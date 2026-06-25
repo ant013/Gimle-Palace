@@ -1,0 +1,128 @@
+## Where ERC-20 tokens are whitelisted
+
+Default ERC-20 token whitelist for fresh mnemonic accounts:
+`Unstoppable/Unstoppable/Modules/CreateAccount/CreateAccountViewModel.swift` —
+`CreateAccountViewModel.defaultTokenQueries` (consumed by `activateDefaultWallets(account:)` which calls `walletManager.save(wallets:)`).
+
+Related (but a different concept — only for passkey/AA accounts):
+`Unstoppable/Unstoppable/Core/Abstraction/Config/StablecoinRegistry.swift` — `v1TokenQueries` used by `ManageWalletsTokenFetcher.tokenQueries(account:)` when `account.type == .passkeyOwned`. Already contains USDC on Ethereum at the requested address.
+
+Other accounts (`default` branch in `ManageWalletsTokenFetcher`) only seed natives via `BlockchainType.supported.map(\.defaultTokenQuery)` — the "user-visible whitelist of pre-approved tokens" is the `defaultTokenQueries` array added at account creation.
+
+## Patch
+
+Project convention (see comment at top of `defaultTokenQueries` and `StablecoinRegistry` + the `erc20AddressesAreLowercased` test) requires ERC-20 addresses to be stored in **lowercase** so MarketKit's case-insensitive `TokenQuery` lookup matches canonically. The task's `0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48` (EIP-55) is the same address as `0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48` (lowercase). Stored lowercase.
+
+```diff
+diff --git a/Unstoppable/Unstoppable/Modules/CreateAccount/CreateAccountViewModel.swift b/Unstoppable/Unstoppable/Modules/CreateAccount/CreateAccountViewModel.swift
+index e4adaab1d..6c1be1b37 100644
+--- a/Unstoppable/Unstoppable/Modules/CreateAccount/CreateAccountViewModel.swift
++++ b/Unstoppable/Unstoppable/Modules/CreateAccount/CreateAccountViewModel.swift
+@@ -6,6 +6,20 @@ import WalletCore
+ class CreateAccountViewModel: ObservableObject {
+     private static let defaultWordCount: Mnemonic.WordCount = .twelve
+
++    // Pre-approved token whitelist activated when a fresh mnemonic account is created.
++    // Order is preserved in the Wallet screen; addresses are lowercased to match the
++    // canonical form used by MarketKit's TokenQuery lookups.
++    static let defaultTokenQueries: [TokenQuery] = [
++        TokenQuery(blockchainType: .bitcoin, tokenType: .derived(derivation: .bip84)), // TODO: make derivation supports accountType
++        TokenQuery(blockchainType: .ethereum, tokenType: .native),
++        TokenQuery(blockchainType: .monero, tokenType: .native),
++        TokenQuery(blockchainType: .tron, tokenType: .native),
++        TokenQuery(blockchainType: .binanceSmartChain, tokenType: .native),
++        TokenQuery(blockchainType: .ethereum, tokenType: .eip20(address: "0xdac17f958d2ee523a2206206994597c13d831ec7")), // USDT
++        TokenQuery(blockchainType: .ethereum, tokenType: .eip20(address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")), // USDC
++        TokenQuery(blockchainType: .tron, tokenType: .eip20(address: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")), // USDT
++    ]
++
+     private let accountFactory = Core.shared.accountFactory
+     private let accountManager = Core.shared.accountManager
+     private let walletManager = Core.shared.walletManager
+@@ -47,19 +61,9 @@ class CreateAccountViewModel: ObservableObject {
+     }
+
+     private func activateDefaultWallets(account: Account) throws {
+-        let tokenQueries = [
+-            TokenQuery(blockchainType: .bitcoin, tokenType: .derived(derivation: .bip84)), // TODO: make derivation supports accountType
+-            TokenQuery(blockchainType: .ethereum, tokenType: .native),
+-            TokenQuery(blockchainType: .monero, tokenType: .native),
+-            TokenQuery(blockchainType: .tron, tokenType: .native),
+-            TokenQuery(blockchainType: .binanceSmartChain, tokenType: .native),
+-            TokenQuery(blockchainType: .ethereum, tokenType: .eip20(address: "0xdac17f958d2ee523a2206206994597c13d831ec7")), // USDT
+-            TokenQuery(blockchainType: .tron, tokenType: .eip20(address: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")), // USDT
+-        ]
+-
+         var wallets = [Wallet]()
+ 
+-        for token in try marketKit.tokens(queries: tokenQueries) {
++        for token in try marketKit.tokens(queries: Self.defaultTokenQueries) {
+             predefinedBlockchainService.prepareNew(account: account, blockchainType: token.blockchainType)
+             wallets.append(Wallet(token: token, account: account))
+         }
+```
+
+Two changes baked into one patch:
+1. Add USDC ERC-20 entry on Ethereum at line `0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48` to the whitelist.
+2. Promote the local `tokenQueries` array inside `activateDefaultWallets(account:)` to a `static let defaultTokenQueries` on the type so tests can assert membership without spinning up `Core.shared`.
+
+## New test (Swift Testing — matches `Unstoppable/Tests` convention)
+
+New file: `Unstoppable/Tests/Modules/CreateAccount/CreateAccountDefaultTokenQueriesTests.swift`
+
+```swift
+import MarketKit
+import Testing
+@testable import Unstoppable
+
+struct CreateAccountDefaultTokenQueriesTests {
+    // The whitelist of tokens enabled by default when a fresh mnemonic account
+    // is created. We assert exact membership so removals are caught too.
+
+    @Test
+    func includesUsdcOnEthereum() {
+        let usdc = TokenQuery(
+            blockchainType: .ethereum,
+            tokenType: .eip20(address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
+        )
+
+        #expect(CreateAccountViewModel.defaultTokenQueries.contains(usdc))
+    }
+
+    @Test
+    func includesExistingPreApprovedTokens() {
+        let expected: [TokenQuery] = [
+            TokenQuery(blockchainType: .bitcoin, tokenType: .derived(derivation: .bip84)),
+            TokenQuery(blockchainType: .ethereum, tokenType: .native),
+            TokenQuery(blockchainType: .monero, tokenType: .native),
+            TokenQuery(blockchainType: .tron, tokenType: .native),
+            TokenQuery(blockchainType: .binanceSmartChain, tokenType: .native),
+            TokenQuery(blockchainType: .ethereum, tokenType: .eip20(address: "0xdac17f958d2ee523a2206206994597c13d831ec7")), // USDT
+            TokenQuery(blockchainType: .ethereum, tokenType: .eip20(address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")), // USDC
+            TokenQuery(blockchainType: .tron, tokenType: .eip20(address: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")), // USDT
+        ]
+
+        #expect(CreateAccountViewModel.defaultTokenQueries == expected)
+    }
+
+    @Test
+    func erc20AddressesAreLowercased() {
+        let erc20Addresses = CreateAccountViewModel.defaultTokenQueries.compactMap { query -> String? in
+            if case let .eip20(address) = query.tokenType, query.blockchainType == .ethereum {
+                return address
+            }
+            return nil
+        }
+
+        for address in erc20Addresses {
+            #expect(address == address.lowercased(), "ERC-20 address must be lowercased: \(address)")
+        }
+    }
+}
+```
+
+## Notes
+
+- `TokenQuery` is `Equatable` (from MarketKit), so `==`/`contains` work without custom matchers.
+- I considered putting the entry into `StablecoinRegistry` instead — but `StablecoinRegistry` only feeds `ManageWalletsTokenFetcher` for `.passkeyOwned` accounts (the gas-abstraction flow). For standard mnemonic accounts the whitelist lives in `CreateAccountViewModel.activateDefaultWallets`, so that is the correct insertion point. USDC on Ethereum was already in `StablecoinRegistry` (line 26 of `StablecoinRegistry.swift`) so passkey accounts were already covered.
+- No commit, no push (per benchmark rules).

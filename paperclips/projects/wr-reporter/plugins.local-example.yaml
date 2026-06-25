@@ -1,0 +1,5 @@
+# Phase F CI fallback — overridden by operator's ~/.paperclip/projects/wr-reporter/plugins.yaml.
+# Operator's real telegram plugin_id lives host-local; never commit it here.
+schemaVersion: 2
+telegram:
+  plugin_id: "00000000-0000-0000-0000-000000000000"

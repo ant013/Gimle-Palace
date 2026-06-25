@@ -1,0 +1,91 @@
+{
+  "capabilities": {
+    "mcp": {
+      "additions": {
+        "byRole": {},
+        "project": []
+      },
+      "baseRequired": [
+        "codebase-memory",
+        "context7",
+        "serena",
+        "github",
+        "sequential-thinking"
+      ],
+      "codebaseMemoryProjects": {
+        "primary": "wallet-radar"
+      },
+      "packageName": "wallet_radar",
+      "serviceName": "wallet-radar",
+      "toolNamespace": "wallet_radar"
+    },
+    "skills": {
+      "additions": {
+        "byRole": {},
+        "project": []
+      }
+    },
+    "subagents": {
+      "additions": {
+        "byRole": {},
+        "project": []
+      }
+    }
+  },
+  "compatibility": {
+    "claudeDeployMapping": "",
+    "codexAgentIdsEnv": "",
+    "legacyOutputPaths": "false",
+    "workspaceUpdateScript": ""
+  },
+  "parameters": {
+    "paths": {
+      "codexTeamRoot": "/Users/Shared/WalletRadar/runs",
+      "operatorMemoryDir": "~/.claude/projects/-Users-Shared-WalletRadar/memory",
+      "overlayRoot": "paperclips/projects/wr-reporter/overlays",
+      "primaryMcpServiceDir": "/Users/Shared/WalletRadar",
+      "primaryRepoRoot": "/Users/Shared/WalletRadar",
+      "productionCheckout": "/Users/Shared/WalletRadar",
+      "projectRoot": "/Users/Shared/WalletRadar",
+      "projectRulesFile": "AGENTS.md"
+    },
+    "project": {
+      "companyId": "a53c1926-0dac-4f91-a274-7f5cf24d2dfa",
+      "displayName": "Wallet Radar Reporter",
+      "integrationBranch": "main",
+      "issuePrefix": "WR",
+      "key": "wr-reporter",
+      "systemName": "WalletRadar"
+    }
+  },
+  "project": "wr-reporter",
+  "schemaVersion": 1,
+  "sourceManifest": "paperclips/projects/wr-reporter/paperclip-agent-assembly.yaml",
+  "sourceManifestSha256": "3eca57e9622f2f19b363013999aed7cad513527ad9436fd629d85573c8d6cb8b",
+  "targets": {
+    "codex": {
+      "adapterType": "codex_local",
+      "deployMode": "api",
+      "instructionEntryFile": "AGENTS.md",
+      "instructionsBundleMode": "managed",
+      "roles": [
+        {
+          "agentId": "7aeab7e4-b3f3-4a39-901c-e2bd59c5bcdf",
+          "agentName": "Reporter",
+          "bytes": 21540,
+          "family": "research",
+          "lines": 382,
+          "output": "paperclips/dist/wr-reporter/codex/Reporter.md",
+          "platform": "all",
+          "profiles": [
+            "research"
+          ],
+          "roleId": "codex:cx-research-agent",
+          "sha256": "96186b983e86b1a75660c49c81b8de23dfa7ffff4a0efe03684b67f59038638d",
+          "source": "paperclips/roles-codex/cx-research-agent.md",
+          "workspaceCwd": ""
+        }
+      ]
+    }
+  }
+}

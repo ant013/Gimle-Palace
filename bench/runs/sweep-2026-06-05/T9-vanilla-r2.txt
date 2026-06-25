@@ -1,0 +1,71 @@
+=== ARTIFACT ===
+
+Task: Extract inline address-formatting helper from MoneroAdapter into a new top-level class MoneroAddressFormatter.
+
+Interpretation note: The task describes "a small ~30-line function that formats Monero subaddresses" inside MoneroAdapter. After full review of /Users/ant013/Ios/bench-vanilla/Unstoppable/Unstoppable/Core/Adapters/MoneroAdapter.swift, no helper exactly matches both "~30 lines" and "subaddresses". The closest address-formatting helper is the static `address(accountType:)` which derives a Monero address (account=0, index=0/1 — index=1 corresponds to the first subaddress in the mnemonic branch) from an AccountType. That is the helper extracted.
+
+Approach:
+1. Created new file MoneroAddressFormatter.swift containing the extracted static logic.
+2. Replaced MoneroAdapter.address(accountType:) body with a one-line delegation to MoneroAddressFormatter.address(accountType:) — public API preserved, so all existing call sites (DestinationHelper.swift) and tests continue to work without modification.
+
+Patch (working-tree diff):
+
+```diff
+diff --git a/Unstoppable/Unstoppable/Core/Adapters/MoneroAdapter.swift b/Unstoppable/Unstoppable/Core/Adapters/MoneroAdapter.swift
+index 40fb612ea..0f275b1d8 100644
+--- a/Unstoppable/Unstoppable/Core/Adapters/MoneroAdapter.swift
++++ b/Unstoppable/Unstoppable/Core/Adapters/MoneroAdapter.swift
+@@ -365,15 +365,7 @@ extension MoneroAdapter {
+     }
+ 
+     static func address(accountType: AccountType) -> String {
+-        switch accountType {
+-        case let .mnemonic(words, passphrase, _):
+-            return (try? Kit.address(wallet: .bip39(seed: words, passphrase: passphrase), account: 0, index: 1)) ?? ""
+-
+-        case let .moneroWatchAccount(address, viewKey):
+-            return (try? Kit.address(wallet: .watch(address: address, viewKey: viewKey), account: 0, index: 0)) ?? ""
+-
+-        default: return ""
+-        }
++        MoneroAddressFormatter.address(accountType: accountType)
+     }
+ }
+```
+
+New file Unstoppable/Unstoppable/Core/Adapters/MoneroAddressFormatter.swift:
+
+```swift
+import Foundation
+import MarketKit
+import MoneroKit
+
+class MoneroAddressFormatter {
+    static func address(accountType: AccountType) -> String {
+        switch accountType {
+        case let .mnemonic(words, passphrase, _):
+            return (try? Kit.address(wallet: .bip39(seed: words, passphrase: passphrase), account: 0, index: 1)) ?? ""
+
+        case let .moneroWatchAccount(address, viewKey):
+            return (try? Kit.address(wallet: .watch(address: address, viewKey: viewKey), account: 0, index: 0)) ?? ""
+
+        default: return ""
+        }
+    }
+}
+```
+
+Files touched (absolute):
+- /Users/ant013/Ios/bench-vanilla/Unstoppable/Unstoppable/Core/Adapters/MoneroAdapter.swift (modified)
+- /Users/ant013/Ios/bench-vanilla/Unstoppable/Unstoppable/Core/Adapters/MoneroAddressFormatter.swift (new)
+
+No tests reference MoneroAdapter directly (grep over *Test*.swift / *Tests*.swift returned empty), and the public API MoneroAdapter.address(accountType:) is preserved as a thin delegate, so test behavior is unchanged.
+
+=== CHECKLIST_FACTS ===
+- Identified the inline address-formatting helper in MoneroAdapter: yes (static address(accountType:) — closest match; noted size discrepancy vs "~30 lines")
+- Created new MoneroAddressFormatter class in a new file: yes
+- Same logic preserved: yes (byte-identical switch body)
+- Call site in MoneroAdapter updated to use the new class: yes (delegating one-liner)
+- Existing tests not modified: yes (no test files touched)
+- Patch shown as working-tree diff: yes
+- No commit/push: yes

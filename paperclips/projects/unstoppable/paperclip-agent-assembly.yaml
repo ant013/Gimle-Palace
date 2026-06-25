@@ -1,0 +1,123 @@
+schemaVersion: 2
+
+project:
+  key: unstoppable
+  display_name: Unstoppable
+  system_name: Unstoppable
+  issue_prefix: UNS
+  integration_branch: main
+  specs_dir: docs/specs
+  plans_dir: docs/plans
+
+domain:
+  wallet_target_short: Unstoppable
+  wallet_target_name: Unstoppable Wallet
+  wallet_target_slug: unstoppable-wallet
+
+evidence:
+  merge_without_smoke_issue: UNS-bootstrap
+  graphiti_mock_issue: UNS-bootstrap
+  release_reset_issue: UNS-bootstrap
+  asyncmock_driver_issue: UNS-bootstrap
+  worktree_discipline_issue_pair: UNS-bootstrap
+  qa_worktree_discipline_issue: UNS-bootstrap
+  mcp_wire_contract_issue: UNS-bootstrap
+  qa_deploy_checklist_issue: UNS-bootstrap
+  review_scope_drift_issue: UNS-bootstrap
+  qa_to_cto_stall_issue: UNS-bootstrap
+  handoff_flake_issue: UNS-bootstrap
+  pre_slim_baseline_issue: UNS-bootstrap
+  cr_to_pe_stall_issue: UNS-bootstrap
+  handoff_misclassified_issue: UNS-bootstrap
+  post_merge_stall_issue: UNS-bootstrap
+
+paths:
+  overlay_root: paperclips/projects/unstoppable/overlays
+  project_rules_file: AGENTS.md
+
+mcp:
+  service_name: unstoppable
+  package_name: unstoppable
+  tool_namespace: unstoppable
+  base_required:
+    - codebase-memory
+    - context7
+    - serena
+    - github
+    - sequential-thinking
+  # Multi-app: one codex team works across three sibling iOS apps sharing WalletCore.
+  codebase_memory_projects:
+    primary: Users-ant013-Ios-HorizontalSystems-unstoppable-wallet-ios
+    ios_app: Users-ant013-Ios-HorizontalSystems-unstoppable-wallet-ios
+    stable_app: Users-ant013-Ios-HorizontalSystems-stable-wallet-ios
+    swap_app: Users-ant013-Ios-HorizontalSystems-multi-swap-ios
+  additions:
+    project: []
+    by_role: {}
+
+skills:
+  additions:
+    project: []
+    by_role: {}
+
+subagents:
+  additions:
+    project: []
+    by_role: {}
+
+targets:
+  claude:
+    instruction_entry_file: AGENTS.md
+    adapter_type: claude_local
+    deploy_mode: api
+    instructions_bundle_mode: managed
+  codex:
+    instruction_entry_file: AGENTS.md
+    adapter_type: codex_local
+    deploy_mode: api
+    instructions_bundle_mode: managed
+
+compatibility:
+  legacy_output_paths: false
+
+# Dev team (5 agents) — TEMP migrated to Claude (Opus/Sonnet) 2026-06-13; codex
+# snapshot + restore.py at /Users/ant013/Data/AI/paperclip/backups/unstoppable-codex-2026-06-13.
+# UUIDs + abs paths live host-local in
+# ~/.paperclip/projects/unstoppable/{bindings.yaml,paths.yaml}; repo ships only
+# sanitized *.local-example.yaml. reportsTo drives topological hire order.
+# One team works across all three apps (ios-app / stable-app / swap-app).
+agents:
+  - agent_name: UnstoppableCEO
+    role_source: paperclips/roles/cto.md
+    instructions_entry_file: UnstoppableCEO.md
+    profile: cto
+    target: claude
+    primary_codebase_memory_project: Users-ant013-Ios-HorizontalSystems-unstoppable-wallet-ios
+  - agent_name: UnstoppableCTO
+    role_source: paperclips/roles/cto.md
+    instructions_entry_file: UnstoppableCTO.md
+    profile: cto
+    target: claude
+    reportsTo: UnstoppableCEO
+    primary_codebase_memory_project: Users-ant013-Ios-HorizontalSystems-unstoppable-wallet-ios
+  - agent_name: UnstoppableCodeReviewer
+    role_source: paperclips/roles/code-reviewer.md
+    instructions_entry_file: UnstoppableCodeReviewer.md
+    profile: reviewer
+    target: claude
+    reportsTo: UnstoppableCTO
+    primary_codebase_memory_project: Users-ant013-Ios-HorizontalSystems-unstoppable-wallet-ios
+  - agent_name: UnstoppableSwiftEngineer
+    role_source: paperclips/roles/swift-engineer.md
+    instructions_entry_file: UnstoppableSwiftEngineer.md
+    profile: implementer
+    target: claude
+    reportsTo: UnstoppableCTO
+    primary_codebase_memory_project: Users-ant013-Ios-HorizontalSystems-unstoppable-wallet-ios
+  - agent_name: UnstoppableQAEngineer
+    role_source: paperclips/roles/qa-engineer.md
+    instructions_entry_file: UnstoppableQAEngineer.md
+    profile: qa
+    target: claude
+    reportsTo: UnstoppableCTO
+    primary_codebase_memory_project: Users-ant013-Ios-HorizontalSystems-unstoppable-wallet-ios

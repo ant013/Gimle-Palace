@@ -1,0 +1,158 @@
+{
+  "capabilities": {
+    "mcp": {
+      "additions": {
+        "byRole": {},
+        "project": []
+      },
+      "baseRequired": [
+        "codebase-memory",
+        "context7",
+        "serena",
+        "github",
+        "sequential-thinking"
+      ],
+      "codebaseMemoryProjects": {
+        "ios_app": "Users-ant013-Ios-HorizontalSystems-unstoppable-wallet-ios",
+        "primary": "Users-ant013-Ios-HorizontalSystems-unstoppable-wallet-ios",
+        "stable_app": "Users-ant013-Ios-HorizontalSystems-stable-wallet-ios",
+        "swap_app": "Users-ant013-Ios-HorizontalSystems-multi-swap-ios"
+      },
+      "packageName": "unstoppable",
+      "serviceName": "unstoppable",
+      "toolNamespace": "unstoppable"
+    },
+    "skills": {
+      "additions": {
+        "byRole": {},
+        "project": []
+      }
+    },
+    "subagents": {
+      "additions": {
+        "byRole": {},
+        "project": []
+      }
+    }
+  },
+  "compatibility": {
+    "claudeDeployMapping": "",
+    "codexAgentIdsEnv": "",
+    "legacyOutputPaths": "false",
+    "workspaceUpdateScript": ""
+  },
+  "parameters": {
+    "paths": {
+      "codexTeamRoot": "/Users/ant013/Ios/HorizontalSystems",
+      "operatorMemoryDir": "~/.claude/projects/-Users-ant013-Ios-HorizontalSystems/memory",
+      "overlayRoot": "paperclips/projects/unstoppable/overlays",
+      "primaryMcpServiceDir": "/Users/ant013/Ios/HorizontalSystems",
+      "primaryRepoRoot": "/Users/ant013/Ios/HorizontalSystems/unstoppable-wallet-ios",
+      "productionCheckout": "/Users/ant013/Ios/HorizontalSystems/unstoppable-wallet-ios",
+      "projectRoot": "/Users/ant013/Ios/HorizontalSystems",
+      "projectRulesFile": "AGENTS.md"
+    },
+    "project": {
+      "companyId": "dfc662ee-513f-42f7-9f46-23f07e0a98d0",
+      "displayName": "Unstoppable",
+      "integrationBranch": "main",
+      "issuePrefix": "UNS",
+      "key": "unstoppable",
+      "systemName": "Unstoppable"
+    }
+  },
+  "project": "unstoppable",
+  "schemaVersion": 1,
+  "sourceManifest": "paperclips/projects/unstoppable/paperclip-agent-assembly.yaml",
+  "sourceManifestSha256": "25da14b09951e1e0d754fc8cdb345e6e498dd4f91b6fa79e351c0859cab94012",
+  "targets": {
+    "claude": {
+      "adapterType": "claude_local",
+      "deployMode": "api",
+      "instructionEntryFile": "AGENTS.md",
+      "instructionsBundleMode": "managed",
+      "roles": [
+        {
+          "agentId": "a6b2b728-c04f-4ace-b4ad-22417e05ea97",
+          "agentName": "UnstoppableCEO",
+          "bytes": 31345,
+          "family": "cto",
+          "lines": 626,
+          "output": "paperclips/dist/unstoppable/claude/UnstoppableCEO.md",
+          "platform": "",
+          "profiles": [
+            "cto"
+          ],
+          "roleId": "claude:cto",
+          "sha256": "521f4187d58a00aa5441105d47c5c04d10257d4210761349aca638e179343de1",
+          "source": "paperclips/roles/cto.md",
+          "workspaceCwd": ""
+        },
+        {
+          "agentId": "404e012b-f162-4bf0-b361-780e1cd629ec",
+          "agentName": "UnstoppableCTO",
+          "bytes": 31345,
+          "family": "cto",
+          "lines": 626,
+          "output": "paperclips/dist/unstoppable/claude/UnstoppableCTO.md",
+          "platform": "",
+          "profiles": [
+            "cto"
+          ],
+          "roleId": "claude:cto",
+          "sha256": "f212486f64a7d146bf77cb2095b8ac8fb6fc294eb946bc377a4a594f71c11b4e",
+          "source": "paperclips/roles/cto.md",
+          "workspaceCwd": ""
+        },
+        {
+          "agentId": "a3e10971-2b60-4621-9630-8291068ee59e",
+          "agentName": "UnstoppableCodeReviewer",
+          "bytes": 26527,
+          "family": "reviewer",
+          "lines": 516,
+          "output": "paperclips/dist/unstoppable/claude/UnstoppableCodeReviewer.md",
+          "platform": "",
+          "profiles": [
+            "reviewer"
+          ],
+          "roleId": "claude:code-reviewer",
+          "sha256": "82c334eda42bf9a27d71d39f9a1f3dc9ef873f9f0262e02a80ee8839792115ba",
+          "source": "paperclips/roles/code-reviewer.md",
+          "workspaceCwd": ""
+        },
+        {
+          "agentId": "8c1b21a2-7944-4c45-a6c5-8cfb001e8d41",
+          "agentName": "UnstoppableSwiftEngineer",
+          "bytes": 27182,
+          "family": "implementer",
+          "lines": 520,
+          "output": "paperclips/dist/unstoppable/claude/UnstoppableSwiftEngineer.md",
+          "platform": "",
+          "profiles": [
+            "implementer"
+          ],
+          "roleId": "claude:swift-engineer",
+          "sha256": "ea8d60ff296c66acc3bac1496bacb25e9d6e9746645721cb99b0255758c9bb23",
+          "source": "paperclips/roles/swift-engineer.md",
+          "workspaceCwd": ""
+        },
+        {
+          "agentId": "56e0b9ef-ff49-4dee-85a7-2358ecbf1ad7",
+          "agentName": "UnstoppableQAEngineer",
+          "bytes": 29036,
+          "family": "qa",
+          "lines": 575,
+          "output": "paperclips/dist/unstoppable/claude/UnstoppableQAEngineer.md",
+          "platform": "",
+          "profiles": [
+            "qa"
+          ],
+          "roleId": "claude:qa-engineer",
+          "sha256": "b8fd11930fd498c1f197260d95c5ff0fa2bd4b36baeb1371b582b700aee7d195",
+          "source": "paperclips/roles/qa-engineer.md",
+          "workspaceCwd": ""
+        }
+      ]
+    }
+  }
+}

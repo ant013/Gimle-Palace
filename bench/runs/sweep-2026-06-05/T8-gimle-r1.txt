@@ -1,0 +1,45 @@
+## Silent-failure location
+
+File: `/Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Modules/SendNew/UtxoSendHelper.swift`
+
+Call chain for Bitcoin send (UTXO-based blockchains):
+
+1. `BitcoinSendHandler.sendData(transactionSettings:)` (`Modules/SendNew/BitcoinSendHandler.swift:30`) calls `adapter.sendInfo(params:)` to estimate the fee; any throw is captured into `SendData.transactionError`.
+2. `BitcoinSendHandler.SendData.cautions(baseToken:currency:rates:)` (line 111) routes that error through `UtxoSendHelper.caution(transactionError:feeToken:)`.
+3. Inside `UtxoSendHelper.caution` the `BitcoinCoreErrors.SendValueErrors` switch only handles `.notEnough` and `.dust` explicitly. Every other variant — notably `.emptyOutputs` (no spendable UTXOs at all) and `.singleNoChangeOutputNotFound` — falls into the `default` branch, which sets:
+
+```swift
+title = "Send Info error"
+text  = "Send Info error description"
+```
+
+These are non-localized debug placeholders. In practice the user either sees this gibberish or, because it's a generic non-actionable string, perceives the failure as silent — the send button is disabled with no meaningful explanation of WHY (insufficient UTXOs, no change output found, etc.). The sibling helpers `MoneroSendHelper`, `TonSendHelper`, `StellarSendHelper`, `ZanoSendHelper`, `TronSendHelper` all use `transactionError.convertedError.smartDescription` plus a localized title in the equivalent fallback branch — that is the established analog in this codebase.
+
+## Smallest patch (working-tree diff, NOT committed)
+
+```diff
+diff --git a/Unstoppable/Unstoppable/Modules/SendNew/UtxoSendHelper.swift b/Unstoppable/Unstoppable/Modules/SendNew/UtxoSendHelper.swift
+index f9ae6216d..cb0d2bda7 100644
+--- a/Unstoppable/Unstoppable/Modules/SendNew/UtxoSendHelper.swift
++++ b/Unstoppable/Unstoppable/Modules/SendNew/UtxoSendHelper.swift
+@@ -41,8 +41,8 @@ class UtxoSendHelper {
+                 text = "send.amount_error.minimum_amount.description".localized("\(dustAmount) satoshis")
+ 
+             default:
+-                title = "Send Info error"
+-                text = "Send Info error description"
++                title = "fee_settings.errors.unexpected_error".localized
++                text = transactionError.convertedError.smartDescription
+             }
+         } else {
+             title = "alert.error".localized
+```
+
+## Why this is the right fix (minimal + analog-driven)
+
+- `fee_settings.errors.unexpected_error` already exists in `en.lproj/Localizable.strings:2166` ("Unexpected Error"), so no new translation key is required.
+- `convertedError.smartDescription` (defined in `UserInterface/Extensions/Error.swift`) is the project's canonical way to render an unknown `Error` to a human-readable message, already used by every other send helper.
+- The change is 2 lines, confined to the single switch's `default` branch — does not alter the happy path, the `.notEnough`/`.dust` branches, or the outer `else` (which already does the right thing for non-`SendValueErrors` errors).
+- The fix immediately surfaces the previously-swallowed cases `BitcoinCoreErrors.SendValueErrors.emptyOutputs` (the exact "no UTXOs" condition the task asks about), `.singleNoChangeOutputNotFound`, and any future variants — the user sees a real, localized error caption instead of placeholder debug text.
+
+Note: an identical placeholder pair lives in `Modules/ZCashShieldTokens/ShieldSendHandler.swift:151-152`. It is the same bug pattern but is outside the Bitcoin-send scope of this task, so I left it untouched.

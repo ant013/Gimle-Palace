@@ -1,0 +1,157 @@
+## 1Inch swap components in unstoppable-wallet-ios
+
+### Important caveat — 1Inch in this codebase is single-chain only
+
+The task example asks about ETH→BSC (a cross-chain swap). 1Inch as integrated
+in unstoppable-wallet-ios does NOT support cross-chain swaps. The provider
+explicitly guards against it:
+
+`OneInchMultiSwapProvider.supports(tokenIn:tokenOut:)`
+(`Unstoppable/Unstoppable/Modules/MultiSwap/Providers/OneInchMultiSwapProvider.swift:34-43`):
+
+```swift
+override func supports(tokenIn: MarketKit.Token, tokenOut: MarketKit.Token) -> Bool {
+    guard tokenIn.blockchainType == tokenOut.blockchainType else {
+        return false                       // <-- cross-chain rejected
+    }
+    switch tokenIn.blockchainType {
+    case .ethereum, .binanceSmartChain, .polygon, .avalanche,
+         .optimism, .arbitrumOne, .gnosis, .fantom, .base: return true
+    default: return false
+    }
+}
+```
+
+Both legs must be on the SAME EVM chain (1Inch Aggregation Router v5 is a
+per-chain contract). A "true" ETH→BSC swap in this app is routed through
+`AllBridgeMultiSwapProvider`
+(`Unstoppable/Unstoppable/Modules/MultiSwap/Providers/AllBridgeProvider/AllBridgeMultiSwapProvider.swift`),
+which has explicit `crosschain = tokenIn.blockchainType != tokenOut.blockchainType`
+branching and uses `/bridge` vs `/swap` endpoints. NOT 1Inch.
+
+So below I describe the 1Inch *same-chain* swap pipeline (e.g. ETH→USDT both
+on Ethereum, or USDT→BNB both on BSC). For a literal ETH→BSC, the answer
+is "1Inch is not used — see AllBridge".
+
+---
+
+### Two parallel 1Inch stacks coexist
+
+The codebase contains two generations of swap UI, both wired to 1Inch:
+
+1. Newer MultiSwap stack (`Modules/MultiSwap/...`) — async/await, aggregates
+   multiple DEX providers behind a uniform `BaseEvmMultiSwapProvider` API.
+2. Legacy single-DEX Swap stack (`Modules/Swap/Adapters/OneInch/...`) —
+   RxSwift, 1Inch-only UI flow with its own VM/Service/TradeService.
+
+Both ultimately call into the **`OneInchKit.Kit`** Swift package (vendored 1Inch
+REST client wrapping the `api.1inch.io/v5.x/{chainId}/...` endpoints).
+
+---
+
+### A. MultiSwap pipeline (current path)
+
+```
+User selects 1Inch in MultiSwapView
+        │
+        ▼
+OneInchMultiSwapProvider                                            ← orchestrator
+  ├─ supports(tokenIn,tokenOut)        same-chain guard
+  ├─ quote(...)                        → OneInchKit.Kit.quote(...)   ← REST: /quote   (QUOTES)
+  │     returns EvmMultiSwapQuote (amountOut, allowanceState, ETA)
+  ├─ confirmationQuote(...)            → OneInchKit.Kit.swap(...)    ← REST: /swap    (BUILDS ROUTE + tx)
+  │     returns EvmSwapFinalQuote (transactionData, gasPrice, fee, ...)
+  ├─ spenderAddress(chain)             → OneInchKit.Kit.routerAddress(chain:)
+  │                                       (used by ERC-20 approve flow)
+  └─ track(swap)                       → USwapMultiSwapProvider.track(...)
+                                          POSTs hash for analytics
+        │
+        ▼
+EvmFeeEstimator.estimateFee(...)       (gas estimate for built tx)
+        │
+        ▼
+Caller (MultiSwap confirmation screen) signs and broadcasts via
+EvmKitWrapper.evmKit  ← SIGNS + BROADCASTS (not 1Inch code; it just executes
+                       the calldata 1Inch returned)
+```
+
+Files:
+- `Unstoppable/Unstoppable/Modules/MultiSwap/Providers/OneInchMultiSwapProvider.swift`
+- `Unstoppable/Unstoppable/Modules/MultiSwap/BaseEvmMultiSwapProvider.swift` (parent: allowance, fee, signing wiring)
+
+Key class names (all real, exact):
+- `OneInchMultiSwapProvider` — `BaseEvmMultiSwapProvider` subclass, the entry point.
+- `OneInchKit.Kit` — vendored 1Inch REST client; `.quote(...)` and `.swap(...)`.
+- `EvmMultiSwapQuote`, `EvmSwapFinalQuote` — value types returned to UI.
+- `EvmFeeEstimator` — gas estimation.
+- `EvmKitWrapper` / `EvmKit.Kit` — actual transaction signer/broadcaster.
+- `USwapMultiSwapProvider` — telemetry sink for `track(swap:)`.
+
+---
+
+### B. Legacy Swap pipeline (still in tree)
+
+```
+OneInchModule    ← assembles the MVVM stack (DI)
+   │
+   ├─► OneInchService          (top-level orchestrator, state machine)
+   │      └─► OneInchTradeService   (timer-driven quote refresh, settings)
+   │             └─► OneInchProvider           ← thin wrapper, our class
+   │                    └─► OneInchKit.Kit     ← REST: quoteSingle / swapSingle
+   │                             (uses EvmKit.Kit.chain + receiveAddress)
+   │
+   ├─► OneInchViewModel        (Rx outputs to UI)
+   └─► OneInchDataSource       (UIKit view glue)
+
+Confirmation screen:
+   OneInchSendEvmTransactionService           ← SIGNS + SENDS
+      ├─ holds EvmKitWrapper                  (signer)
+      ├─ holds OneInchFeeService              (fee/gas + final OneInchSwapParameters)
+      └─ holds EvmSendSettingsService         (gas price / nonce settings)
+
+Settings:
+   OneInchSettingsModule / Service / ViewModel / DataSource (slippage, recipient)
+```
+
+Files:
+- `Unstoppable/Unstoppable/Modules/Swap/Adapters/OneInch/OneInchModule.swift`
+- `Unstoppable/Unstoppable/Modules/Swap/Adapters/OneInch/OneInchService.swift`
+- `Unstoppable/Unstoppable/Modules/Swap/Adapters/OneInch/OneInchTradeService.swift`
+- `Unstoppable/Unstoppable/Modules/Swap/Adapters/OneInch/OneInchProvider.swift`
+- `Unstoppable/Unstoppable/Modules/Swap/Adapters/OneInch/OneInchViewModel.swift`
+- `Unstoppable/Unstoppable/Modules/Swap/Adapters/OneInch/OneInchDataSource.swift`
+- `Unstoppable/Unstoppable/Modules/SwapConfirmation/OneInch/OneInchSendEvmTransactionService.swift`
+- `Unstoppable/Unstoppable/Modules/SwapConfirmation/OneInch/OneInchFeeService.swift`
+- `Unstoppable/Unstoppable/Modules/SwapSettings/OneInchSettings/*.swift`
+
+`OneInchProvider` legacy API (`OneInchProvider.swift`):
+- `quoteSingle(tokenIn:tokenOut:amount:) -> Single<OneInchKit.Quote>` — calls `swapKit.quoteSingle(...)` (REST `/quote`).
+- `swapSingle(tokenFrom:tokenTo:amount:recipient:slippage:gasPrice:) -> Single<OneInchKit.Swap>` — calls `swapKit.swapSingle(...)` (REST `/swap`, returns tx calldata).
+- `routerAddress: EvmKit.Address` — `OneInchKit.Kit.routerAddress(chain:)` (spender for approvals).
+
+---
+
+### Role summary (who does what)
+
+| Concern                | Component                                                                 |
+|------------------------|---------------------------------------------------------------------------|
+| Eligibility / chain support | `OneInchMultiSwapProvider.supports(...)` — same-chain only            |
+| Quote (indicative amount-out) | `OneInchKit.Kit.quote(...)` invoked by `OneInchMultiSwapProvider.quote(...)` / legacy `OneInchProvider.quoteSingle(...)` -> `OneInchTradeService` |
+| Build route + calldata | `OneInchKit.Kit.swap(...)` invoked by `OneInchMultiSwapProvider.confirmationQuote(...)` / legacy `OneInchProvider.swapSingle(...)` |
+| Router (spender) address for ERC-20 approve | `OneInchKit.Kit.routerAddress(chain:)` via `OneInchMultiSwapProvider.spenderAddress(chain:)` |
+| Gas estimation         | `EvmFeeEstimator` (MultiSwap) / `OneInchFeeService` (legacy)             |
+| Sign + broadcast tx    | `EvmKitWrapper` / `EvmKit.Kit` (MultiSwap) — 1Inch returns calldata only; signing is local. Legacy confirmation screen: `OneInchSendEvmTransactionService` |
+| Slippage / recipient settings | `TransactionSettings` (MultiSwap) / `OneInchSettings` (legacy) |
+| Analytics              | `USwapMultiSwapProvider.track(swap:)`                                    |
+
+### Cross-chain ETH↔BSC (NOT 1Inch)
+
+If the user really wants ETH→BSC, the code paths to look at are:
+- `AllBridgeMultiSwapProvider` (`Modules/MultiSwap/Providers/AllBridgeProvider/`)
+- `ThorChainMultiSwapProvider` (`Modules/MultiSwap/Providers/ThorChainProvider/`)
+- `StonFiMultiSwapProvider` / etc.
+
+These set `crosschain = tokenIn.blockchainType != tokenOut.blockchainType` and
+issue bridge transactions (lock-on-source, mint/release-on-dest) rather than a
+single atomic swap. 1Inch's `OneInchKit.Kit` has no cross-chain API surface in
+this codebase (no Fusion+ integration is present in the tree).

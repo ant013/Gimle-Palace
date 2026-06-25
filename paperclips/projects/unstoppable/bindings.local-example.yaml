@@ -1,0 +1,12 @@
+# CI/dev fallback — overridden by operator's host-local
+# ~/.paperclip/projects/unstoppable/bindings.yaml (written by the hire step with
+# real UUIDs). Committed sanitized values let the builder render bundles without
+# operator host-local files. Real UUIDs take precedence at deploy.
+schemaVersion: 2
+company_id: "00000000-0000-0000-0000-000000000000"
+agents:
+  UnstoppableCEO: "00000000-0000-0000-0000-000000000201"
+  UnstoppableCTO: "00000000-0000-0000-0000-000000000202"
+  UnstoppableCodeReviewer: "00000000-0000-0000-0000-000000000203"
+  UnstoppableSwiftEngineer: "00000000-0000-0000-0000-000000000204"
+  UnstoppableQAEngineer: "00000000-0000-0000-0000-000000000205"

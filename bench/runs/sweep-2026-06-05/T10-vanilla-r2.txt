@@ -1,0 +1,30 @@
+=== ARTIFACT ===
+
+Findings: exactly one `recordSwap` method exists in the working tree at /Users/ant013/Ios/bench-vanilla.
+
+| # | File path | Line | Enclosing class |
+|---|---|---|---|
+| 1 | /Users/ant013/Ios/bench-vanilla/Source/RecentSwaps.swift | 20 | `RecentSwaps` (final class) |
+
+Signature: `func recordSwap(txHash: String, from: String, to: String)`
+
+Search method: ran `grep -rn "recordSwap" --include="*.swift" .` and broader variants (`record_swap`, `RecordSwap`, `func recordSwap`) across the entire working tree, including untracked files. The `Source/` directory is untracked (newly staged for the benchmark) and was included in the scan. No other matches found across `.swift`, `.m`, `.h` files.
+
+Context: `Source/RecentSwaps.swift` is a freshly staged file (its own header comment notes it was added for the T10 benchmark probe). It is the sole occurrence; no other `recordSwap` declaration exists anywhere else in the iOS codebase working tree.
+
+=== CHECKLIST_FACTS ===
+- Found the recordSwap occurrence in Source/RecentSwaps.swift: yes
+- Reported file path: yes
+- Reported line number (20): yes
+- Reported enclosing class (RecentSwaps): yes
+- Searched untracked / newly added files (not just the index): yes
+- Cross-verified there are no other recordSwap methods in the tree: yes
+
+=== TOOL_USAGE ===
+- Bash calls: 5
+- Read calls: 2
+- Grep calls: 0
+- Glob calls: 0
+- Edit/Write calls: 0
+- WebFetch/WebSearch calls: 0
+- skills invoked: none (single-file lookup; brainstorming/plan skills not warranted)

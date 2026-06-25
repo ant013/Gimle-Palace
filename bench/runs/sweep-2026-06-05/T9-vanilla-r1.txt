@@ -1,0 +1,52 @@
+## T9 — MoneroAdapter subaddress-formatter extraction
+
+### Finding: task premise does not match the codebase
+
+I searched `/Users/ant013/Ios/bench-vanilla/Unstoppable/Unstoppable/Core/Adapters/MoneroAdapter.swift` (429 lines, the only `MoneroAdapter*` file in the tree) and there is **no inline ~30-line helper that formats Monero subaddresses**. The task asks to extract a function that does not exist.
+
+### Evidence
+
+Full enumeration of functions/methods declared inside `MoneroAdapter` (file at `/Users/ant013/Ios/bench-vanilla/Unstoppable/Unstoppable/Core/Adapters/MoneroAdapter.swift`):
+
+- `init(wallet:restoreSettings:node:)` — initializer (~35 lines), constructs `MoneroKit.Kit`, no formatting
+- `transactionRecord(fromTransaction:)` (lines 74-114) — builds `MoneroIncoming/OutgoingTransactionRecord` from `TransactionInfo`. Touches `transaction.recipientAddress` but does not format an address — just passes the string through
+- `moneroBalanceData(balanceInfo:)` (lines 116-121) — 6 lines, balance conversion
+- `adapterStateFromKit()` (lines 123-142) — wallet-state mapping
+- `explorerTitle` / `explorerUrl(transactionHash:)` / `explorerUrl(address:)` — 1-line URL helpers
+- `start` / `stop` / `refresh` / `restart` / `statusInfo` — kit pass-throughs
+- `subAddressesUpdated(subaddresses _:)` (line 189) — delegate callback, **1 line**, body just calls `depositAddressSubject.send(.completed(receiveAddress))`. Ignores the `subaddresses` parameter (uses `_`)
+- `balanceDidChange` / `walletStateDidChange` / `transactionsUpdated` — `MoneroKitDelegate` callbacks
+- `convertToPiconero(amount:)` (lines 252-262) — 11 lines, Decimal → piconero conversion, not address formatting
+- `estimateFee(amount:address:priority:)` / `send(to:amount:priority:memo:)` — kit pass-throughs
+- `rawTransaction(hash:)` / `lastBlockInfo` / `syncingObservable` / `lastBlockUpdatedObservable` / `additionalTokenQueries`
+- `transactionsObservable(token:filter:address:)` (lines 286-300) — Rx filter pipeline
+- `transactionsSingle(...)` (lines 302-316) — kit query
+- `allTransactionsAfter(...)` — 1 line
+- `receiveAddress` (line 324-326) — **3 lines**, `DepositAddress(kit.receiveAddress)` — no formatting
+- `receiveAddressPublisher` — 1 line
+- `usedAddresses` (lines 332-336) — **5 lines**, maps `kit.usedAddresses` to `UsedAddress(index:address:explorerUrl:nil,transactionsCount:)`. The `.address` string is passed through unmodified. No truncation/prefix/suffix/formatting
+- `clear(except:)`, `key(accountType:privateKey:spendKey:)`, `address(accountType:)` — static utilities, 5-12 lines each
+
+Searches performed:
+- `grep -n "format" Unstoppable/Unstoppable/Core/Adapters/MoneroAdapter.swift` — zero matches
+- `grep -rn "subaddress|formatSubAddress|formatAddress|MoneroAddressFormatter" Unstoppable/` — only the existing 1-line `subAddressesUpdated` delegate and resource strings / view-model wiring; no formatter implementation anywhere
+- `git log --oneline -- ...MoneroAdapter.swift` — no historical commit referencing a formatter extraction or revert
+
+### Conclusion
+
+There is no candidate function to extract. Performing the asked rewrite would require either:
+1. Inventing a new `MoneroAddressFormatter` class with fabricated formatting logic that no caller in `MoneroAdapter` currently invokes — which would not be a refactor and would also violate "Keep existing tests passing (do not modify any test files)" because no test would exercise it and the call site in `MoneroAdapter` would have to be invented too; or
+2. Mis-labelling an unrelated helper (e.g. `transactionRecord` or `convertToPiconero`) as `MoneroAddressFormatter` — this would corrupt domain semantics and fail any code review.
+
+Neither is the right action. The honest result is: **no patch — the inline helper described in the brief is not present in this checkout**.
+
+### Patch
+
+```
+(empty — `git status` and `git diff` both clean; no source files modified)
+```
+
+### Suggested follow-up for the requester
+
+- Confirm the source branch/commit. The current HEAD on `bench/sandbox-ab-vanilla` shows `a06f6148a` as the most recent touch to `MoneroAdapter.swift`; verify the prompt was not authored against a different branch (e.g. a feature branch that introduced an inline subaddress formatter that was later moved out, or a fork).
+- If the intended helper is the `IDepositAdapter.usedAddresses` mapping at lines 332-336 of `/Users/ant013/Ios/bench-vanilla/Unstoppable/Unstoppable/Core/Adapters/MoneroAdapter.swift`, please reconfirm — it is 5 lines, not ~30, and contains no formatting logic, only a model adapter map. A refactor of that block would not match the task description.

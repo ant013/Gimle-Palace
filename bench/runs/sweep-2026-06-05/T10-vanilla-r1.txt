@@ -1,0 +1,33 @@
+=== ARTIFACT ===
+
+Searched the entire working tree of /Users/ant013/Ios/bench-vanilla for any method named `recordSwap` (via `grep -rn "recordSwap"` across all files, then narrowed to `func recordSwap` declarations in Swift).
+
+Result: exactly ONE occurrence of a `recordSwap` method.
+
+| # | File path | Line | Enclosing class |
+|---|-----------|------|-----------------|
+| 1 | /Users/ant013/Ios/bench-vanilla/Source/RecentSwaps.swift | 20 | `RecentSwaps` (final class) |
+
+Signature:
+    func recordSwap(txHash: String, from: String, to: String)
+
+Notes:
+- File is a newly-staged file (header comment confirms it was placed for the T10 benchmark and is not in any pre-existing index). Plain `grep` across the working tree finds it without issue.
+- Line 6 is a comment that contains the literal token `recordSwap` but is not a method definition; only line 20 is the method declaration.
+- No other Swift, Kotlin, Objective-C, or other source file in the tree contains a `recordSwap` symbol.
+
+=== CHECKLIST_FACTS ===
+- Lists every `recordSwap` method in the working tree: yes
+- Includes file path for each occurrence: yes
+- Includes line number for each occurrence: yes
+- Identifies enclosing class for each occurrence: yes
+- Catches the newly added file (Source/RecentSwaps.swift) not in any stale index: yes
+
+=== TOOL_USAGE ===
+- Bash calls: 3
+- Read calls: 2
+- Grep calls: 0
+- Glob calls: 0
+- Edit/Write calls: 0
+- WebFetch/WebSearch calls: 0
+- skills invoked: none (trivial single-grep lookup; brainstorming/plans/TDD waived as not applicable to a pure search task)

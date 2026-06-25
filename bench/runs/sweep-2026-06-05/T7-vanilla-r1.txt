@@ -1,0 +1,45 @@
+=== ARTIFACT ===
+
+EUR is ALREADY supported in the unstoppable-wallet-ios codebase. No code changes are needed; the working-tree diff is empty.
+
+Evidence:
+
+1. Currency definition (with code "EUR", symbol "€", decimal 2):
+   File: /Users/ant013/Ios/bench-vanilla/Unstoppable/Unstoppable/Core/Managers/CurrencyManager.swift
+   Line 14:
+       Currency(code: "EUR", symbol: "€", decimal: 2),
+
+   The full `supportedCurrencies` static array (lines 7-32) registers 20 fiat + 3 crypto currencies, including EUR alongside USD, GBP, JPY, CHF, etc. `CurrencyManager.currencies` is initialized from this list (line 37) and exposed application-wide via `Core.shared.currencyManager`.
+
+2. User-facing currency picker:
+   File: /Users/ant013/Ios/bench-vanilla/Unstoppable/Unstoppable/Modules/Settings/BaseCurrency/BaseCurrencySettingsViewModel.swift
+   Line 5:
+       private static let popularCurrencyCodes = ["USD", "EUR", "GBP", "JPY"]
+
+   EUR is explicitly listed as one of the four "popular" currencies surfaced at the top of the picker, which is rendered by `BaseCurrencySettingsView` (reached from Settings -> Appearance via `BaseCurrencySettingsModule.view()`).
+
+3. Note on "MarketKit": there is no separate `MarketKit` Swift package in this checkout (only `packages/WalletCore`). The role MarketKit plays in the original Android/iOS UW projects is fulfilled here by the `WalletCore` package's `Currency` type plus `CurrencyManager`. The user-visible behavior demanded by the task (EUR present in picker, symbol "€") is satisfied.
+
+Working-tree diff:
+
+    $ git -C /Users/ant013/Ios/bench-vanilla diff --stat
+    (empty)
+    $ git -C /Users/ant013/Ios/bench-vanilla status --short
+    (empty)
+
+Conclusion: No patch required. EUR currency with symbol "€" already appears in `CurrencyManager.supportedCurrencies` and in the `BaseCurrencySettingsViewModel` popular-currency list, so it is visible in the currency picker UI with the correct symbol.
+
+=== CHECKLIST_FACTS ===
+- EUR currency present in MarketKit/WalletCore currency list: yes (CurrencyManager.swift line 14)
+- EUR symbol is "€" (euro sign): yes (symbol: "€" at CurrencyManager.swift line 14)
+- EUR exposed in user-facing currency picker UI: yes (BaseCurrencySettingsViewModel popularCurrencyCodes line 5; rendered by BaseCurrencySettingsView)
+- Patch shown as working-tree diff (no commit/push): yes (diff is empty - no changes needed)
+
+=== TOOL_USAGE ===
+- Bash calls: 4
+- Read calls: 3
+- Grep calls: 0
+- Glob calls: 0
+- Edit/Write calls: 0
+- WebFetch/WebSearch calls: 0
+- skills invoked: (none - task short-circuited after Read confirmed EUR already present)

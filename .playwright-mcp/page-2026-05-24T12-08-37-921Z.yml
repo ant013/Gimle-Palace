@@ -1,0 +1,216 @@
+- generic [ref=e2]:
+  - generic [ref=e7]:
+    - button "keyboard_double_arrow_left" [ref=e649] [cursor=pointer]:
+      - generic [ref=e651]: keyboard_double_arrow_left
+    - list [ref=e10]:
+      - listitem [ref=e11]:
+        - link "app" [ref=e13] [cursor=pointer]:
+          - /url: http://127.0.0.1:8501/
+          - paragraph [ref=e16]: app
+      - listitem [ref=e17]:
+        - link "batch sweep" [ref=e19] [cursor=pointer]:
+          - /url: http://127.0.0.1:8501/batch_sweep
+          - paragraph [ref=e22]: batch sweep
+      - listitem [ref=e23]:
+        - link "compare" [ref=e25] [cursor=pointer]:
+          - /url: http://127.0.0.1:8501/compare
+          - paragraph [ref=e28]: compare
+      - listitem [ref=e29]:
+        - link "settings" [ref=e31] [cursor=pointer]:
+          - /url: http://127.0.0.1:8501/settings
+          - paragraph [ref=e34]: settings
+      - listitem [ref=e35]:
+        - link "shared" [ref=e37] [cursor=pointer]:
+          - /url: http://127.0.0.1:8501/shared
+          - paragraph [ref=e40]: shared
+      - listitem [ref=e41]:
+        - link "strategy builder" [active] [ref=e43] [cursor=pointer]:
+          - /url: http://127.0.0.1:8501/strategy_builder
+          - paragraph [ref=e46]: strategy builder
+      - listitem [ref=e47]:
+        - link "top 5" [ref=e49] [cursor=pointer]:
+          - /url: http://127.0.0.1:8501/top_5
+          - paragraph [ref=e52]: top 5
+    - generic [ref=e56]:
+      - heading "LabUI" [level=2] [ref=e656]
+      - paragraph [ref=e661]: Single-run Strategy Lab backtests on local Binance futures data.
+      - code [ref=e666]: uv run trading-research serve-lab-ui
+      - generic [ref=e669]: "Data: data/historical/binance_futures"
+      - separator [ref=e674]
+      - paragraph [ref=e679]: Pages
+      - list [ref=e684]:
+        - listitem [ref=e685]:
+          - link "Strategy Builder" [ref=e686] [cursor=pointer]:
+            - /url: Strategy_builder
+  - generic [ref=e3]:
+    - banner [ref=e93]:
+      - generic [ref=e96]:
+        - button "Deploy" [ref=e98] [cursor=pointer]:
+          - generic [ref=e100]: Deploy
+        - button "Main menu" [ref=e102] [cursor=pointer]:
+          - img [ref=e103]
+    - generic [ref=e106]:
+      - heading "Generic Strategy Builder" [level=1] [ref=e691]:
+        - text: Generic Strategy Builder
+        - generic [ref=e692]:
+          - link "Link to heading":
+            - /url: "#generic-strategy-builder"
+            - img
+      - paragraph [ref=e697]: Manage saved generic strategies and prepare the builder form state.
+      - generic [ref=e699]:
+        - generic [ref=e701]:
+          - heading "Saved Strategies" [level=3] [ref=e706]:
+            - text: Saved Strategies
+            - generic [ref=e707]:
+              - link "Link to heading":
+                - /url: "#saved-strategies"
+                - img
+          - alert [ref=e710]:
+            - paragraph [ref=e715]: No saved strategies yet. Create one to start the builder.
+          - generic [ref=e717]:
+            - paragraph [ref=e721]: New Strategy ID
+            - textbox "New Strategy ID" [ref=e724]:
+              - /placeholder: ""
+          - button "Create" [ref=e727] [cursor=pointer]:
+            - paragraph [ref=e731]: Create
+          - separator [ref=e736]
+          - generic [ref=e738]:
+            - paragraph [ref=e742]: Rename To
+            - textbox "Rename To" [disabled] [ref=e745]:
+              - /placeholder: ""
+          - button "Rename" [disabled] [ref=e748]:
+            - paragraph [ref=e752]: Rename
+          - generic [ref=e754]:
+            - paragraph [ref=e758]: Duplicate As
+            - textbox "Duplicate As" [disabled] [ref=e761]:
+              - /placeholder: ""
+          - button "Duplicate" [disabled] [ref=e764]:
+            - paragraph [ref=e768]: Duplicate
+          - button "Delete" [disabled] [ref=e771]:
+            - paragraph [ref=e775]: Delete
+        - generic [ref=e777]:
+          - heading "Strategy Details" [level=3] [ref=e782]:
+            - text: Strategy Details
+            - generic [ref=e783]:
+              - link "Link to heading":
+                - /url: "#strategy-details"
+                - img
+          - alert [ref=e786]:
+            - paragraph [ref=e791]: No strategy loaded.
+        - generic [ref=e793]:
+          - heading "Signal Catalog" [level=3] [ref=e798]:
+            - text: Signal Catalog
+            - generic [ref=e799]:
+              - link "Link to heading":
+                - /url: "#signal-catalog"
+                - img
+          - generic [ref=e801]:
+            - paragraph [ref=e805]: Search Signals
+            - textbox "Search Signals" [ref=e808]:
+              - /placeholder: ""
+          - generic [ref=e810]:
+            - paragraph [ref=e814]: Filter Roles
+            - generic [ref=e817]:
+              - generic [ref=e818]:
+                - combobox "Filter Roles" [ref=e820]
+                - generic: Choose options
+              - img "open" [ref=e822] [cursor=pointer]
+          - paragraph [ref=e828]: Select or create a strategy to add signals.
+          - paragraph [ref=e833]:
+            - strong [ref=e834]: bollinger_channel_reentry
+          - paragraph [ref=e839]: "Suggested roles: weighted, trigger, stop"
+          - paragraph [ref=e844]: Signals when price re-enters a Bollinger channel from an extreme.
+          - alert [ref=e847]:
+            - paragraph [ref=e852]: "Params: window: int, num_std: float"
+          - button "Add bollinger_channel_reentry" [disabled] [ref=e855]:
+            - paragraph [ref=e859]: Add bollinger_channel_reentry
+          - separator [ref=e864]
+          - paragraph [ref=e869]:
+            - strong [ref=e870]: bollinger_midline_hold
+          - paragraph [ref=e875]: "Suggested roles: weighted, trigger, stop"
+          - paragraph [ref=e880]: Tracks persistent closes on one side of the Bollinger midline.
+          - alert [ref=e883]:
+            - paragraph [ref=e888]: "Params: window: int, num_std: float, hold_floor: int = 2, hold_ceiling: int = 10"
+          - button "Add bollinger_midline_hold" [disabled] [ref=e891]:
+            - paragraph [ref=e895]: Add bollinger_midline_hold
+          - separator [ref=e900]
+          - paragraph [ref=e905]:
+            - strong [ref=e906]: bollinger_squeeze
+          - paragraph [ref=e911]: "Suggested roles: gate"
+          - paragraph [ref=e916]: Flags compression by ranking current Bollinger band width.
+          - alert [ref=e919]:
+            - paragraph [ref=e924]: "Params: window: int, num_std: float, percentile_window: int = 20"
+          - button "Add bollinger_squeeze" [disabled] [ref=e927]:
+            - paragraph [ref=e931]: Add bollinger_squeeze
+          - separator [ref=e936]
+          - paragraph [ref=e941]:
+            - strong [ref=e942]: breakout_high
+          - paragraph [ref=e947]: "Suggested roles: weighted, trigger, stop"
+          - paragraph [ref=e952]: Detects closes that break above the rolling high.
+          - alert [ref=e955]:
+            - paragraph [ref=e960]: "Params: window: int, atr_window: int"
+          - button "Add breakout_high" [disabled] [ref=e963]:
+            - paragraph [ref=e967]: Add breakout_high
+          - separator [ref=e972]
+          - paragraph [ref=e977]:
+            - strong [ref=e978]: ema_trend_strength
+          - paragraph [ref=e983]: "Suggested roles: weighted, trigger, stop"
+          - paragraph [ref=e988]: Measures directional trend strength from EMA slope and distance.
+          - alert [ref=e991]:
+            - paragraph [ref=e996]: "Params: ema_window: int, atr_window: int, atr_scale: float = 1.0, slope_lookback: int = 3"
+          - button "Add ema_trend_strength" [disabled] [ref=e999]:
+            - paragraph [ref=e1003]: Add ema_trend_strength
+          - separator [ref=e1008]
+          - paragraph [ref=e1013]:
+            - strong [ref=e1014]: event_stub
+          - paragraph [ref=e1019]: "Suggested roles: gate"
+          - paragraph [ref=e1024]: Placeholder event filter used for integration and contract tests.
+          - alert [ref=e1027]:
+            - paragraph [ref=e1032]: "Params: No constructor params."
+          - button "Add event_stub" [disabled] [ref=e1035]:
+            - paragraph [ref=e1039]: Add event_stub
+          - separator [ref=e1044]
+          - paragraph [ref=e1049]:
+            - strong [ref=e1050]: liquidity_stub
+          - paragraph [ref=e1055]: "Suggested roles: gate"
+          - paragraph [ref=e1060]: Placeholder liquidity filter used for integration and contract tests.
+          - alert [ref=e1063]:
+            - paragraph [ref=e1068]: "Params: No constructor params."
+          - button "Add liquidity_stub" [disabled] [ref=e1071]:
+            - paragraph [ref=e1075]: Add liquidity_stub
+          - separator [ref=e1080]
+          - paragraph [ref=e1085]:
+            - strong [ref=e1086]: regime_classifier
+          - paragraph [ref=e1091]: "Suggested roles: gate"
+          - paragraph [ref=e1096]: Classifies market regime from EMA separation, slope, and ATR.
+          - alert [ref=e1099]:
+            - paragraph [ref=e1104]: "Params: fast_ema_window: int = 10, slow_ema_window: int = 30, atr_window: int = 14, atr_trend_threshold: float = 0.5, ema_gap_threshold: float = 0.002, slope_lookback: int = 3"
+          - button "Add regime_classifier" [disabled] [ref=e1107]:
+            - paragraph [ref=e1111]: Add regime_classifier
+          - separator [ref=e1116]
+          - paragraph [ref=e1121]:
+            - strong [ref=e1122]: relative_strength_vs_benchmark
+          - paragraph [ref=e1127]: "Suggested roles: weighted, trigger, stop"
+          - paragraph [ref=e1132]: Compares asset EMA momentum against a benchmark EMA.
+          - alert [ref=e1135]:
+            - paragraph [ref=e1140]: "Params: ema_asset_window: int, ema_bench_window: int, atr_scale: float = 1.0"
+          - button "Add relative_strength_vs_benchmark" [disabled] [ref=e1143]:
+            - paragraph [ref=e1147]: Add relative_strength_vs_benchmark
+          - separator [ref=e1152]
+          - paragraph [ref=e1157]:
+            - strong [ref=e1158]: volatility_filter_vs_benchmark
+          - paragraph [ref=e1163]: "Suggested roles: gate"
+          - paragraph [ref=e1168]: Compares asset ATR against benchmark ATR as a filter strength.
+          - alert [ref=e1171]:
+            - paragraph [ref=e1176]: "Params: atr_asset_window: int, atr_bench_window: int"
+          - button "Add volatility_filter_vs_benchmark" [disabled] [ref=e1179]:
+            - paragraph [ref=e1183]: Add volatility_filter_vs_benchmark
+          - separator [ref=e1188]
+          - paragraph [ref=e1193]:
+            - strong [ref=e1194]: volume_spike
+          - paragraph [ref=e1199]: "Suggested roles: gate"
+          - paragraph [ref=e1204]: Measures how strongly current volume exceeds recent median volume.
+          - alert [ref=e1207]:
+            - paragraph [ref=e1212]: "Params: window: int"
+          - button "Add volume_spike" [disabled] [ref=e1215]:
+            - paragraph [ref=e1219]: Add volume_spike

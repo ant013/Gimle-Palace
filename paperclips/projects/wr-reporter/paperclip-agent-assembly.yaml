@@ -1,0 +1,95 @@
+schemaVersion: 2
+
+# Wallet Radar Reporter — the standalone reporting/intelligence agent.
+# DELIBERATELY a separate Paperclip company (a53c1926, prefix WR) from the
+# uaudit/wallet-radar DEV team (company 8f55e80b, prefix UNS) that codes the
+# project. This project assembles instructions for that single reporter agent.
+# Real UUIDs / telegram plugin id / paths live host-local in
+# ~/.paperclip/projects/wr-reporter/{bindings,plugins,paths}.yaml (Phase F).
+
+project:
+  key: wr-reporter
+  display_name: Wallet Radar Reporter
+  system_name: WalletRadar
+  issue_prefix: WR
+  integration_branch: main
+  specs_dir: docs/superpowers/specs
+  plans_dir: docs/superpowers/plans
+
+domain:
+  wallet_target_short: WalletRadar
+  wallet_target_name: Wallet Radar
+  wallet_target_slug: wallet-radar
+
+evidence:
+  merge_without_smoke_issue: WR-bootstrap
+  graphiti_mock_issue: WR-bootstrap
+  release_reset_issue: WR-bootstrap
+  asyncmock_driver_issue: WR-bootstrap
+  worktree_discipline_issue_pair: WR-bootstrap
+  qa_worktree_discipline_issue: WR-bootstrap
+  mcp_wire_contract_issue: WR-bootstrap
+  qa_deploy_checklist_issue: WR-bootstrap
+  review_scope_drift_issue: WR-bootstrap
+  qa_to_cto_stall_issue: WR-bootstrap
+  handoff_flake_issue: WR-bootstrap
+  pre_slim_baseline_issue: WR-bootstrap
+  cr_to_pe_stall_issue: WR-bootstrap
+  handoff_misclassified_issue: WR-bootstrap
+  post_merge_stall_issue: WR-bootstrap
+
+paths:
+  overlay_root: paperclips/projects/wr-reporter/overlays
+  project_rules_file: AGENTS.md
+
+# Reporter is LEAN at runtime — its codex config.toml exposes ONLY the
+# wallet-radar MCP. The base_required list below satisfies the shared validator
+# contract; the Reporter overlay (_common.md) authoritatively narrows the live
+# scope to wallet-radar only ("do not assume codebase-memory/serena/github").
+mcp:
+  service_name: wallet-radar
+  package_name: wallet_radar
+  tool_namespace: wallet_radar
+  base_required:
+    - codebase-memory
+    - context7
+    - serena
+    - github
+    - sequential-thinking
+  codebase_memory_projects:
+    primary: wallet-radar
+  additions:
+    project: []
+    by_role: {}
+
+report_delivery:
+  issue_prefix: WR
+  default_owner: Reporter
+
+skills:
+  additions:
+    project: []
+    by_role: {}
+
+subagents:
+  additions:
+    project: []
+    by_role: {}
+
+targets:
+  codex:
+    instruction_entry_file: AGENTS.md
+    adapter_type: codex_local
+    deploy_mode: api
+    instructions_bundle_mode: managed
+
+compatibility:
+  legacy_output_paths: false
+
+agents:
+  - agent_name: Reporter
+    role_source: paperclips/roles-codex/cx-research-agent.md
+    profile: research
+    target: codex
+    platform: all
+    primary_codebase_memory_project: wallet-radar

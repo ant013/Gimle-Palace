@@ -1,0 +1,30 @@
+=== ARTIFACT ===
+
+Task premise does not match the codebase. There is NO inline ~30-line address-formatting (subaddress) helper inside `MoneroAdapter` to extract.
+
+File inspected: /Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Core/Adapters/MoneroAdapter.swift (430 lines, full read).
+
+Address/subaddress-related code present:
+- Line 152-154: `explorerUrl(address:) -> String?` — 1 line, returns "".
+- Line 189-191: delegate stub `subAddressesUpdated(subaddresses _: [MoneroKit.SubAddress])` — 1 line body, just forwards `depositAddressSubject.send(.completed(receiveAddress))`. No formatting.
+- Line 323-337: `IDepositAdapter` extension — `receiveAddress` wraps `kit.receiveAddress` in `DepositAddress(...)` (1 line); `usedAddresses` maps `kit.usedAddresses` to `UsedAddress` (~3 lines, no formatting logic — pure field rename).
+- Line 367-377: `static func address(accountType:) -> String` (~10 lines) — switches on AccountType and delegates fully to `MoneroKit.Kit.address(wallet:account:index:)`. No formatting, no string manipulation, no truncation/abbreviation; nothing to extract.
+
+Verified via grep: `format` does not appear anywhere in MoneroAdapter.swift. `subaddress`/`SubAddress` only appears at the delegate-callback signature (line 189).
+
+A `MoneroAddressFormatter` class cannot be created from logic that does not exist. Fabricating an arbitrary ~30-line helper and a synthetic call site would be a destructive hallucination, would not preserve behavior (no behavior to preserve), and would not satisfy "Keep existing tests passing" in any meaningful way (the new symbol would have no exercised contract).
+
+No patch is produced. If the task author meant a different adapter (e.g., a Monero send/receive view-model or a `MoneroAddressParser` somewhere outside Core/Adapters), please re-point the prompt. A repo-wide search for inline Monero subaddress formatting (`MoneroAdapter` + `format` + `subaddress` keywords) returned no matches.
+
+=== CHECKLIST_FACTS ===
+- Inline ~30-line subaddress-formatting helper exists in MoneroAdapter: no (it does not — task premise rejected)
+- New top-level class `MoneroAddressFormatter` created in a new file: no (no source logic to extract; refused to fabricate)
+- Call site in `MoneroAdapter` updated to use new class: no (no original call site exists)
+- Existing tests not modified: yes (no files modified)
+- Patch shown as working-tree diff: yes (empty diff — no changes made; explanation provided in lieu of patch)
+- Not committed / not pushed: yes
+
+=== PALACE_USAGE ===
+- tools called: none (single-file task; direct Read + grep was sufficient and cheaper than palace round-trips)
+- total palace calls: 0
+- approx bytes returned by palace: 0
