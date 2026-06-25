@@ -28,6 +28,7 @@ from pydantic import ConfigDict
 from palace_mcp.code.native_detect_changes import FALLBACK_TO_CM, native_detect_changes
 from palace_mcp.code.native_get_architecture import native_get_architecture
 from palace_mcp.code.native_get_code_snippet import native_get_code_snippet
+from palace_mcp.code.native_search_code import native_search_code
 from palace_mcp.code.list_passthrough_projects import (
     build_passthrough_project_listing,
 )
@@ -256,6 +257,7 @@ _PASSTHROUGH_TOOLS: dict[str, PassthroughEntry] = {
     "search_code": PassthroughEntry(
         "Grep-like code search across indexed repositories.",
         phase2_error_code="phase2_required",
+        native_handler=native_search_code,
     ),
 }
 
