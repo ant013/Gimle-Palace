@@ -105,12 +105,37 @@ async def get_health(driver: AsyncDriver, *, default_group_id: str) -> HealthRes
     async with driver.session() as session:
         entity_counts, ingest, slugs, per_project = await session.execute_read(_read)
 
-    git_available: list[str] = []
+    # git_repos_available = registered projects whose repo resolves to a real git
+    # repo (native: via repo_path on the :Project node) — i.e. usable by palace.git.*.
+    # NOT a flat REPOS_ROOT scan (which missed hs-mount projects on native).
+    from palace_mcp.git.path_resolver import resolve_registered_project
+    from palace_mcp.memory.cypher import LIST_PROJECTS
+
+    async with driver.session() as proj_session:
+        proj_result = await proj_session.run(LIST_PROJECTS)
+        project_rows: list[Any] = [row["p"] async for row in proj_result]
+
+    git_available_set: set[str] = set()
+    for node in project_rows:
+        node_slug = node.get("slug")
+        if not node_slug:
+            continue
+        try:
+            repo = resolve_registered_project(node_slug, project_node=node)
+        except Exception:
+            continue
+        if (repo / ".git").exists():
+            git_available_set.add(node_slug)
+    git_available = sorted(git_available_set)
+
+    # git_repos_unregistered = git repos physically under REPOS_ROOT that are NOT
+    # registered projects (a distinct list from `available`).
+    disk_repos: set[str] = set()
     if REPOS_ROOT.is_dir():
         for entry in sorted(REPOS_ROOT.iterdir()):
             if entry.is_dir() and (entry / ".git").exists():
-                git_available.append(entry.name)
-    git_unregistered = sorted(set(git_available) - set(slugs))
+                disk_repos.add(entry.name)
+    git_unregistered = sorted(disk_repos - set(slugs))
 
     default_project = default_group_id.removeprefix("project/")
     bridge_health = _build_bridge_health(default_project)

@@ -29,7 +29,8 @@ class LookupRequest(BaseModel):
     filters: dict[str, Any] = Field(default_factory=dict)
     offset: int = Field(default=0, ge=0)
     limit: int = Field(default=20, ge=1, le=100)
-    order_by: Literal["created_at", "name"] = "created_at"
+    # Free-form "<column> [asc|desc]"; parsed + whitelisted in lookup._safe_order_by.
+    order_by: str = "created_at"
 
 
 class LookupResponseItem(BaseModel):

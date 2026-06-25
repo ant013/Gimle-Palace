@@ -44,6 +44,26 @@ def _serialize_props(props: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+_ALLOWED_ORDER_COLUMNS = {"created_at", "updated_at", "name"}
+
+
+def _safe_order_by(order_by: str) -> tuple[str, str]:
+    """Parse a user ``order_by`` (e.g. ``"created_at desc"``) into (column, direction).
+
+    Whitelists the column (defends against Cypher injection via interpolation) and
+    parses an optional ASC/DESC direction. Falls back to ``("created_at", "DESC")``
+    for anything unrecognised so the query is always valid and never raises.
+    """
+    tokens = (order_by or "").strip().split()
+    column = tokens[0] if tokens else "created_at"
+    direction = tokens[1].upper() if len(tokens) > 1 else "DESC"
+    if column not in _ALLOWED_ORDER_COLUMNS:
+        column = "created_at"
+    if direction not in {"ASC", "DESC"}:
+        direction = "DESC"
+    return column, direction
+
+
 def _build_query(
     entity_type: EntityType,
     where_clauses: list[str],
@@ -52,11 +72,12 @@ def _build_query(
     offset: int = 0,
 ) -> str:
     where = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
-    # order_by is a Literal union of known column names; limit/offset are validated ints.
+    order_col, order_dir = _safe_order_by(order_by)
+    # order_col/order_dir are whitelisted; limit/offset are validated ints.
     return f"""
         MATCH (n:{entity_type})
         {where}
-        ORDER BY n.{order_by} DESC
+        ORDER BY n.{order_col} {order_dir}
         SKIP {offset}
         LIMIT {limit}
         RETURN n AS node
