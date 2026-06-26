@@ -86,6 +86,39 @@ def test_slice_ref_operator_decision_ok() -> None:
     assert req.slice_ref == "operator-decision-20260426"
 
 
+def test_slice_ref_spec_ok() -> None:
+    req = DecideRequest(
+        **{**_MINIMAL, "slice_ref": "spec:incremental-update-orchestration"}
+    )
+    assert req.slice_ref == "spec:incremental-update-orchestration"
+
+
+def test_slice_ref_bootstrap_ok() -> None:
+    req = DecideRequest(**{**_MINIMAL, "slice_ref": "bootstrap:GIM-247"})
+    assert req.slice_ref == "bootstrap:GIM-247"
+
+
+def test_slice_ref_pr_ok() -> None:
+    req = DecideRequest(**{**_MINIMAL, "slice_ref": "pr:436"})
+    assert req.slice_ref == "pr:436"
+
+
+def test_slice_ref_pr_non_numeric_raises() -> None:
+    with pytest.raises(ValidationError):
+        DecideRequest(**{**_MINIMAL, "slice_ref": "pr:abc"})
+
+
+def test_slice_ref_spec_empty_payload_raises() -> None:
+    with pytest.raises(ValidationError):
+        DecideRequest(**{**_MINIMAL, "slice_ref": "spec:"})
+
+
+def test_slice_ref_full_pr_url_raises() -> None:
+    # Full URLs are not a bounded provenance anchor — use pr:<n> instead.
+    with pytest.raises(ValidationError):
+        DecideRequest(**{**_MINIMAL, "slice_ref": "https://github.com/x/y/pull/1"})
+
+
 def test_decision_maker_invalid_raises() -> None:
     with pytest.raises(ValidationError):
         DecideRequest(**{**_MINIMAL, "decision_maker_claimed": "hacker"})

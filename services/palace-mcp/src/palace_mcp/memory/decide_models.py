@@ -7,8 +7,16 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field, field_validator
 
+# Bounded provenance anchors. Tracker refs (GIM-/N+/operator-decision-) plus
+# documented namespaced contexts the analog-driven-development skill needs
+# (spec:/bootstrap:/pr:). Full URLs are intentionally NOT accepted — use pr:<n>.
 SLICE_REF_PATTERN = re.compile(
-    r"^GIM-\d+$|^N\+\d+[a-z]*(\.\d+)?$|^operator-decision-\d{8}$"
+    r"^GIM-\d+$"
+    r"|^N\+\d+[a-z]*(\.\d+)?$"
+    r"|^operator-decision-\d{8}$"
+    r"|^spec:[A-Za-z0-9._\-/]+$"
+    r"|^bootstrap:[A-Za-z0-9._\-]+$"
+    r"|^pr:\d+$"
 )
 
 VALID_DECISION_MAKERS = frozenset(
@@ -41,7 +49,8 @@ class DecideRequest(BaseModel):
         if not SLICE_REF_PATTERN.match(v):
             raise ValueError(
                 f"slice_ref {v!r} does not match allowed patterns: "
-                "GIM-<n>, N+<n>[a-z][.<n>], operator-decision-<YYYYMMDD>"
+                "GIM-<n>, N+<n>[a-z][.<n>], operator-decision-<YYYYMMDD>, "
+                "spec:<slug>, bootstrap:<id>, pr:<n>"
             )
         return v
 
