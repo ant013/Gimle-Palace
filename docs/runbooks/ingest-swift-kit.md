@@ -5,6 +5,128 @@
 > For the registry-backed baseline first run, see
 > [uw-ios-baseline-first-ingest.md](uw-ios-baseline-first-ingest.md).
 
+---
+
+## NATIVE ingest (current dev-Mac setup — no Docker) — USE THIS
+
+The dev-Mac palace is **native** (Homebrew Neo4j + a launchd-managed uvicorn on
+`:8765`, source `/Users/Shared/Ios/Gimle-Palace/services/palace-mcp/src` via the
+`Gimle-Palace-native/.venv` editable install). Docker is dead. **Do not run the
+CLI `palace-mcp project analyze` subcommand on native** — its
+`ensure_project_analyze_runtime` does `docker compose up --force-recreate` and it
+writes container `/repos-hs/...` SCIP paths the native server cannot read. Drive
+the server-side MCP tool directly instead. Validated 2026-06-27 on
+eip20-kit / tron-kit / uniswap-kit.
+
+Topology (native):
+- Source repos (code **and** SCIP): `/Users/Shared/Ios/Gimle-Repos/HorizontalSystems/<RepoDir>`
+- Authoritative env (shell-sourced by `…/scripts/launch_native_macos.sh`):
+  **`/Users/ant013/Android/Gimle-Palace-native/.env`** — NOT the Shared-root or
+  `services/palace-mcp/.env`. SCIP paths here are **real absolute paths**, single-quoted JSON.
+- MCP URL: `http://localhost:8765/mcp`
+- Restart: `launchctl kickstart -k gui/$(id -u)/work.ant013.palace-mcp-native`
+
+### Steps (per kit, e.g. `tron-kit` → `TronKit.Swift`)
+
+**1. Clone at the rev uw-ios-app pins** (so the kit matches the ingested app). Read the
+revision from `unstoppable-wallet-ios/…/Package.resolved`, then:
+```bash
+cd /Users/Shared/Ios/Gimle-Repos/HorizontalSystems
+git clone https://github.com/horizontalsystems/TronKit.Swift.git
+git -C TronKit.Swift checkout <pinned-rev>
+```
+
+**2. Emit SCIP locally (no remote copy):**
+```bash
+cd /Users/Shared/Ios/Gimle-Palace
+bash paperclips/scripts/scip_emit_swift_kit.sh tron-kit \
+  --repo-root /Users/Shared/Ios/Gimle-Repos/HorizontalSystems \
+  --no-remote-copy
+# → writes /Users/Shared/Ios/Gimle-Repos/HorizontalSystems/TronKit.Swift/scip/index.scip
+```
+(Uses `xcrun` → the real Xcode toolchain; a stale `swift` on PATH does not matter.)
+
+**3. Register the SCIP path in the NATIVE env** (real path, NOT `/repos-hs`). Back up first;
+the value is single-quoted JSON on one line:
+```bash
+python3 - <<'PY'
+import json, pathlib
+p = pathlib.Path("/Users/ant013/Android/Gimle-Palace-native/.env")
+out=[]
+for ln in p.read_text().splitlines():
+    if ln.startswith("PALACE_SCIP_INDEX_PATHS="):
+        d = json.loads(ln.split("=",1)[1].strip().strip("'"))
+        d["tron-kit"] = "/Users/Shared/Ios/Gimle-Repos/HorizontalSystems/TronKit.Swift/scip/index.scip"
+        ln = "PALACE_SCIP_INDEX_PATHS='" + json.dumps(d) + "'"
+    out.append(ln)
+p.write_text("\n".join(out)+"\n")
+PY
+```
+
+**4. Restart so the server reloads the env** (config reads `PALACE_SCIP_INDEX_PATHS`
+from the process environment; no hot-reload):
+```bash
+launchctl kickstart -k gui/$(id -u)/work.ant013.palace-mcp-native
+# wait for health: curl -s http://localhost:8765/health  → {"status":"ok"}
+```
+Batch tip: add **all** new kits' paths in step 3, then restart once.
+
+**5. Start the durable analysis run via the MCP tool** (register + symbol_index_swift +
+audit cascade + `embedding_symbol` are all in this one run):
+```bash
+/Users/ant013/Android/Gimle-Palace-native/.venv/bin/python -m palace_mcp.cli \
+  tool call palace.project.analyze --url http://localhost:8765/mcp \
+  --json '{"slug":"tron-kit","parent_mount":"hs","relative_path":"TronKit.Swift",
+           "language_profile":"swift_kit","name":"tron-kit","bundle":"uw-ios","depth":"full"}'
+# → {"ok":true,"run_id":"…","status":"RUNNING"}  (returns immediately; runs async on server)
+```
+
+**6. Monitor.** `palace.project.analyze_status` exists but can error under heavy embedding
+load — Neo4j is ground truth:
+```bash
+cypher-shell -a bolt://localhost:7687 -u neo4j -p "$NEO4J_PASSWORD" --format plain \
+  "MATCH (s:Symbol) WHERE s.group_id='project/tron-kit'
+   RETURN count(s) AS syms, count(s.embedding) AS emb"
+# done when emb == syms (kits embed to 100%, like evm-kit 44662/44662)
+```
+
+Slug ↔ repo-dir come from `services/palace-mcp/scripts/uw-ios-bundle-manifest.json`
+(`eip20-kit`→`Eip20Kit.Swift`, `tron-kit`→`TronKit.Swift`, `uniswap-kit`→`UniswapKit.Swift`).
+`parent_mount` is `hs`; `language_profile` is `swift_kit`.
+
+### Gotchas (native, learned 2026-06-27 on eip20/tron/uniswap)
+
+- **Run kits STRICTLY SERIALLY — one analyze run at a time.** Two failure modes from
+  concurrency on the single-process native server:
+  - Concurrent `symbol_index_swift` collide on the shared Tantivy index — the loser writes
+    **0 symbols** (no hard error; `continue_on_failure` then runs the rest of the cascade on an
+    empty graph). Symptom: `count(Symbol)=0` while the run shows `last_completed_extractor`
+    already past `symbol_index_swift`. Fix: `force_new=true` re-run, alone.
+  - Concurrent `embedding_symbol` saturates the single uvicorn event loop → the server stops
+    answering HTTP (`/health` times out, agents see **"Tools: (none)"** / MCP list-tools hangs).
+    Data is fine (embeddings keep landing in Neo4j), but agents can't use palace until it drains.
+  Wait for each run to reach a terminal status (e.g. `SUCCEEDED_WITH_FAILURES`) before starting
+  the next. `ACTIVE_ANALYSIS_RUN_EXISTS` means the prior run for that slug is still active.
+- **`SUCCEEDED_WITH_FAILURES` is the normal terminal status** for a kit ingested without
+  Periphery/`.swiftinterface` artefacts — `public_api_surface`/`hot_path_profiler` report
+  `MISSING_INPUT`, `cross_module_contract` is `SKIPPED`. Run `prepare_swift_kit_artifacts.sh`
+  first if you need those audit extractors.
+- **Verify with Neo4j, not the tools.** `palace.memory.list_projects` may omit a freshly
+  registered kit (W9a `p.name` vs `p.slug` quirk) and scoped `semantic_search` on a small kit can
+  return 0 (W3 global top-K starvation vs uw-ios-app's 248k) — both pre-existing query-layer bugs,
+  NOT ingest failures. Ground truth: `MATCH (s:Symbol) WHERE s.group_id='project/<slug>'`. A
+  `search_graph` name-pattern query is the most reliable agent-facing check.
+- Don't run heavy ingests while agents need palace — embedding makes `:8765` unresponsive.
+
+> **Why the legacy flow below fails on native:** it targets Docker (`/repos-hs` bind mount,
+> `:8080`, `docker compose` recreate). The native server reads `PALACE_SCIP_INDEX_PATHS`
+> literally and there is no `/repos-hs` (root symlinks are SIP-blocked on macOS), so container
+> paths point at nothing. Keep the section below only for the historical iMac/Docker deploy.
+
+---
+
+## LEGACY: dev-Mac SCIP + iMac Docker registration (historical)
+
 This runbook covers Audit-V1 S3 single-kit ingestion for one HorizontalSystems
 Swift kit. It splits the flow into:
 
