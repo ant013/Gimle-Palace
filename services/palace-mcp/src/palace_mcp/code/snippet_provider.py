@@ -12,8 +12,9 @@ Security contract:
 
 from __future__ import annotations
 
+import os
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from palace_mcp.git.path_resolver import (
@@ -64,6 +65,11 @@ class FreshnessResult:
     indexed_commit: str | None
     commits_behind_head: int | None
     stale: bool = False
+    # True/False once `git status` ran; None when undeterminable (non-git / error).
+    # Reported separately from `stale`: a dirty tree at the indexed HEAD is not the
+    # same as the index being behind committed HEAD (the operator's symptom — a
+    # just-created uncommitted symbol — is dirty=true, stale=false).
+    dirty_working_tree: bool | None = None
 
 
 def resolve_snippet(
@@ -160,7 +166,7 @@ def resolve_snippet(
     )
 
 
-def inspect_freshness(
+def _inspect_commit_freshness(
     repo_root: Path | None, commit_sha: str | None
 ) -> FreshnessResult:
     """Compare an indexed commit against the repo's current HEAD."""
@@ -221,3 +227,59 @@ def inspect_freshness(
             commits_behind_head=None,
             stale=False,
         )
+
+
+# Dirty-bit cache keyed by repo, invalidated by .git/index mtime (exact, ~1µs
+# stat vs a ~20ms `git status`). HEAD/commit freshness stays uncached — rev-parse
+# is cheap and callers dedup per project.
+_DIRTY_CACHE: dict[Path, tuple[int, bool]] = {}
+
+
+def _is_working_tree_dirty(repo_root: Path | None) -> bool | None:
+    """True if the working tree has uncommitted *tracked* changes.
+
+    Uses `git status --porcelain --untracked-files=no` (untracked files cannot be
+    SCIP-indexed, and `-uall` would walk derived-data dirs at ~40x the cost).
+    Cached per repo, invalidated by `.git/index` mtime. None when the dirty state
+    cannot be determined (not a git repo, git error/timeout) — never raises.
+    """
+    if repo_root is None:
+        return None
+    mtime: int | None
+    try:
+        mtime = os.stat(repo_root / ".git" / "index").st_mtime_ns
+    except OSError:
+        mtime = None  # worktree/bare layout — skip cache, probe live
+    if mtime is not None:
+        cached = _DIRTY_CACHE.get(repo_root)
+        if cached is not None and cached[0] == mtime:
+            return cached[1]
+    try:
+        res = subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=no"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if res.returncode != 0:
+            return None
+        dirty = bool(res.stdout.strip())
+    except Exception:  # noqa: BLE001
+        return None
+    if mtime is not None:
+        _DIRTY_CACHE[repo_root] = (mtime, dirty)
+    return dirty
+
+
+def inspect_freshness(
+    repo_root: Path | None, commit_sha: str | None
+) -> FreshnessResult:
+    """Index freshness: commit lag (vs HEAD) + working-tree dirty bit.
+
+    Composes the committed-state comparison with a separate, cached working-tree
+    dirty check so `0 results + stale:false + dirty_working_tree:false` reads as
+    "really none" while a pending edit surfaces as `dirty_working_tree:true`.
+    """
+    base = _inspect_commit_freshness(repo_root, commit_sha)
+    return replace(base, dirty_working_tree=_is_working_tree_dirty(repo_root))
