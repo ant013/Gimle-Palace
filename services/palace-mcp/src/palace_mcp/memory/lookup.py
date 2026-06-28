@@ -31,10 +31,27 @@ logger = logging.getLogger(__name__)
 _RELATED_FRAGMENTS: dict[EntityType, str] = {}
 
 
-def _serialize_props(props: dict[str, Any]) -> dict[str, Any]:
-    """Convert neo4j temporal/spatial types to JSON-safe primitives."""
+def _is_embedding_key(key: str) -> bool:
+    """Vector-artifact property keys: graphiti `name_embedding`/`fact_embedding`
+    and the bare `embedding` on :Symbol. NOT `embedding_input_hash` (real field)."""
+    return key == "embedding" or key.endswith("_embedding")
+
+
+def _serialize_props(
+    props: dict[str, Any], *, include_embeddings: bool = False
+) -> dict[str, Any]:
+    """Convert neo4j temporal/spatial types to JSON-safe primitives.
+
+    By default drops embedding vectors (1536-dim ≈ 32K chars each) — they are an
+    internal ranking artifact, dominate the read payload (a single lookup of 8
+    Decision nodes was 276K chars, ~95% embeddings), and no read consumer needs
+    them (decide returns only the dim; prime reads only `body`). Pass
+    include_embeddings=True to retain them.
+    """
     out: dict[str, Any] = {}
     for k, v in props.items():
+        if not include_embeddings and _is_embedding_key(k):
+            continue
         if hasattr(v, "iso_format"):
             out[k] = v.iso_format()
         elif isinstance(v, (list, tuple)):
@@ -128,7 +145,7 @@ async def perform_lookup(
     items: list[LookupResponseItem] = []
     for row in rows:
         node = row["node"]
-        props = _serialize_props(dict(node))
+        props = _serialize_props(dict(node), include_embeddings=req.include_embeddings)
         node_id = props.get("uuid") or props.get("id", "")
         props.pop("group_id", None)
         items.append(

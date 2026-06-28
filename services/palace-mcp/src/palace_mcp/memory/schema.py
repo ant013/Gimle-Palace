@@ -4,7 +4,7 @@ Types here are the wire contract between MCP clients and the palace-mcp
 service. Keep them stable — changes are breaking.
 """
 
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -31,6 +31,9 @@ class LookupRequest(BaseModel):
     limit: int = Field(default=20, ge=1, le=100)
     # Free-form "<column> [asc|desc]"; parsed + whitelisted in lookup._safe_order_by.
     order_by: str = "created_at"
+    # Embedding vectors are stripped from response properties by default
+    # (internal ranking artifact, ~32K chars/node); opt in only if truly needed.
+    include_embeddings: bool = False
 
 
 class LookupResponseItem(BaseModel):
