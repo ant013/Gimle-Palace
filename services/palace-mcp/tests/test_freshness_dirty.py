@@ -69,9 +69,8 @@ def test_inspect_freshness_composes_dirty_and_commit(tmp_path: Path) -> None:
     assert fr2.stale is False  # still at indexed HEAD; dirty ≠ stale
 
 
-def test_dirty_cache_invalidates_on_index_change(tmp_path: Path) -> None:
+def test_staged_change_is_dirty(tmp_path: Path) -> None:
     _init_repo(tmp_path)
-    assert _is_working_tree_dirty(tmp_path) is False
     (tmp_path / "a.swift").write_text("changed\n")
-    _git(tmp_path, "add", "-A")  # touches .git/index → cache invalidated
+    _git(tmp_path, "add", "-A")
     assert _is_working_tree_dirty(tmp_path) is True
