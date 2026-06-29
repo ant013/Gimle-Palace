@@ -148,6 +148,64 @@ _DESC = (
 )
 
 
+_ZERO_RESOLVE_QUERY = """
+MATCH (s:Symbol)
+WHERE s.group_id = $gid
+  AND (s.qualified_name IN $qn_variants OR s.short_name = $short)
+RETURN count(s) AS c
+""".strip()
+
+_ZERO_FUZZY_QUERY = """
+MATCH (s:Symbol)
+WHERE s.group_id = $gid AND s.short_name IS NOT NULL
+  AND toLower(s.short_name) CONTAINS toLower($needle)
+RETURN DISTINCT s.short_name AS sn
+ORDER BY size(sn) ASC
+LIMIT 5
+""".strip()
+
+
+def _camel_tokens(name: str) -> list[str]:
+    """CamelCase / snake tokens (len >= 4) of a name, for fuzzy did_you_mean."""
+    return [t for t in re.findall(r"[A-Za-z][a-z0-9]+", name) if len(t) >= 4]
+
+
+async def _classify_zero_reference(
+    driver: Any, slug: str | None, requested_qn: str
+) -> tuple[str, list[str]]:
+    """Disambiguate a 0-occurrence find_references result.
+
+    Returns ("resolved", []) when the name maps to a real :Symbol (defined but
+    unreferenced — a genuine zero), or ("unresolved", did_you_mean) when nothing
+    matches (a name typo / human dotted name that never resolved). did_you_mean
+    is up to 5 nearby project short-names. Falls back to ("resolved", []) on any
+    error so we never convert a real answer into a false symbol_not_found.
+    """
+    if driver is None or not slug:
+        return "resolved", []
+    short = requested_qn.rsplit(".", 1)[-1].strip()
+    gid = f"project/{slug}"
+    variants = list(_qualified_name_variants(requested_qn))
+    try:
+        async with driver.session() as session:
+            res = await session.run(
+                _ZERO_RESOLVE_QUERY, gid=gid, qn_variants=variants, short=short
+            )
+            row = await res.single()
+            if row and int(row["c"]) > 0:
+                return "resolved", []
+            tokens = sorted(_camel_tokens(short), key=len, reverse=True)
+            needle = tokens[0] if tokens else short
+            if not needle:
+                return "unresolved", []
+            fuzzy = await session.run(_ZERO_FUZZY_QUERY, gid=gid, needle=needle)
+            cands = [str(record["sn"]) async for record in fuzzy]
+        return "unresolved", cands
+    except Exception:  # noqa: BLE001
+        logger.debug("zero-reference classification failed", exc_info=True)
+        return "resolved", []
+
+
 async def _resolve_qn(
     session: ClientSession | None,
     qualified_name: str,
@@ -1482,12 +1540,36 @@ def register_code_composite_tools(
             driver, resolved_qn, resolved_project
         )
 
+        # Disambiguate a zero result: a name that never resolved must not look
+        # the same as a symbol that genuinely has no references (P1).
+        if total_found == 0:
+            _slug = (
+                project_namespace.slug
+                if project_namespace is not None
+                else resolved_project
+            )
+            resolution, did_you_mean = await _classify_zero_reference(
+                driver, _slug, req.qualified_name
+            )
+            if resolution == "unresolved":
+                return {
+                    "ok": False,
+                    "error_code": "symbol_not_found",
+                    "resolution": "unresolved",
+                    "requested_qualified_name": req.qualified_name,
+                    "project": resolved_project,
+                    "did_you_mean": did_you_mean,
+                    "total_found": 0,
+                    **pagination_envelope(total=0, returned=0, offset=req.offset),
+                }
+
         response: dict[str, Any] = {
             "ok": True,
             "requested_qualified_name": req.qualified_name,
             "project": resolved_project,
             "occurrences": occurrences,
             "total_found": total_found,
+            "resolution": "resolved",
         }
         partitions, counts = _partition_occurrences_by_source_scope(occurrences)
         response["occurrences_by_source_scope"] = partitions
