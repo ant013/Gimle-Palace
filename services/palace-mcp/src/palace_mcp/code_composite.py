@@ -1510,7 +1510,27 @@ def register_code_composite_tools(
                         # Fall back to literal QN instead of surfacing a CM infrastructure error.
                         resolved_qn = req.qualified_name
                     else:
-                        return disambig  # symbol_not_found or ambiguous_qualified_name
+                        # symbol_not_found / ambiguous_qualified_name — enrich with
+                        # an explicit resolution marker (+ did_you_mean for the
+                        # bare-name not-found case) for parity with the zero path.
+                        ec = disambig.get("error_code")
+                        disambig.setdefault(
+                            "resolution",
+                            "ambiguous"
+                            if ec == "ambiguous_qualified_name"
+                            else "unresolved",
+                        )
+                        if ec == "symbol_not_found" and "did_you_mean" not in disambig:
+                            _slug = (
+                                project_namespace.slug
+                                if project_namespace is not None
+                                else resolved_project
+                            )
+                            _, _dym = await _classify_zero_reference(
+                                driver, _slug, req.qualified_name
+                            )
+                            disambig["did_you_mean"] = _dym
+                        return disambig
                 else:
                     _short_name, resolved_qn = disambig
             except Exception:
