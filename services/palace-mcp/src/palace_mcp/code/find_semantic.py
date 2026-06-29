@@ -760,7 +760,6 @@ async def _load_freshness(project: str, commit_sha: str | None) -> dict[str, Any
         "indexed_commit": freshness.indexed_commit,
         "commits_behind_head": freshness.commits_behind_head,
         "stale": freshness.stale,
-        "dirty_working_tree": freshness.dirty_working_tree,
     }
 
 
