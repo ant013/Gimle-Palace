@@ -143,14 +143,27 @@ def _make_open_fn_metadata(fn: Any) -> FuncMetadata:
 def _open_schema_for_tool(cm_tool_name: str) -> dict[str, Any]:
     if cm_tool_name not in _READ_FILTER_DEFAULT_TOOLS:
         return _OPEN_SCHEMA
+    properties: dict[str, Any] = {
+        "include_deprecated": {
+            "type": "boolean",
+            "default": False,
+        }
+    }
+    if cm_tool_name == "get_code_snippet":
+        properties["scope"] = {
+            "type": "string",
+            "enum": ["symbol", "file", "type"],
+            "default": "symbol",
+            "description": (
+                "symbol = narrow window around the symbol (default); "
+                "file = the whole file; "
+                "type = the type declaration plus all its extension files "
+                "(Swift; the fix for extensions being dropped from a class snippet)."
+            ),
+        }
     return {
         "type": "object",
-        "properties": {
-            "include_deprecated": {
-                "type": "boolean",
-                "default": False,
-            }
-        },
+        "properties": properties,
         "additionalProperties": True,
     }
 
