@@ -16,6 +16,8 @@ from palace_mcp.memory.cypher import (
     UNREGISTERED_GROUP_IDS,
 )
 
+__all__ = ["ensure_schema", "SchemaIntegrityError", "SNIPPET_SCOPE_INDEXES"]
+
 
 def _bootstrap_name_for(slug: str) -> str:
     return slug.replace("-", " ").replace("_", " ").title() + " (bootstrap)"
@@ -39,6 +41,15 @@ PRUNE_SWIFT_SYMBOLS_INDEXES = [
     "FOR (e:DeprecationEvent) ON (e.project_id, e.occurred_at)",
 ]
 
+# Range index backing get_code_snippet's symbol resolve + whole_type file
+# discovery (group_id equality + qualified_name STARTS WITH). Without it both
+# queries do a full :Symbol label scan — ~2 full scans per whole_type call on a
+# 248k-symbol project.
+SNIPPET_SCOPE_INDEXES = [
+    "CREATE INDEX symbol_group_qn IF NOT EXISTS "
+    "FOR (s:Symbol) ON (s.group_id, s.qualified_name)",
+]
+
 
 async def ensure_schema(driver: AsyncDriver, *, default_group_id: str) -> None:
     from palace_mcp.memory.projects import derive_cm_project_name
@@ -49,7 +60,11 @@ async def ensure_schema(driver: AsyncDriver, *, default_group_id: str) -> None:
     async with driver.session() as session:
         for stmt in [*CREATE_CONSTRAINTS, *PRUNE_SWIFT_SYMBOLS_CONSTRAINTS]:
             await session.run(stmt)
-        for stmt in [*CREATE_INDEXES, *PRUNE_SWIFT_SYMBOLS_INDEXES]:
+        for stmt in [
+            *CREATE_INDEXES,
+            *PRUNE_SWIFT_SYMBOLS_INDEXES,
+            *SNIPPET_SCOPE_INDEXES,
+        ]:
             await session.run(stmt)
         await session.run(
             BOOTSTRAP_PROJECT,
