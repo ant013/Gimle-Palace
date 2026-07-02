@@ -160,10 +160,17 @@ def build_documents(
             failed += 1
             docs.append(
                 DocResult(
-                    file_path=fp, role=role, source=None,
-                    start_line=0, end_line=0, total_lines=0,
-                    truncated=False, truncated_lines=0, truncated_reason=None,
-                    error=msg, error_code=code,
+                    file_path=fp,
+                    role=role,
+                    source=None,
+                    start_line=0,
+                    end_line=0,
+                    total_lines=0,
+                    truncated=False,
+                    truncated_lines=0,
+                    truncated_reason=None,
+                    error=msg,
+                    error_code=code,
                 )
             )
             continue
@@ -172,9 +179,13 @@ def build_documents(
             truncated_docs += 1
         docs.append(
             DocResult(
-                file_path=fp, role=role, source=snip.source,
-                start_line=snip.start_line, end_line=snip.end_line,
-                total_lines=snip.total_lines, truncated=snip.truncated,
+                file_path=fp,
+                role=role,
+                source=snip.source,
+                start_line=snip.start_line,
+                end_line=snip.end_line,
+                total_lines=snip.total_lines,
+                truncated=snip.truncated,
                 truncated_lines=snip.truncated_lines,
                 truncated_reason=snip.truncated_reason,
                 language=getattr(snip, "language", ""),

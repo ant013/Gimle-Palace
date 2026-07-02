@@ -8,12 +8,22 @@ from typing import Any
 from palace_mcp.code import snippet_scope as ss
 
 
-def _snip(source: str, *, truncated: bool = False, truncated_lines: int = 0,
-          truncated_reason: str | None = None, total_lines: int = 1) -> Any:
+def _snip(
+    source: str,
+    *,
+    truncated: bool = False,
+    truncated_lines: int = 0,
+    truncated_reason: str | None = None,
+    total_lines: int = 1,
+) -> Any:
     return SimpleNamespace(
-        source=source, start_line=1, end_line=source.count("\n") + 1,
-        total_lines=total_lines, truncated=truncated,
-        truncated_lines=truncated_lines, truncated_reason=truncated_reason,
+        source=source,
+        start_line=1,
+        end_line=source.count("\n") + 1,
+        total_lines=total_lines,
+        truncated=truncated,
+        truncated_lines=truncated_lines,
+        truncated_reason=truncated_reason,
         byte_count=len(source.encode()),
     )
 
@@ -36,7 +46,9 @@ def test_plan_type_scope_non_swift_downgrades_to_file() -> None:
 
 
 def test_order_type_files_declaration_first_rest_sorted() -> None:
-    roles = ss.order_type_files("Foo.swift", ["Zzz+Ext.swift", "Foo.swift", "Aaa+Ext.swift"])
+    roles = ss.order_type_files(
+        "Foo.swift", ["Zzz+Ext.swift", "Foo.swift", "Aaa+Ext.swift"]
+    )
     assert roles[0] == ("Foo.swift", "declaration")
     assert roles[1:] == [("Aaa+Ext.swift", "extension"), ("Zzz+Ext.swift", "extension")]
 
@@ -47,7 +59,10 @@ def test_build_documents_happy_path() -> None:
 
     docs, rollup = ss.build_documents(
         [("A.swift", "declaration"), ("B.swift", "extension")],
-        project="p", repo_path=None, commit_sha=None, freshness=None,
+        project="p",
+        repo_path=None,
+        commit_sha=None,
+        freshness=None,
         resolve=fake_resolve,
     )
     assert len(docs) == 2
@@ -65,7 +80,10 @@ def test_build_documents_captures_per_doc_failure() -> None:
 
     docs, rollup = ss.build_documents(
         [("A.swift", "declaration"), ("B.swift", "extension")],
-        project="p", repo_path=None, commit_sha=None, freshness=None,
+        project="p",
+        repo_path=None,
+        commit_sha=None,
+        freshness=None,
         resolve=fake_resolve,
     )
     assert rollup["documents_failed"] == 1
@@ -75,11 +93,18 @@ def test_build_documents_captures_per_doc_failure() -> None:
 
 def test_build_documents_counts_truncation() -> None:
     def fake_resolve(**_: Any) -> Any:
-        return _snip("x", truncated=True, truncated_lines=50, truncated_reason="lines"), None, None
+        return (
+            _snip("x", truncated=True, truncated_lines=50, truncated_reason="lines"),
+            None,
+            None,
+        )
 
     _, rollup = ss.build_documents(
         [("A.swift", "declaration")],
-        project="p", repo_path=None, commit_sha=None, freshness=None,
+        project="p",
+        repo_path=None,
+        commit_sha=None,
+        freshness=None,
         resolve=fake_resolve,
     )
     assert rollup["documents_truncated"] == 1
@@ -92,12 +117,18 @@ def test_build_documents_file_count_cap_lists_dropped() -> None:
         return _snip("y"), None, None
 
     docs, rollup = ss.build_documents(
-        files, project="p", repo_path=None, commit_sha=None, freshness=None,
+        files,
+        project="p",
+        repo_path=None,
+        commit_sha=None,
+        freshness=None,
         resolve=fake_resolve,
     )
     assert len(docs) == ss._MAX_TYPE_FILES
     assert len(rollup["dropped_files"]) == 3
-    assert rollup["dropped_files"] == [f"F{i}.swift" for i in range(ss._MAX_TYPE_FILES, ss._MAX_TYPE_FILES + 3)]
+    assert rollup["dropped_files"] == [
+        f"F{i}.swift" for i in range(ss._MAX_TYPE_FILES, ss._MAX_TYPE_FILES + 3)
+    ]
 
 
 def test_build_documents_byte_budget_exhaustion_drops_rest() -> None:
@@ -109,7 +140,11 @@ def test_build_documents_byte_budget_exhaustion_drops_rest() -> None:
 
     files = [(f"F{i}.swift", "extension") for i in range(10)]
     docs, rollup = ss.build_documents(
-        files, project="p", repo_path=None, commit_sha=None, freshness=None,
+        files,
+        project="p",
+        repo_path=None,
+        commit_sha=None,
+        freshness=None,
         resolve=fake_resolve,
     )
     # 400KB / 64KB ≈ 6 full docs, rest dropped (never silent)

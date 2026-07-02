@@ -44,9 +44,14 @@ async def _no_repo(_: str) -> None:
 
 def _fake_snip(source: str) -> Any:
     return SimpleNamespace(
-        source=source, language="swift", start_line=1,
-        end_line=source.count("\n") + 1, total_lines=source.count("\n") + 1,
-        truncated=False, truncated_lines=0, truncated_reason=None,
+        source=source,
+        language="swift",
+        start_line=1,
+        end_line=source.count("\n") + 1,
+        total_lines=source.count("\n") + 1,
+        truncated=False,
+        truncated_lines=0,
+        truncated_reason=None,
         byte_count=len(source.encode()),
     )
 

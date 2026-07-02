@@ -207,12 +207,12 @@ async def _scope_response(
     deprecated_suppressed = 0
     if effective_scope == "type":
         files = [
-            str(r.get("file_path") or "")
-            for r in type_files_rows
-            if r.get("file_path")
+            str(r.get("file_path") or "") for r in type_files_rows if r.get("file_path")
         ]
         if not include_deprecated:
-            deprecated_suppressed = sum(int(r.get("dep_count") or 0) for r in type_files_rows)
+            deprecated_suppressed = sum(
+                int(r.get("dep_count") or 0) for r in type_files_rows
+            )
         if file_path and file_path not in files:
             files.append(file_path)
         file_roles = order_type_files(file_path, files)
