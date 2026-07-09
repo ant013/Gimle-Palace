@@ -8,9 +8,9 @@ limits:
   max_diff_lines: 3000
 
 routines:
-  - id: daily-android-version-0.49
+  - id: daily-android-version-0.50
     platform: android
-    branch: version/0.49
+    branch: version/0.50
     repo_url: https://github.com/horizontalsystems/unstoppable-wallet-android
     repo_local_path_template: "{{paths.project_root}}/repos/android/unstoppable-wallet-android"
     cursor_path_template: "{{paths.project_root}}/state/android-version-audit.json"

@@ -1,0 +1,26 @@
+=== ARTIFACT ===
+Found 1 `recordSwap` method in the unstoppable-wallet-ios working tree at /Users/ant013/Ios/bench-gimle.
+
+| # | File path | Line | Enclosing class |
+|---|-----------|------|-----------------|
+| 1 | /Users/ant013/Ios/bench-gimle/Source/RecentSwaps.swift | 20 | `RecentSwaps` (final class) |
+
+Signature: `func recordSwap(txHash: String, from: String, to: String)`
+
+Verification notes:
+- Tried palace.code.search_graph first against `uw-ios-app` — that project slug is not indexed (palace returned an "available_projects" list with the canonical slug `Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios`).
+- Retried against the canonical slug — MCP session expired, so cross-verification via palace was not possible this run.
+- Fell back to a `grep -rn "recordSwap" --include="*.swift" .` across the full working tree from `/Users/ant013/Ios/bench-gimle`. The grep hit only `Source/RecentSwaps.swift` (one function definition at line 20, plus one comment-line mention at line 6).
+- The file header explicitly notes it was staged immediately before the benchmark run and is intentionally NOT in palace's index — so a palace-only answer would have returned zero results. Grep is the authoritative tool here.
+
+Total occurrences of `recordSwap` (function definitions) in the working tree: 1.
+
+=== CHECKLIST_FACTS ===
+- Identifies Source/RecentSwaps.swift recordSwap on line 20 in class RecentSwaps: yes
+- Cross-verified via Grep (not palace alone) since file is staged and not indexed: yes
+- Reports exactly 1 occurrence (no fabricated extras): yes
+
+=== PALACE_USAGE ===
+- tools called: search_graph x2 (one wrong-slug error, one session-expired)
+- total palace calls: 2
+- approx bytes returned by palace: ~1.5 KB (mostly the available_projects error payload)

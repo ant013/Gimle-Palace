@@ -1,0 +1,58 @@
+=== ARTIFACT ===
+
+Investigation summary for T7 (EUR fiat currency support in unstoppable-wallet-ios):
+
+The task asked to add EUR (symbol "€") **if it isn't already supported**. After
+inspecting the codebase, EUR is **already fully supported**. No code changes are
+required, and the working-tree diff is empty.
+
+Note on "MarketKit": the iOS project has migrated currency definitions into the
+local `WalletCore` Swift package. The currency model lives at
+`/Users/ant013/Ios/bench-vanilla/packages/WalletCore/Sources/WalletCore/Models/Currency.swift`
+(`public struct Currency: Hashable { code, symbol, decimal }`), and the runtime
+list is defined in `CurrencyManager.supportedCurrencies`. There is no separate
+`MarketKit` module/package in this repo; `CurrencyManager` is the canonical
+registry the picker UI reads from.
+
+Evidence:
+
+1. Currency registry — `/Users/ant013/Ios/bench-vanilla/Unstoppable/Unstoppable/Core/Managers/CurrencyManager.swift`
+   already contains EUR with the correct symbol and 2 decimals:
+
+       Currency(code: "EUR", symbol: "€", decimal: 2),
+
+   (line 14, alphabetically placed between CNY and GBP)
+
+2. User-facing currency picker — `/Users/ant013/Ios/bench-vanilla/Unstoppable/Unstoppable/Modules/Settings/BaseCurrency/BaseCurrencySettingsViewModel.swift`
+   reads `currencyManager.currencies` (= `CurrencyManager.supportedCurrencies`)
+   to build `popularCurrencies` + `otherCurrencies`. EUR is explicitly listed in
+   `popularCurrencyCodes = ["USD", "EUR", "GBP", "JPY"]` (line 5), so it appears
+   in the "Popular" section of the BaseCurrencySettingsView picker.
+
+3. The corresponding view `BaseCurrencySettingsView.swift` renders both
+   `popularCurrencies` and `otherCurrencies` from the view-model, so EUR is
+   already visible end-to-end in the UI.
+
+Working-tree diff:
+
+    (empty — `git diff` produces no output)
+
+No patch is necessary. EUR support is complete: the currency is in the registry
+with the correct "€" symbol and 2-decimal precision, and it surfaces in the
+user-facing base-currency settings picker as a popular currency.
+
+=== CHECKLIST_FACTS ===
+- EUR currency present in supported currencies list: yes
+- EUR symbol is "€": yes
+- EUR appears in user-facing currency picker UI: yes
+- Patch shown as working-tree diff (empty, since no change needed): yes
+- No commit / no push: yes
+
+=== TOOL_USAGE ===
+- Bash calls: 6
+- Read calls: 3
+- Grep calls: 0
+- Glob calls: 0
+- Edit/Write calls: 0
+- WebFetch/WebSearch calls: 0
+- skills invoked: none (task resolved on inspection — EUR already supported; brainstorming/plan/TDD not warranted for a zero-change verification)

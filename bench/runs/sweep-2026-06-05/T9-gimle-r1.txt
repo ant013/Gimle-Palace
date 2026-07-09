@@ -1,0 +1,40 @@
+=== ARTIFACT ===
+
+Task premise verification failed. The task describes "a small ~30-line function that formats Monero subaddresses" inline inside `MoneroAdapter`. After reading the full file (`/Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Core/Adapters/MoneroAdapter.swift`, 430 lines), no such helper exists.
+
+What is actually in `MoneroAdapter.swift`:
+
+- `transactionRecord(fromTransaction:)` (~40 lines) — builds `MoneroTransactionRecord` from `TransactionInfo`. Not address-formatting.
+- `moneroBalanceData(balanceInfo:)` (~5 lines) — balance mapping.
+- `adapterStateFromKit()` (~20 lines) — state mapping.
+- `convertToPiconero(amount:)` (~10 lines) — amount conversion.
+- `static func address(accountType:)` (~10 lines) — resolves an account address from `Kit.address(...)`. Pure delegation, no formatting.
+- `static func key(accountType:)` (~10 lines) — resolves spend/view key. Not addresses.
+- `usedAddresses` getter (3 lines) — maps `kit.usedAddresses` to `UsedAddress`. Not a function, not ~30 lines.
+- `receiveAddress` getter (1 line) — wraps `kit.receiveAddress`.
+
+Verification commands run:
+- `grep -n "format" MoneroAdapter.swift` → no matches.
+- `grep -rn "subaddress\|subAddress\|formatAddress\|formatSubaddress" Unstoppable/Core/Adapters/` → only `subAddressesUpdated(...)` delegate stub (1 line, calls `depositAddressSubject.send(...)`).
+
+There is no ~30-line subaddress formatter to extract. The MoneroKit library handles subaddress construction internally — the iOS adapter only exposes `kit.receiveAddress`, `kit.usedAddresses`, and `Kit.address(...)` as already-formatted strings.
+
+No patch produced. Fabricating a `MoneroAddressFormatter` class would require inventing format logic (e.g., truncation, BIP-style "primary/account/index" formatting) that has no basis in the current codebase and would change runtime behavior of `receiveAddress` / `usedAddresses` / `kit.receiveAddress` in ways the existing tests do not anchor.
+
+Recommended next step: confirm the intended target. Candidates if the task is approximate:
+1. If the goal is to wrap `kit.receiveAddress`/`usedAddresses` display in a formatter, please specify the format (e.g., "abc…xyz" truncation) — but no existing call site does this in `MoneroAdapter`.
+2. If the goal is to extract `static func address(accountType:)`, that is ~10 lines and not specifically about subaddresses; happy to extract it into a `MoneroAddressFormatter` if you confirm.
+3. If the task was authored against a different branch/commit, please re-pin.
+
+=== CHECKLIST_FACTS ===
+- Locate the inline ~30-line subaddress formatting helper inside MoneroAdapter: no — function does not exist in the file.
+- Extract helper into new top-level class `MoneroAddressFormatter` in a new file: no — nothing to extract without fabricating logic.
+- Update call site inside MoneroAdapter to use new class: no — no call site exists.
+- Keep existing tests passing without modifying test files: vacuously yes — no changes made.
+- Produce working-tree diff: no — empty diff would be misleading.
+- Do not commit or push: yes — nothing committed or pushed.
+
+=== PALACE_USAGE ===
+- tools called: none (palace calls would not change the file contents; direct Read + grep was sufficient and cheaper)
+- total palace calls: 0
+- approx bytes returned by palace: 0

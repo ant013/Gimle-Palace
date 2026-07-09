@@ -1,0 +1,7 @@
+# Phase F CI fallback — overridden by operator's ~/.paperclip/projects/wr-reporter/bindings.yaml.
+# Sanitized UUIDs let CI build wr-reporter without operator host-local files.
+# Builder precedence: ~/.paperclip/projects/wr-reporter/bindings.yaml -> this file.
+schemaVersion: 2
+company_id: "00000000-0000-0000-0000-0000000000a5"
+agents:
+  Reporter: "00000000-0000-0000-0000-000000000071"

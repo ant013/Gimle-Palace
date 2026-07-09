@@ -1,0 +1,258 @@
+=== ARTIFACT ===
+
+# Tap "Send" on an Ethereum send screen → signed broadcastable transaction
+
+Below is the end-to-end call chain inside `unstoppable-wallet-ios`
+(modern `SendNew` architecture, located at
+`Unstoppable/Unstoppable/Modules/SendNew/`). The path uses the EVM
+SwiftKit `EvmKit.Swift` (resolved via Xcode Swift Packages) for the
+actual signing.
+
+## 1. UI: the "slide to send" gesture (SwiftUI)
+
+File: `Unstoppable/Unstoppable/Modules/SendNew/RegularSendView.swift`
+
+`RegularSendView` is the SwiftUI confirmation screen that hosts the
+`SendView` body and a bottom button. While `sendViewModel.state == .success`
+and `sendViewModel.canSend`, the bottom slot renders a `SlideButton`
+(custom SwiftUI control). Its `action` closure is:
+
+```swift
+SlideButton(
+    styling: .text(start: sendData.customSendButtonTitle ?? "send.confirmation.slide_to_send".localized, …),
+    action: { try await sendViewModel.send() },
+    completion: { onSuccess() }
+)
+```
+
+When the user completes the slide, the SwiftUI control invokes the
+async `action` closure, which calls `SendViewModel.send()`.
+
+(`SendView.swift` is the content area above the button; menu items for
+"edit_fee" and "transaction_nonce" come from `SendView.menuItems(handler:)`,
+but the actual send dispatch goes through `SendViewModel`.)
+
+## 2. SendViewModel.send() — orchestration
+
+File: `Unstoppable/Unstoppable/Modules/SendNew/SendViewModel.swift`
+
+```swift
+func send() async throws {
+    guard let handler else { throw SendError.noHandler }
+    guard let sendData else { throw SendError.noSendData }
+    await set(sending: true)
+    _ = try await handler.send(data: sendData)
+    if let address {
+        try? recentAddressStorage.save(address: address,
+                                       blockchainUid: handler.baseToken.blockchain.uid)
+    }
+}
+```
+
+The view model holds two collaborators created in `init(sendData:address:)`:
+- `handler: ISendHandler?` — produced by `SendHandlerFactory.handler(sendData:)`
+- `transactionService: ITransactionService?` — produced by
+  `TransactionServiceFactory.transactionService(baseToken:initialTransactionSettings:)`
+
+For an EVM send, `SendHandlerFactory.handler(sendData:)` matches
+`case let .evm(blockchainType, transactionData, token):` and returns
+`EvmSendHandler.instance(blockchainType:transactionData:)` (file
+`SendHandlerFactory.swift`).
+
+So `handler.send(data:)` resolves to `EvmSendHandler.send(data:)`.
+
+## 3. EvmSendHandler — pulls validated params and calls the wrapper
+
+File: `Unstoppable/Unstoppable/Modules/SendNew/EvmSendHandler.swift`
+
+```swift
+class EvmSendHandler {
+    let baseToken: Token
+    private let transactionData: TransactionData          // EvmKit.TransactionData
+    private let evmKitWrapper: EvmKitWrapper
+    …
+}
+
+extension EvmSendHandler: ISendHandler {
+    func send(data: ISendData) async throws {
+        guard let data = data as? EvmSendData else { throw SendError.invalidData }
+        guard let transactionData = data.transactionData else { throw SendError.noTransactionData }
+        guard let gasPrice = data.gasPrice else { throw SendError.noGasPrice }
+        guard let gasLimit = data.evmFeeData?.surchargedGasLimit else { throw SendError.noGasLimit }
+
+        _ = try await evmKitWrapper.send(
+            transactionData: transactionData,
+            gasPrice: gasPrice,
+            gasLimit: gasLimit,
+            privateSend: false,
+            nonce: data.nonce
+        )
+    }
+}
+```
+
+`EvmSendData` was produced earlier by `EvmSendHandler.sendData(transactionSettings:)`
+when the screen was syncing — it called `EvmFeeEstimator.estimateFee(...)`
+to fill `evmFeeData` (gas limit + L1 fee), and copied
+`gasPriceData?.userDefined` (legacy gasPrice or EIP-1559 maxFee/maxPriorityFee)
+and the `nonce` from `TransactionSettings`.
+
+`evmKitWrapper` was obtained in `EvmSendHandler.instance(...)` from
+`Core.shared.evmBlockchainManager.evmKitManager(blockchainType:).evmKitWrapper`.
+
+## 4. EvmKitWrapper.send — build raw tx, sign, broadcast
+
+File: `Unstoppable/Unstoppable/Core/Managers/EvmKitManager.swift`
+(class `EvmKitWrapper`).
+
+```swift
+class EvmKitWrapper {
+    let blockchainType: BlockchainType
+    let evmKit: EvmKit.Kit
+    let nftKit: NftKit.Kit?
+    let merkleTransactionAdapter: MerkleTransactionAdapter?
+    let signer: Signer?
+    …
+
+    func send(transactionData: TransactionData, gasPrice: GasPrice,
+              gasLimit: Int, privateSend: Bool, nonce: Int? = nil) async throws -> FullTransaction {
+        guard let signer else { throw SignerError.signerNotSupported }
+
+        let rawTransaction = try await evmKit.fetchRawTransaction(
+            transactionData: transactionData, gasPrice: gasPrice,
+            gasLimit: gasLimit, nonce: nonce
+        )
+        let signature = try signer.signature(rawTransaction: rawTransaction)
+
+        if privateSend, let merkleTransactionAdapter {
+            return try await merkleTransactionAdapter.send(rawTransaction: rawTransaction, signature: signature)
+        }
+        return try await evmKit.send(rawTransaction: rawTransaction, signature: signature)
+    }
+}
+```
+
+This is the heart of the chain — three steps:
+
+### 4a. `EvmKit.Kit.fetchRawTransaction(...)`
+File: `EvmKit.Swift/Sources/EvmKit/Core/Kit.swift`
+
+Resolves the nonce (uses the supplied one, else
+`nonceProvider.nonce(defaultBlockParameter: .pending)`) and constructs a
+`RawTransaction(gasPrice:gasLimit:to:value:data:nonce:)`.
+
+### 4b. `Signer.signature(rawTransaction:)` — produces the ECDSA signature
+
+File: `EvmKit.Swift/Sources/EvmKit/Core/Signer/Signer.swift`
+
+```swift
+public class Signer {
+    public func signature(rawTransaction: RawTransaction) throws -> Signature {
+        try transactionSigner.signature(rawTransaction: rawTransaction)
+    }
+    …
+}
+```
+
+`Signer.instance(seed:chain:)` / `instance(privateKey:chain:)` wires up a
+`TransactionSigner(chain:privateKey:)`, a `TransactionBuilder(chain:address:)`
+and an `EthSigner(privateKey:)`. The wallet's mnemonic seed is fed through
+`HDWallet(seed:coinType:xPrivKey:.xprv).privateKey(account:0,index:0,chain:.external)`
+to derive the EVM private key.
+
+### 4c. `TransactionSigner.signature(rawTransaction:)` — RLP + keccak + secp256k1
+
+File: `EvmKit.Swift/Sources/EvmKit/Core/Signer/TransactionSigner.swift`
+
+```swift
+func sign(rawTransaction: RawTransaction) throws -> Data {
+    switch rawTransaction.gasPrice {
+    case let .legacy(legacyGasPrice):
+        return try signEip155(rawTransaction: rawTransaction, legacyGasPrice: legacyGasPrice)
+    case let .eip1559(maxFeePerGas, maxPriorityFeePerGas):
+        return try signEip1559(rawTransaction: rawTransaction,
+                               maxFeePerGas: maxFeePerGas,
+                               maxPriorityFeePerGas: maxPriorityFeePerGas)
+    }
+}
+```
+
+- `signEip155(...)`: RLP-encodes `[nonce, gasPrice, gasLimit, to, value, data, chainId, 0, 0]`,
+  hashes with `Crypto.sha3` (keccak-256), then `Crypto.ellipticSign(hash, privateKey:)`
+  produces the secp256k1 65-byte (r||s||v) signature. `signatureLegacy(from:)`
+  packs `v = recId + (chainId == 0 ? 27 : 35 + 2*chainId)` per EIP-155.
+- `signEip1559(...)`: RLP-encodes
+  `[chainId, nonce, maxPriorityFeePerGas, maxFeePerGas, gasLimit, to, value, data, []]`,
+  prepends the type byte `0x02` before hashing, signs the keccak digest, and
+  `signatureEip1559(from:)` returns `v = recId` (no chain-id offset for typed txs).
+
+Both return a `Signature(v:r:s:)`.
+
+### 4d. `EvmKit.Kit.send(rawTransaction:signature:)` — encode and broadcast
+
+`Kit.send` delegates to `RpcBlockchain.send(rawTransaction:signature:)`
+(file `EvmKit.Swift/Sources/EvmKit/Api/Core/RpcBlockchain.swift`):
+
+```swift
+func send(rawTransaction: RawTransaction, signature: Signature) async throws -> Transaction {
+    let encoded = transactionBuilder.encode(rawTransaction: rawTransaction, signature: signature)
+    _ = try await syncer.fetch(rpc: SendRawTransactionJsonRpc(signedTransaction: encoded))
+    return transactionBuilder.transaction(rawTransaction: rawTransaction, signature: signature)
+}
+```
+
+`TransactionBuilder.encode(rawTransaction:signature:)` (file
+`EvmKit.Swift/Sources/EvmKit/Core/TransactionBuilder.swift`) is the moment
+the "signed transaction ready to broadcast" exists as bytes:
+it RLP-encodes the signed payload (for EIP-1559 it prepends the `0x02`
+type byte). That `Data` blob is the raw signed Ethereum transaction.
+
+`SendRawTransactionJsonRpc(signedTransaction:)` hex-encodes it and pushes it
+to the node via `eth_sendRawTransaction`.
+
+For MEV-protected sends (`privateSend == true` and a wrapped
+`merkleTransactionAdapter` exists), the same `(rawTransaction, signature)`
+pair is forwarded to `MerkleTransactionAdapter.send(rawTransaction:signature:)`
+instead of going through the public RPC.
+
+## 5. Summary of the call chain
+
+```
+RegularSendView (SlideButton.action)
+  -> SendViewModel.send()                                 [SendViewModel.swift]
+      -> ISendHandler.send(data:)
+         dispatch via SendHandlerFactory.handler(sendData:)
+         => EvmSendHandler.send(data:)                    [EvmSendHandler.swift]
+              guards EvmSendData -> transactionData/gasPrice/gasLimit/nonce
+              -> EvmKitWrapper.send(transactionData:gasPrice:gasLimit:privateSend:nonce:)
+                                                          [EvmKitManager.swift]
+                  -> EvmKit.Kit.fetchRawTransaction(...)  [Kit.swift]
+                       (resolves nonce, builds RawTransaction)
+                  -> Signer.signature(rawTransaction:)    [Signer.swift]
+                       -> TransactionSigner.signature(rawTransaction:)
+                                                          [TransactionSigner.swift]
+                            -> sign(rawTransaction:) -> signEip155 | signEip1559
+                                 (RLP encode -> keccak256 -> Crypto.ellipticSign)
+                            -> signatureLegacy | signatureEip1559 -> Signature(v,r,s)
+                  -> EvmKit.Kit.send(rawTransaction:signature:)  [Kit.swift]
+                       -> RpcBlockchain.send(rawTransaction:signature:)
+                                                          [RpcBlockchain.swift]
+                            -> TransactionBuilder.encode(rawTransaction:signature:)
+                                = signed broadcastable bytes
+                            -> SendRawTransactionJsonRpc(signedTransaction:)
+                  (or MerkleTransactionAdapter.send(...) for private/MEV-protected)
+```
+
+Key files (all absolute paths):
+
+- `/Users/ant013/Ios/bench-vanilla/Unstoppable/Unstoppable/Modules/SendNew/RegularSendView.swift`
+- `/Users/ant013/Ios/bench-vanilla/Unstoppable/Unstoppable/Modules/SendNew/SendViewModel.swift`
+- `/Users/ant013/Ios/bench-vanilla/Unstoppable/Unstoppable/Modules/SendNew/SendHandlerFactory.swift`
+- `/Users/ant013/Ios/bench-vanilla/Unstoppable/Unstoppable/Modules/SendNew/EvmSendHandler.swift`
+- `/Users/ant013/Ios/bench-vanilla/Unstoppable/Unstoppable/Modules/SendNew/EvmSendData.swift`
+- `/Users/ant013/Ios/bench-vanilla/Unstoppable/Unstoppable/Core/Managers/EvmKitManager.swift` (`EvmKitWrapper`)
+- `EvmKit.Swift/Sources/EvmKit/Core/Kit.swift` (`fetchRawTransaction`, `send`)
+- `EvmKit.Swift/Sources/EvmKit/Core/Signer/Signer.swift`
+- `EvmKit.Swift/Sources/EvmKit/Core/Signer/TransactionSigner.swift`
+- `EvmKit.Swift/Sources/EvmKit/Core/TransactionBuilder.swift` (RLP `encode`)
+- `EvmKit.Swift/Sources/EvmKit/Api/Core/RpcBlockchain.swift` (`SendRawTransactionJsonRpc`)

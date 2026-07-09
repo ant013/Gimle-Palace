@@ -1,0 +1,48 @@
+## Where `MoneroAdapter` is constructed
+
+There is **exactly one construction site** for `MoneroAdapter` in the iOS app:
+
+`Unstoppable/Unstoppable/Core/Factories/AdapterFactory.swift:216`, inside the `(.native, .monero)` branch of `AdapterFactory.adapter(wallet:)`:
+
+```swift
+case (.native, .monero):
+    let restoreSettings = restoreSettingsManager.settings(accountId: wallet.account.id, blockchainType: .monero)
+    let moneroNode = moneroNodeManager.node(blockchainType: .monero)
+    return try? MoneroAdapter(wallet: wallet, restoreSettings: restoreSettings, node: moneroNode.node)
+```
+
+(The other places that reference `MoneroAdapter` — `AppAdapterManager.swift:132`, `MoneroSendHandler`, `MoneroPreSendHandler`, `MoneroTransactionService`, `MoneroKeyViewModel`, `MoneroReceiveAddressService`, `WalletTokenModule`, `MoneroAddressParserItem`, `MoneroWatchWalletParser`, `KitCleaner`, `USwapMultiSwapProvider`, `MultiSwapSendHandler`, `DestinationHelper`, `TransactionServiceFactory`, `SendHandlerFactory`, `MoneroHashBroadcaster` — only consume an existing adapter via downcasts like `as? MoneroAdapter` returned by `AdapterManager`/`engine.adapter(for:)`; they do not call `init`.)
+
+## How `MoneroAdapter` gets its dependencies
+
+The init signature in `Unstoppable/Unstoppable/Core/Adapters/MoneroAdapter.swift:35` is:
+
+```swift
+init(wallet: Wallet, restoreSettings: RestoreSettings, node: Node) throws
+```
+
+So `MoneroAdapter` itself takes **three explicit constructor-injected parameters**. The pattern is **manual constructor injection driven by a hand-written factory class (`AdapterFactory`), not a DI container** (no Swinject / no Resolver / no Needle is used). Specifically:
+
+1. **`wallet: Wallet`** is forwarded from `AdapterFactory.adapter(wallet:)`'s argument (which is dispatched on `(wallet.account.type, wallet.token.blockchainType)`).
+2. **`restoreSettings: RestoreSettings`** is resolved by calling `restoreSettingsManager.settings(accountId:blockchainType:)` on the `RestoreSettingsManager` that was constructor-injected into `AdapterFactory`.
+3. **`node: Node`** is resolved by calling `moneroNodeManager.node(blockchainType: .monero).node` on the `MoneroNodeManager` that was constructor-injected into `AdapterFactory`.
+
+`AdapterFactory` is itself constructed once in the composition root, `Unstoppable/Unstoppable/Core/Core.swift:318`, where all 13 of its collaborators (`EvmBlockchainManager`, `EvmSyncSourceManager`, `MoneroNodeManager`, `BtcBlockchainManager`, `TronKitManager`, `TonKitManager`, `StellarKitManager`, `ZanoKitManager`, `SolanaKitManager`, `RestoreSettingsManager`, `CoinManager`, `SpamWrapper`, `EvmLabelManager`) are passed in via its `init`. The factory is then handed to `AdapterManager` (which `AdapterFactory` conforms to via `IAdapterFactory`), and `AdapterManager` is what actually invokes `adapterFactory.adapter(wallet:)` per wallet.
+
+In addition to the three constructor parameters, `MoneroAdapter.init` also pulls **two service-locator-style dependencies** from the `Core.shared` singleton inside its body (not via init):
+- `Core.shared.logger.scoped(with: "MoneroKit")` — used as the `logger:` for `MoneroKit.Kit`.
+- `Core.shared.reachabilityManager` — passed as the `reachabilityManager:` for `MoneroKit.Kit`.
+
+So the full picture is: **constructor injection at the call site (`AdapterFactory`) for per-wallet collaborators, plus implicit access to two app-wide singletons (`logger`, `reachabilityManager`) via `Core.shared`.** There is no DI container — `Core` acts as a hand-rolled composition root that builds `AdapterFactory`, and `AdapterFactory` then does a `switch`-based factory dispatch that calls `MoneroAdapter.init` with managers it already holds.
+
+### Key files
+
+- `/Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Core/Factories/AdapterFactory.swift` — sole construction site (line 216), and holds the per-wallet dep providers (`restoreSettingsManager`, `moneroNodeManager`) via its own constructor injection (lines 9-42).
+- `/Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Core/Adapters/MoneroAdapter.swift` — class + `init(wallet:restoreSettings:node:)` (line 35); also touches `Core.shared.logger` and `Core.shared.reachabilityManager` inside the init body.
+- `/Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Core/Core.swift:318` — composition root where `AdapterFactory` itself is built with all 13 managers.
+- `/Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Core/Managers/AppAdapterManager.swift:132` — consumer site only (downcasts to `MoneroAdapter` to call `restart()`), not a constructor.
+
+=== PALACE_USAGE ===
+- tools called: palace.code.find_references×1, palace.code.search_graph×1
+- total palace calls: 2
+- approx bytes returned by palace: ~7 KB

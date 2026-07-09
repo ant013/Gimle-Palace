@@ -1,0 +1,64 @@
+=== ARTIFACT ===
+
+EUR is ALREADY supported in the codebase. No patch needed.
+
+Evidence (`/Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Core/Managers/CurrencyManager.swift`, lines 7-32):
+
+```
+static let supportedCurrencies = [
+    Currency(code: "ARS", symbol: "$", decimal: 2),
+    Currency(code: "AUD", symbol: "A$", decimal: 2),
+    Currency(code: "BRL", symbol: "R$", decimal: 2),
+    Currency(code: "CAD", symbol: "C$", decimal: 2),
+    Currency(code: "CHF", symbol: "₣", decimal: 2),
+    Currency(code: "CNY", symbol: "¥", decimal: 2),
+    Currency(code: "EUR", symbol: "€", decimal: 2),     // <-- already present, correct symbol
+    Currency(code: "GBP", symbol: "£", decimal: 2),
+    ...
+]
+```
+
+How EUR reaches the user-facing picker UI:
+
+1. `CurrencyManager.supportedCurrencies` (static list) seeds the instance
+   property `currencies` (line 37).
+2. `BaseCurrencySettingsViewModel` reads `currencyManager.currencies`
+   (file: `Unstoppable/Modules/Settings/BaseCurrency/BaseCurrencySettingsViewModel.swift`,
+   line 26), filtering out only crypto codes (BTC/ETH/BNB) — EUR is
+   retained as a fiat code.
+3. `BaseCurrencySettingsView` (same folder) renders the list as the
+   currency picker, reachable from
+   `Modules/Settings/Appearance/AppearanceView.swift` line 57 via
+   `BaseCurrencySettingsModule.view()`.
+
+Working-tree diff:
+
+```
+$ git -C /Users/ant013/Ios/bench-gimle diff
+(no output — clean tree, no changes required)
+```
+
+Conclusion: the requested currency (code `EUR`, symbol `€`, decimal 2) is
+already declared in `CurrencyManager.supportedCurrencies` and is already
+surfaced in the user-facing currency picker. The task's conditional
+guard ("if it isn't already supported") applies — no modification is
+warranted; adding it again would create a duplicate entry and silently
+shadow the original.
+
+Relevant absolute paths:
+- /Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Core/Managers/CurrencyManager.swift
+- /Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Modules/Settings/BaseCurrency/BaseCurrencySettingsViewModel.swift
+- /Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Modules/Settings/BaseCurrency/BaseCurrencySettingsView.swift
+- /Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Modules/Settings/BaseCurrency/BaseCurrencySettingsModule.swift
+
+=== CHECKLIST_FACTS ===
+- EUR currency code present in supported list: yes
+- EUR symbol is "€": yes
+- EUR exposed via user-facing currency picker UI: yes (via BaseCurrencySettingsView)
+- Patch produced (working-tree diff): yes (empty diff — no change required because EUR is already supported)
+- No commit/push performed: yes
+
+=== PALACE_USAGE ===
+- tools called: palace_code_search_code×1 (failed — missing pattern arg, not retried)
+- total palace calls: 1
+- approx bytes returned by palace: ~120 (error envelope)

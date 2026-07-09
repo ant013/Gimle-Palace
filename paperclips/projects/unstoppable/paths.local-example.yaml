@@ -1,0 +1,15 @@
+# CI/dev fallback — overridden by operator's host-local
+# ~/.paperclip/projects/unstoppable/paths.yaml. Sanitized example values; operator
+# copies and replaces with real local paths. Builder precedence: host-local wins.
+#
+# Real (this machine): team_workspace_root = /Users/ant013/Ios/HorizontalSystems
+# (the three app repos live as siblings there, sharing one WalletCore).
+schemaVersion: 2
+project_root: /opt/example/horizontalsystems
+primary_repo_root: /opt/example/horizontalsystems/unstoppable-wallet-ios
+primary_mcp_service_dir: /opt/example/horizontalsystems
+production_checkout: /opt/example/horizontalsystems/unstoppable-wallet-ios
+team_workspace_root: /opt/example/horizontalsystems
+operator_memory_dir: ~/.claude/projects/-opt-example-horizontalsystems/memory
+overlay_root: paperclips/projects/unstoppable/overlays
+project_rules_file: AGENTS.md

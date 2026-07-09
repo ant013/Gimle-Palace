@@ -1,0 +1,69 @@
+## Silent UTXO failure in Bitcoin send
+
+### Where the failure was silent
+
+`/Users/ant013/Ios/bench-vanilla/Unstoppable/Unstoppable/Modules/SendNew/BitcoinSendHandler.swift`, function `sendData(transactionSettings:)`, lines 39-43.
+
+The "send max" shortcut: when the user enters an amount equal to `balance` (so `decimalValue == balance`), the handler silently overwrites `params.value` with `adapter.availableBalance(params: params)`. The call chain is:
+
+```
+adapter.availableBalance(params:)         BitcoinBaseAdapter.swift:299
+   -> (try? abstractKit.maxSpendableValue(params:)) ?? 0
+```
+
+The `try?` swallows `BitcoinCoreErrors.SendValueErrors.notEnough` raised by BitcoinCore when the *currently selected UTXOs* (e.g. a user-chosen `customUtxos` set in `BitcoinPreSendHandler`) do not cover `value + fee`. The error is converted to `0`, then `params.value = 0` is fed to `adapter.sendInfo(params:)` which then either returns a degenerate fee or fails with an unrelated `dust` error — the original "insufficient UTXOs" condition never reaches the user.
+
+The downstream caution renderer `UtxoSendHelper.caution(transactionError:feeToken:)` already knows how to render `SendValueErrors.notEnough` as `"fee_settings.errors.insufficient_balance"`. The only missing piece was capturing the error at the silent-overwrite site.
+
+### Smallest patch (working-tree diff)
+
+```diff
+diff --git a/Unstoppable/Unstoppable/Modules/SendNew/BitcoinSendHandler.swift b/Unstoppable/Unstoppable/Modules/SendNew/BitcoinSendHandler.swift
+index 0e916580d..ba791c812 100644
+--- a/Unstoppable/Unstoppable/Modules/SendNew/BitcoinSendHandler.swift
++++ b/Unstoppable/Unstoppable/Modules/SendNew/BitcoinSendHandler.swift
+@@ -39,14 +39,24 @@ extension BitcoinSendHandler: ISendHandler {
+             let balance = adapter.balanceData.available
+             let decimalValue = params.value.map { Decimal($0) / adapter.coinRate }
+             if decimalValue == balance {
+-                params.value = adapter.convertToSatoshi(value: adapter.availableBalance(params: params))
++                let maxSpendable = adapter.availableBalance(params: params)
++                if maxSpendable <= 0 {
++                    // Selected UTXOs cannot cover amount + fee. Surface the
++                    // underlying `notEnough` error instead of silently
++                    // overwriting params.value with 0 and proceeding.
++                    transactionError = BitcoinCoreErrors.SendValueErrors.notEnough
++                } else {
++                    params.value = adapter.convertToSatoshi(value: maxSpendable)
++                }
+             }
+ 
+-            do {
+-                let sendInfo = try adapter.sendInfo(params: params)
+-                fee = sendInfo.fee
+-            } catch {
+-                transactionError = error
++            if transactionError == nil {
++                do {
++                    let sendInfo = try adapter.sendInfo(params: params)
++                    fee = sendInfo.fee
++                } catch {
++                    transactionError = error
++                }
+             }
+         }
+```
+
+### Why this is the smallest viable patch
+
+- Reuses the existing error-propagation channel `transactionError` on `BitcoinSendHandler.SendData`.
+- Reuses the existing caution renderer in `UtxoSendHelper.swift` (already handles `SendValueErrors.notEnough` -> `fee_settings.errors.insufficient_balance` localized strings).
+- No new types, no API changes on `BitcoinBaseAdapter`, no new strings to localize.
+- Keeps the public signature `availableBalance(params:) -> Decimal` unchanged (so the legacy `SendBitcoinAdapterService` path is not affected).
+
+### Result for the user
+
+When UTXOs are insufficient, the send confirmation now surfaces:
+- title: "Insufficient balance"
+- text: "Not enough BTC..." (localized via `fee_settings.errors.insufficient_balance.info`)
+- `canSend = false` (because `transactionError != nil`), keeping the Send button disabled with a visible explanation.

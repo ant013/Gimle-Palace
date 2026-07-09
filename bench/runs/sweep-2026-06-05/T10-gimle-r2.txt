@@ -1,0 +1,13 @@
+Found 1 occurrence of `recordSwap` in the working tree of /Users/ant013/Ios/bench-gimle.
+
+| # | File | Line | Enclosing class | Signature |
+|---|------|------|-----------------|-----------|
+| 1 | /Users/ant013/Ios/bench-gimle/Source/RecentSwaps.swift | 20 | `RecentSwaps` (final class) | `func recordSwap(txHash: String, from: String, to: String)` |
+
+Method body appends a `RecentSwap` struct (txHash, Date(), fromToken, toToken) to the private `swaps` array.
+
+Cross-verification:
+- `grep -rn "recordSwap" --include="*.swift"` in the working tree returns only this one definition (plus one comment reference at line 6 of the same file).
+- palace-mcp `search_graph(name_pattern=recordSwap)` against the indexed UW iOS project (`Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios`) returns 0 hits — the Neo4j index is stale w.r.t. the working tree and does NOT see `Source/RecentSwaps.swift`. The working-tree grep is the authoritative source here.
+
+No other `recordSwap` methods exist in the working tree.

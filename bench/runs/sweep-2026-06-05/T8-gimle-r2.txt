@@ -1,0 +1,82 @@
+## Silent-failure spot
+
+`Unstoppable/Unstoppable/Modules/SendNew/BitcoinSendHandler.swift`, inside `sendData(transactionSettings:)`.
+
+When the user attempts a max-balance Bitcoin send (`decimalValue == balance`), the handler calls `adapter.availableBalance(params:)`. That wrapper, in `BitcoinBaseAdapter.swift` line 299-302, does:
+
+```swift
+func availableBalance(params: SendParameters) -> Decimal {
+    let amount = (try? abstractKit.maxSpendableValue(params: params)) ?? 0
+    return Decimal(amount) / coinRate
+}
+```
+
+The `try?` swallows `BitcoinCoreErrors.SendValueErrors.notEnough` — thrown when the available UTXOs cannot cover even the dust + fee — and silently returns 0. The handler then sets `params.value = 0`, calls `adapter.sendInfo` which can succeed for a zero-value request, so `transactionError` stays `nil`. `SendData.canSend` becomes `false` (fee may be nil or zero) but `cautions()` returns an empty list because `transactionError == nil`. Result: the send screen disables the button with no visible reason — exactly the reported silent failure.
+
+## Smallest patch
+
+Detect the swallow at the only place it matters (the new-send Bitcoin handler) and synthesize the lost error so the existing `UtxoSendHelper.caution` mapper surfaces "fee_settings.errors.insufficient_balance" to the user. No protocol/API change, no other callers affected.
+
+```diff
+diff --git a/Unstoppable/Unstoppable/Modules/SendNew/BitcoinSendHandler.swift b/Unstoppable/Unstoppable/Modules/SendNew/BitcoinSendHandler.swift
+index 0e916580d..de929b686 100644
+--- a/Unstoppable/Unstoppable/Modules/SendNew/BitcoinSendHandler.swift
++++ b/Unstoppable/Unstoppable/Modules/SendNew/BitcoinSendHandler.swift
+@@ -39,14 +39,25 @@ extension BitcoinSendHandler: ISendHandler {
+             let balance = adapter.balanceData.available
+             let decimalValue = params.value.map { Decimal($0) / adapter.coinRate }
+             if decimalValue == balance {
+-                params.value = adapter.convertToSatoshi(value: adapter.availableBalance(params: params))
++                let available = adapter.availableBalance(params: params)
++                if available > 0 {
++                    params.value = adapter.convertToSatoshi(value: available)
++                } else {
++                    // availableBalance returned 0 because the underlying
++                    // BitcoinCore call swallowed a SendValueErrors.notEnough
++                    // (UTXOs can't cover dust + fee). Surface it instead of
++                    // silently calling sendInfo with value=0.
++                    transactionError = BitcoinCoreErrors.SendValueErrors.notEnough
++                }
+             }
+ 
+-            do {
+-                let sendInfo = try adapter.sendInfo(params: params)
+-                fee = sendInfo.fee
+-            } catch {
+-                transactionError = error
++            if transactionError == nil {
++                do {
++                    let sendInfo = try adapter.sendInfo(params: params)
++                    fee = sendInfo.fee
++                } catch {
++                    transactionError = error
++                }
+             }
+         }
+```
+
+## Why this works
+
+- `transactionError = BitcoinCoreErrors.SendValueErrors.notEnough` is the exact type already handled in `UtxoSendHelper.caution` (line 33-37): it maps to the localized "Insufficient balance" title and "Insufficient `<COIN>` balance" body.
+- `SendData.cautions(...)` in the same file (line 114-116) already appends that caution whenever `transactionError != nil`, so the existing UI rendering path lights up — no new wiring.
+- We skip the now-pointless `sendInfo` call when we already know there is no spendable amount, avoiding an avoidable RPC and a misleading zero-fee result.
+- The change is localized to `BitcoinSendHandler.sendData`; no protocol changes, no other call sites of `availableBalance(params:)` touched (the only other caller is the legacy `SendBitcoinAdapterService.update(...)` which has its own `sendInfoState = .failed(error)` path already).
+
+## Files touched
+
+- `/Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Modules/SendNew/BitcoinSendHandler.swift`
+
+(There is also a pre-existing unrelated working-tree change in `Unstoppable/Unstoppable/Modules/SendNew/UtxoSendHelper.swift` that restores the original localized strings for the default error branch — not introduced by this fix.)
+
+=== ARTIFACT ===
+See above.
+
+=== CHECKLIST_FACTS ===
+- Locate silent-failure spot for Bitcoin send w/ insufficient UTXOs: yes — `BitcoinSendHandler.sendData` calls `availableBalance` which `try?`-swallows `SendValueErrors.notEnough`.
+- Smallest patch surfacing error to user: yes — 14-line diff confined to one function, reuses existing UtxoSendHelper.caution mapping for `BitcoinCoreErrors.SendValueErrors.notEnough`.
+- Working-tree diff shown (no commit/push): yes.
+
+=== PALACE_USAGE ===
+- tools called: semantic_search x2
+- total palace calls: 2
+- approx bytes returned by palace: ~14000

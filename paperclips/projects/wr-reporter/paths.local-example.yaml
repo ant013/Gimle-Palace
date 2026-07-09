@@ -1,0 +1,10 @@
+# Phase F CI fallback — overridden by operator's ~/.paperclip/projects/wr-reporter/paths.yaml.
+schemaVersion: 2
+project_root: /opt/walletradar-example
+primary_repo_root: /opt/walletradar-example
+primary_mcp_service_dir: /opt/walletradar-example
+production_checkout: /opt/walletradar-example
+team_workspace_root: /opt/walletradar-example/runs
+operator_memory_dir: ~/.claude/projects/-walletradar-example/memory
+overlay_root: paperclips/projects/wr-reporter/overlays
+project_rules_file: AGENTS.md

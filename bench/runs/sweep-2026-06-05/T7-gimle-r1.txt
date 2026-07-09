@@ -1,0 +1,44 @@
+## Result: No code change required — EUR is already fully supported
+
+### Evidence
+
+**Currency definition** — `/Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Core/Managers/CurrencyManager.swift:14`
+
+```swift
+static let supportedCurrencies = [
+    Currency(code: "ARS", symbol: "$", decimal: 2),
+    Currency(code: "AUD", symbol: "A$", decimal: 2),
+    Currency(code: "BRL", symbol: "R$", decimal: 2),
+    Currency(code: "CAD", symbol: "C$", decimal: 2),
+    Currency(code: "CHF", symbol: "₣", decimal: 2),
+    Currency(code: "CNY", symbol: "¥", decimal: 2),
+    Currency(code: "EUR", symbol: "€", decimal: 2),   // <-- already present
+    Currency(code: "GBP", symbol: "£", decimal: 2),
+    ...
+]
+```
+
+- `code = "EUR"` — ISO 4217 fiat code, correct.
+- `symbol = "€"` — exactly the symbol the task requires.
+- `decimal = 2` — matches all other major fiat entries (USD, GBP, JPY, etc.).
+
+**Picker exposure** — `/Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Modules/Settings/BaseCurrency/BaseCurrencySettingsViewModel.swift:5`
+
+```swift
+private static let popularCurrencyCodes = ["USD", "EUR", "GBP", "JPY"]
+```
+
+EUR is explicitly promoted into the "popular" section of the base-currency picker, alongside USD/GBP/JPY. The view (`BaseCurrencySettingsView.swift`) renders `viewModel.popularCurrencies` then `viewModel.otherCurrencies`, both pulled from `CurrencyManager.currencies`, so EUR appears at the top of the picker UI.
+
+### Note about scope
+
+The task names "MarketKit", but the user-facing fiat-currency catalog in `unstoppable-wallet-ios` lives in `Unstoppable/Core/Managers/CurrencyManager.swift` (app target). MarketKit (HS package) exposes a `Currency` type but the master list and picker source are in the app target shown above. There is no separate MarketKit-side currency catalog in the iOS repo that would need an additional entry.
+
+### Patch
+
+(empty — no changes needed)
+
+```
+$ git -C /Users/ant013/Ios/bench-gimle diff
+(no output)
+```

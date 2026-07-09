@@ -1,0 +1,105 @@
+
+# Ethereum Send: from "Send" tap to signed transaction (UW-iOS)
+
+This trace covers the **confirmation-screen** Send path (the actual signed-tx producer). The earlier amount screen `SendEvmViewController` → `SendEvmViewModel.didTapProceed()` → `openConfirm(sendData:)` builds `SendEvmConfirmationModule.viewController(...)`, which presents the confirmation screen. The signing/broadcasting begins on the confirmation screen.
+
+## Step-by-step
+
+### 1. UI layer — tap on the confirmation "Send" control
+File: `Unstoppable/Unstoppable/Modules/SendEvm/Confirmation/SendEvmConfirmationViewController.swift`
+
+- The confirmation screen uses one of two controls depending on `Mode`:
+  - `.send` → `sendSliderButton: SliderButton` with `onTap = { [weak self] in self?.transactionViewModel.send() }` (lines 32–40).
+  - `.resend` / `.cancel` → `sendButton: PrimaryButton` whose target is `@objc private func onTapSend()`, which calls `transactionViewModel.send()` (lines 65–67).
+- `sendEnabledDriver` keeps the controls enabled/disabled based on the service state (lines 59–62).
+
+So the very first call out of the UI layer is:
+
+```swift
+transactionViewModel.send()    // SendEvmTransactionViewModel
+```
+
+### 2. ViewModel — pass-through to the service
+File: `Unstoppable/Unstoppable/Modules/SendEvmTransaction/SendEvmTransactionViewModel.swift`
+
+```swift
+func send() {
+    service.send()             // ISendEvmTransactionService → SendEvmTransactionService
+}
+```
+(lines 727–729)
+
+The ViewModel also subscribes to `service.sendStateObservable` and re-publishes through `sendingSignal` / `sendSuccessSignal` / `sendFailedSignal` (see `sync(sendState:)` at lines 99–106 — `idle`/`sending`/`sent(hash)`/`failed(error)`). The VC then translates those into the HUD banner and `handleSendSuccess(transactionHash:)` callback.
+
+### 3. Service — build the call, hand off to the kit wrapper
+File: `Unstoppable/Unstoppable/Modules/SendEvmTransaction/SendEvmTransactionService.swift`
+
+`SendEvmTransactionService.send()` (lines 131–169):
+
+1. Guards on `state == .ready` and `settingsService.status == .completed(fallibleTransaction)`.
+2. Sets `sendState = .sending`.
+3. Branches on `privateSendMode`:
+   - `.none` / `.protected` → calls `evmKitWrapper.sendSingle(transactionData:gasPrice:gasLimit:privateSend:nonce:)` (RxSwift `Single`); on success: `sendState = .sent(transactionHash: fullTransaction.transaction.hash)`; on error: `sendState = .failed(error:)`.
+   - `.cancelPrevious(hash)` → fires `evmKitWrapper.sendCancel(hash:)` via async/await (Merkle private-pool cancel path).
+
+`evmKitWrapper` is the `EvmKitWrapper` injected at construction (line 33, 56).
+
+### 4. EvmKitWrapper — fetch raw tx, sign, broadcast
+File: `Unstoppable/Unstoppable/Core/Managers/EvmKitManager.swift`
+
+`EvmKitWrapper` holds:
+- `evmKit: EvmKit.Kit` (network/encoding),
+- `signer: Signer?` (ECDSA),
+- optional `merkleTransactionAdapter` (private mempool).
+
+`func sendSingle(transactionData:gasPrice:gasLimit:privateSend:nonce:) -> Single<FullTransaction>` (lines 188–206):
+
+```swift
+guard let signer else { return Single.error(SignerError.signerNotSupported) }
+
+return evmKit.rawTransaction(transactionData: transactionData,
+                             gasPrice: gasPrice,
+                             gasLimit: gasLimit,
+                             nonce: nonce)
+    .flatMap { [weak self] rawTransaction in
+        ...
+        let signature = try signer.signature(rawTransaction: rawTransaction)   // sign here
+        return strongSelf.evmKit.sendSingle(rawTransaction: rawTransaction,
+                                            signature: signature)              // broadcast
+    }
+```
+
+So inside the wrapper:
+1. `EvmKit.Kit.rawTransaction(...)` resolves the missing pieces (chain ID, nonce if nil) and returns a `RawTransaction` ready for signing.
+2. `signer.signature(rawTransaction:)` — this is **the actual signing step**. `signer` is the `EvmKit.Signer` constructed in `EvmKitManager._evmKitWrapper(account:blockchainType:)` (lines 51–73): from `account.type.mnemonicSeed` via `Signer.instance(seed: seed, chain: chain)`, or from raw private-key bytes via `Signer.instance(privateKey: data, chain: chain)`. (Watch-only / passkey accounts get `signer = nil`, so `sendSingle` errors with `SignerError.signerNotSupported`.) `Signer` lives in EvmKit and produces a 65-byte ECDSA secp256k1 `Signature` (v, r, s) over the EIP-1559 / legacy RLP-encoded raw transaction.
+3. `EvmKit.Kit.sendSingle(rawTransaction:, signature:)` RLP-encodes `rawTransaction + signature` and broadcasts to `rpcSource`, returning `Single<FullTransaction>` (the locally-stored decorated transaction).
+
+There is also an async sibling `func send(transactionData:...)` (lines 216–229) that does the same raw → sign → broadcast, with a `privateSend` branch routing through `merkleTransactionAdapter.send(rawTransaction:, signature:)` when MEV-protection is enabled (used by Merkle/Flashbots private mempool).
+
+### 5. Result propagation back up
+- `evmKit.sendSingle(...)` emits `FullTransaction`; service maps to `.sent(transactionHash: fullTransaction.transaction.hash)`.
+- ViewModel's `sync(sendState:)` fires `sendSuccessRelay.accept(hash)`.
+- `SendEvmConfirmationViewController.handleSendSuccess(transactionHash:)` (lines 73–77) shows the "sent" HUD banner and calls `super.handleSendSuccess(...)` (`SendEvmTransactionViewController`) which dismisses the screens.
+
+## Call-chain summary (UI → bytes-on-wire)
+
+```
+SendEvmConfirmationViewController.onTapSend / sendSliderButton.onTap
+  -> SendEvmTransactionViewModel.send()
+     -> SendEvmTransactionService.send()                 // guards state, sets .sending
+        -> EvmKitWrapper.sendSingle(transactionData:gasPrice:gasLimit:privateSend:nonce:)
+           -> EvmKit.Kit.rawTransaction(...)             // builds RawTransaction (resolves nonce/chainId)
+           -> Signer.signature(rawTransaction:)          // <-- secp256k1 ECDSA signing
+           -> EvmKit.Kit.sendSingle(rawTransaction:signature:)   // RLP-encode + JSON-RPC eth_sendRawTransaction
+        -> sendState = .sent(transactionHash: ...)
+  -> ViewModel re-emits sendSuccessSignal
+  -> SendEvmConfirmationViewController.handleSendSuccess(transactionHash:)
+```
+
+## Key files (absolute paths)
+
+- `/Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Modules/SendEvm/Confirmation/SendEvmConfirmationViewController.swift`
+- `/Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Modules/SendEvmTransaction/SendEvmTransactionViewModel.swift`
+- `/Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Modules/SendEvmTransaction/SendEvmTransactionService.swift`
+- `/Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Core/Managers/EvmKitManager.swift`  (`EvmKitWrapper`, `Signer.instance(...)` construction)
+- `/Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Modules/SendEvm/SendEvmViewController.swift` (upstream: `didTapProceed` → `openConfirm(sendData:)` → `SendEvmConfirmationModule`)

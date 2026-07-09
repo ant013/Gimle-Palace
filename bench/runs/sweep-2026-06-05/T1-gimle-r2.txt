@@ -1,0 +1,82 @@
+File path:
+/Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Core/Adapters/MoneroAdapter.swift
+
+Class: MoneroAdapter
+- Declared access level: internal (Swift default; no `public` modifier on the class itself).
+- Adapts the Monero blockchain (MoneroKit.Kit) to the app's wallet adapter interfaces: IAdapter, IBalanceAdapter, ITransactionsAdapter, IDepositAdapter, and to MoneroKitDelegate.
+
+Symbols explicitly marked `public` in source (only members with the `public` keyword):
+- public var explorerTitle: String { get }
+- public func explorerUrl(transactionHash: String) -> String?
+- public func explorerUrl(address: String) -> String?
+
+Full externally-visible API surface (default `internal` — accessible to the rest of the Unstoppable target):
+
+Type-level / static:
+- static let networkType: MoneroKit.NetworkType
+- static let confirmationsThreshold: Int
+- static func clear(except excludedWalletIds: [String]) throws
+- static func key(accountType: AccountType, privateKey: Bool, spendKey: Bool) -> String
+- static func address(accountType: AccountType) -> String
+
+Initializer:
+- init(wallet: Wallet, restoreSettings: RestoreSettings, node: Node) throws
+
+Stored / computed properties (non-private):
+- var coinRate: Decimal
+- let transactionRecordsSubject: PublishSubject<[MoneroTransactionRecord]>
+- private(set) var balanceState: AdapterState
+- private(set) var syncing: Bool
+- let token: Token
+- public var explorerTitle: String
+- var moneroBalanceData: MoneroBalanceData
+- var moneroBalanceDataObservable: Observable<MoneroBalanceData>
+- var minimumSendAmount: Decimal
+
+Methods (non-private):
+- func transactionRecord(fromTransaction:) -> MoneroTransactionRecord
+- public func explorerUrl(transactionHash:) -> String?
+- public func explorerUrl(address:) -> String?
+- func estimateFee(amount: MoneroSendAmount, address: String, priority: MoneroKit.SendPriority) throws -> Decimal
+- @discardableResult func send(to: String, amount: MoneroSendAmount, priority: MoneroKit.SendPriority, memo: String?) throws -> [String]
+- func convertToPiconero(amount: MoneroSendAmount) -> SendAmount
+
+IAdapter conformance:
+- var isMainNet: Bool
+- var debugInfo: String
+- func start()
+- func stop()
+- func refresh()
+- func restart()
+- var statusInfo: [(String, Any)]
+
+MoneroKitDelegate conformance:
+- func subAddressesUpdated(subaddresses: [MoneroKit.SubAddress])
+- func balanceDidChange(balanceInfo: MoneroKit.BalanceInfo)
+- func walletStateDidChange(state: MoneroKit.WalletState)
+- func transactionsUpdated(inserted: [TransactionInfo], updated: [TransactionInfo])
+
+IBalanceAdapter conformance:
+- var balanceStateUpdatedObservable: Observable<AdapterState>
+- var balanceData: BalanceData
+- var balanceDataUpdatedObservable: Observable<BalanceData>
+
+ITransactionsAdapter conformance:
+- func rawTransaction(hash: String) -> String?
+- var lastBlockInfo: LastBlockInfo?
+- var syncingObservable: Observable<Void>
+- var lastBlockUpdatedObservable: Observable<Void>
+- var additionalTokenQueries: [TokenQuery]
+- func transactionsObservable(token: Token?, filter: TransactionTypeFilter, address: String?) -> Observable<[TransactionRecord]>
+- func transactionsSingle(paginationData: String?, token: Token?, filter: TransactionTypeFilter, address: String?, limit: Int) -> Single<[TransactionRecord]>
+- func allTransactionsAfter(paginationData: String?) -> Single<[TransactionRecord]>
+
+IDepositAdapter conformance:
+- var receiveAddress: DepositAddress
+- var receiveAddressPublisher: AnyPublisher<DataStatus<DepositAddress>, Never>
+- var usedAddresses: [UsedAddress]
+
+Nested type:
+- struct MoneroBalanceData { let all: Decimal; let unlocked: Decimal; var balanceData: BalanceData }
+
+Note: strictly by Swift access modifier, the class's "public" API is only the three `explorerTitle` / `explorerUrl(...)` members. In practice the adapter is consumed via the I*Adapter protocols listed above, which form the wallet-interface contract the question is asking about.

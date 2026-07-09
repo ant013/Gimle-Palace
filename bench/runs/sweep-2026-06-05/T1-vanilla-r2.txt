@@ -1,0 +1,102 @@
+=== ARTIFACT ===
+
+File: /Users/ant013/Ios/bench-vanilla/Unstoppable/Unstoppable/Core/Adapters/MoneroAdapter.swift
+
+Class: MoneroAdapter (declared with default `internal` access; no member is declared `open`. Three members are explicitly marked `public`; the rest are `internal` by default. Below I list the full non-private API surface, since the user asked for the public API of the adapter — i.e., everything callable from outside the type — and separately call out which are explicitly `public`.)
+
+Explicitly `public` members:
+  - public var explorerTitle: String
+  - public func explorerUrl(transactionHash: String) -> String?
+  - public func explorerUrl(address _: String) -> String?
+
+Non-private API surface of MoneroAdapter (default `internal`, callable from outside the type):
+
+Static members:
+  - static let networkType: MoneroKit.NetworkType
+  - static let confirmationsThreshold: Int
+  - static func clear(except excludedWalletIds: [String]) throws
+  - static func key(accountType: AccountType, privateKey: Bool, spendKey: Bool) -> String
+  - static func address(accountType: AccountType) -> String
+
+Stored / computed properties (instance):
+  - var coinRate: Decimal
+  - let transactionRecordsSubject: PublishSubject<[MoneroTransactionRecord]>
+  - private(set) var balanceState: AdapterState   (getter internal, setter private)
+  - private(set) var syncing: Bool                (getter internal, setter private)
+  - let token: Token
+
+Initializer:
+  - init(wallet: Wallet, restoreSettings: RestoreSettings, node: Node) throws
+
+Instance methods:
+  - func transactionRecord(fromTransaction transaction: TransactionInfo) -> MoneroTransactionRecord
+
+IAdapter conformance:
+  - var isMainNet: Bool
+  - var debugInfo: String
+  - func start()
+  - func stop()
+  - func refresh()
+  - func restart()
+  - var statusInfo: [(String, Any)]
+
+MoneroKitDelegate conformance:
+  - func subAddressesUpdated(subaddresses: [MoneroKit.SubAddress])
+  - func balanceDidChange(balanceInfo: MoneroKit.BalanceInfo)
+  - func walletStateDidChange(state: MoneroKit.WalletState)
+  - func transactionsUpdated(inserted: [TransactionInfo], updated: [TransactionInfo])
+
+IBalanceAdapter conformance:
+  - var balanceStateUpdatedObservable: Observable<AdapterState>
+  - var balanceData: BalanceData
+  - var balanceDataUpdatedObservable: Observable<BalanceData>
+
+Monero-specific extension (send / balance):
+  - var moneroBalanceData: MoneroBalanceData
+  - var moneroBalanceDataObservable: Observable<MoneroBalanceData>
+  - var minimumSendAmount: Decimal
+  - func estimateFee(amount: MoneroSendAmount, address: String, priority: MoneroKit.SendPriority) throws -> Decimal
+  - @discardableResult func send(to address: String, amount: MoneroSendAmount, priority: MoneroKit.SendPriority, memo: String?) throws -> [String]
+  - func convertToPiconero(amount: MoneroSendAmount) -> SendAmount
+
+ITransactionsAdapter conformance:
+  - func rawTransaction(hash: String) -> String?
+  - var lastBlockInfo: LastBlockInfo?
+  - var syncingObservable: Observable<Void>
+  - var lastBlockUpdatedObservable: Observable<Void>
+  - var additionalTokenQueries: [TokenQuery]
+  - func transactionsObservable(token: Token?, filter: TransactionTypeFilter, address: String?) -> Observable<[TransactionRecord]>
+  - func transactionsSingle(paginationData: String?, token: Token?, filter: TransactionTypeFilter, address: String?, limit: Int) -> Single<[TransactionRecord]>
+  - func allTransactionsAfter(paginationData: String?) -> Single<[TransactionRecord]>
+
+IDepositAdapter conformance:
+  - var receiveAddress: DepositAddress
+  - var receiveAddressPublisher: AnyPublisher<DataStatus<DepositAddress>, Never>
+  - var usedAddresses: [UsedAddress]
+
+Nested type:
+  - struct MoneroBalanceData { let all: Decimal; let unlocked: Decimal; var balanceData: BalanceData }
+
+Notes / private-only members (excluded from the API surface):
+  - private let kit, moneroBalanceDataSubject, lastBlockUpdatedSubject, balanceStateSubject, depositAddressSubject, transactionSource
+  - private func moneroBalanceData(balanceInfo:), private func adapterStateFromKit()
+
+Caveat on Swift visibility: the class is declared without an explicit access modifier, so it defaults to `internal`. The three members written as `public` are therefore still effectively `internal` outside the Unstoppable module (Swift caps a member at the type's access level). Only `explorerTitle`, `explorerUrl(transactionHash:)`, and `explorerUrl(address:)` are syntactically `public` in the source.
+
+=== CHECKLIST_FACTS ===
+- Identifies MoneroAdapter as the adapter class: yes
+- Reports correct file path (Unstoppable/Unstoppable/Core/Adapters/MoneroAdapter.swift): yes
+- Lists public/external API methods (start/stop/refresh/restart, send, estimateFee, explorerUrl, transactionsObservable/Single, etc.): yes
+- Lists public/external properties (balanceData, receiveAddress, lastBlockInfo, statusInfo, token, etc.): yes
+- Covers protocol conformances (IAdapter, IBalanceAdapter, ITransactionsAdapter, IDepositAdapter, MoneroKitDelegate): yes
+- Notes static members (clear, key, address, networkType, confirmationsThreshold): yes
+- Calls out actual `public` keyword vs default `internal` access: yes
+
+=== TOOL_USAGE ===
+- Bash calls: 3
+- Read calls: 2
+- Grep calls: 0
+- Glob calls: 0
+- Edit/Write calls: 0
+- WebFetch/WebSearch calls: 0
+- skills invoked: none (single-file lookup task; brainstorming/plans waived as unnecessary overhead for read-only enumeration)

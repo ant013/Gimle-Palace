@@ -1,0 +1,78 @@
+## Silent-failure spot: Bitcoin send with insufficient UTXOs
+
+**File:** `/Users/ant013/Ios/bench-vanilla/Unstoppable/Unstoppable/Modules/SendNew/BitcoinSendHandler.swift`
+
+**Lines (baseline):** 39-43, inside `BitcoinSendHandler.sendData(transactionSettings:)`
+
+### Where the silent failure happens
+
+When the user's send amount equals their available balance, the handler tries to recompute `params.value` to the max spendable amount (so it adjusts for the fee):
+
+```swift
+if decimalValue == balance {
+    params.value = adapter.convertToSatoshi(value: adapter.availableBalance(params: params))
+}
+```
+
+`BitcoinBaseAdapter.availableBalance(params:)` (lines 299-302) is defined as:
+
+```swift
+func availableBalance(params: SendParameters) -> Decimal {
+    let amount = (try? abstractKit.maxSpendableValue(params: params)) ?? 0
+    return Decimal(amount) / coinRate
+}
+```
+
+Note the `try?` — when the selected UTXOs cannot cover `amount + fee` (the classic "insufficient UTXOs" case), `maxSpendableValue` throws, and `availableBalance` silently returns `0`. The handler then sets `params.value = 0` and proceeds into `adapter.sendInfo(params:)`. The original "not enough" condition is swallowed: the user sees the form silently switch to a zero-amount send (or a confusing "ok" state with no error caution).
+
+`UtxoSendHelper.caution(...)` already knows how to render `BitcoinCoreErrors.SendValueErrors.notEnough` as the localized "insufficient_balance" / "insufficient_balance.info" caution, so the smallest patch is to detect the zero-result branch and surface that error explicitly.
+
+### Smallest patch (working-tree diff)
+
+```diff
+diff --git a/Unstoppable/Unstoppable/Modules/SendNew/BitcoinSendHandler.swift b/Unstoppable/Unstoppable/Modules/SendNew/BitcoinSendHandler.swift
+index 0e916580d..ba791c812 100644
+--- a/Unstoppable/Unstoppable/Modules/SendNew/BitcoinSendHandler.swift
++++ b/Unstoppable/Unstoppable/Modules/SendNew/BitcoinSendHandler.swift
+@@ -39,14 +39,24 @@ extension BitcoinSendHandler: ISendHandler {
+             let balance = adapter.balanceData.available
+             let decimalValue = params.value.map { Decimal($0) / adapter.coinRate }
+             if decimalValue == balance {
+-                params.value = adapter.convertToSatoshi(value: adapter.availableBalance(params: params))
++                let maxSpendable = adapter.availableBalance(params: params)
++                if maxSpendable <= 0 {
++                    // Selected UTXOs cannot cover amount + fee. Surface the
++                    // underlying `notEnough` error instead of silently
++                    // overwriting params.value with 0 and proceeding.
++                    transactionError = BitcoinCoreErrors.SendValueErrors.notEnough
++                } else {
++                    params.value = adapter.convertToSatoshi(value: maxSpendable)
++                }
+             }
+ 
+-            do {
+-                let sendInfo = try adapter.sendInfo(params: params)
+-                fee = sendInfo.fee
+-            } catch {
+-                transactionError = error
++            if transactionError == nil {
++                do {
++                    let sendInfo = try adapter.sendInfo(params: params)
++                    fee = sendInfo.fee
++                } catch {
++                    transactionError = error
++                }
+             }
+         }
+```
+
+### Why this is the smallest fix
+
+- Single file touched: `BitcoinSendHandler.swift`.
+- Reuses the existing `BitcoinCoreErrors.SendValueErrors.notEnough` case, which `UtxoSendHelper.caution(transactionError:feeToken:)` already maps to the user-facing strings `"fee_settings.errors.insufficient_balance"` and `"fee_settings.errors.insufficient_balance.info"` (lines 33-37 of `UtxoSendHelper.swift`). No new localization keys, no new error types.
+- The existing flow (`SendData.cautions(...)` -> `UtxoSendHelper.caution(...)`) propagates `transactionError` into a red caution, and `SendData.canSend` already returns `false` when `transactionError != nil`, so the Send button is correctly disabled.
+- Wrapping the `sendInfo` block in `if transactionError == nil` avoids overwriting the surfaced `notEnough` with a downstream zero-amount error and avoids the extra RPC call.
+
+### Patch was applied to the working tree, not committed
+
+`git status` confirms `BitcoinSendHandler.swift` is modified but untracked-for-commit, per task constraints.

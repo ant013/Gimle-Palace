@@ -1,0 +1,70 @@
+=== ARTIFACT ===
+
+## Finding
+
+USDC on Ethereum mainnet with contract address `0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48` is ALREADY in the whitelist. No code change is required.
+
+### Location of the whitelist
+
+The pre-approved/whitelisted ERC-20 tokens activated by default for every freshly created mnemonic account are defined in:
+
+- `/Users/ant013/Ios/bench-vanilla/Unstoppable/Unstoppable/Modules/CreateAccount/CreateAccountViewModel.swift`
+
+Specifically in the static array `CreateAccountViewModel.defaultWalletTokenQueries` (lines 12-21). The relevant entry:
+
+```
+TokenQuery(blockchainType: .ethereum, tokenType: .eip20(address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")), // USDC
+```
+
+This is the same address as `0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48` — only the EIP-55 checksum casing differs. The codebase stores the address lowercased (matching how the other entries — USDT Ethereum, USDT Tron — are stored, and matching how EIP-20 token addresses are normalized in `TokenQuery.tokenType == .eip20`). Ethereum addresses are case-insensitive at the EVM level; EIP-55 checksum is a display-time integrity check only.
+
+A parallel definition also exists in:
+
+- `/Users/ant013/Ios/bench-vanilla/Unstoppable/Unstoppable/Core/Abstraction/Config/StablecoinRegistry.swift`
+  `Entry(blockchainType: .ethereum, address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"), // USDC`
+
+(That registry is used for stablecoin classification, not the create-account whitelist, but it also already lists USDC.)
+
+### Existing test coverage
+
+The change is already covered by:
+
+- `/Users/ant013/Ios/bench-vanilla/Unstoppable/Tests/Modules/CreateAccount/CreateAccountDefaultTokenQueriesTests.swift`
+
+which contains three Swift Testing `@Test` cases:
+
+1. `includesUsdcOnEthereumMainnet` — asserts the whitelist contains a `TokenQuery` matching `(.ethereum, .eip20("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"))`.
+2. `keepsExistingErc20Whitelist` — sanity check that USDT/Ethereum and USDT/Tron remain.
+3. `hasNoDuplicateEntries` — guards against accidental duplicate insertion.
+
+### Patch
+
+No patch necessary — the whitelist already contains USDC on Ethereum mainnet at the requested contract address, and a Swift Testing test (`includesUsdcOnEthereumMainnet`) asserts it stays in place.
+
+```
+diff --git a/Unstoppable/Unstoppable/Modules/CreateAccount/CreateAccountViewModel.swift b/Unstoppable/Unstoppable/Modules/CreateAccount/CreateAccountViewModel.swift
+(no changes — USDC entry already present at line 19)
+
+diff --git a/Unstoppable/Tests/Modules/CreateAccount/CreateAccountDefaultTokenQueriesTests.swift b/Unstoppable/Tests/Modules/CreateAccount/CreateAccountDefaultTokenQueriesTests.swift
+(no changes — `includesUsdcOnEthereumMainnet` test already present)
+```
+
+### Optional hardening (NOT applied)
+
+If the reviewer wants to additionally tolerate any future re-casing of the address constant, the test could be made case-insensitive by lowercasing both sides before comparing the `.eip20(address:)` payload. The current test relies on the source already being stored lowercase, which is the repo convention enforced everywhere else (`StablecoinRegistry`, USDT, etc.), so the extra normalization is not strictly required.
+
+=== CHECKLIST_FACTS ===
+- Identifies the whitelist location (CreateAccountViewModel.defaultWalletTokenQueries): yes
+- Confirms USDC on Ethereum mainnet with the requested contract address is in (or added to) the whitelist: yes
+- Provides a test covering the USDC-on-Ethereum entry: yes (existing `includesUsdcOnEthereumMainnet` in CreateAccountDefaultTokenQueriesTests.swift)
+- Does NOT commit or push: yes
+- Output is a diff / patch + new test: yes (no-op patch shown; entry+test already present)
+
+=== TOOL_USAGE ===
+- Bash calls: 4
+- Read calls: 2
+- Grep calls: 0
+- Glob calls: 0
+- Edit/Write calls: 0
+- WebFetch/WebSearch calls: 0
+- skills invoked: none (no-op: change already present; no productive surface for brainstorming/plan/TDD beyond verification)
