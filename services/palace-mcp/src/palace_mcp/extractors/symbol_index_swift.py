@@ -237,6 +237,9 @@ class SymbolIndexSwift(BaseExtractor):
             previous_body_hashes = await _read_existing_file_body_hashes(
                 driver, project_id=ctx.group_id
             )
+            current_body_hash_manifest_digest = _body_hash_manifest_digest(
+                current_body_hashes
+            )
             scip_document_count = _count_scip_documents(scip_index)
             scip_occurrence_count = _count_scip_occurrences(scip_index)
             logger.info(
@@ -264,6 +267,38 @@ class SymbolIndexSwift(BaseExtractor):
                 and previous_body_hashes
                 and previous_body_hashes == current_body_hashes
             ):
+                fast_skip_reason = await _current_swift_baseline_fast_skip_reason(
+                    driver,
+                    project_id=ctx.group_id,
+                    commit_sha=commit_sha,
+                    body_hash_manifest_digest=current_body_hash_manifest_digest,
+                )
+                if fast_skip_reason is None:
+                    logger.info(
+                        "symbol_index_swift.freshness.skip",
+                        extra={
+                            "extractor": self.name,
+                            "project": ctx.project_slug,
+                            "run_id": ctx.run_id,
+                            "freshness_decision": "skip",
+                            "freshness_reason": "body_hash_match",
+                            "baseline_state": "present",
+                            "graph_refresh": "skipped",
+                            "occurrence_iteration_count": 0,
+                            "file_count": len(current_body_hashes),
+                        },
+                    )
+                    await finalize_ingest_run(driver, run_id=ctx.run_id, success=True)
+                    return ExtractorStats(
+                        outcome=ExtractorOutcome.SKIPPED,
+                        message=(
+                            "Skipped re-ingest: file body_hash values and durable "
+                            "Swift baseline matched current HEAD."
+                        ),
+                        next_action="Modify source content or run with force=True before rerunning symbol_index_swift.",
+                        mode=ExtractorExecutionMode.SKIPPED,
+                    )
+
                 await _refresh_graph_state(
                     driver,
                     repo_path=ctx.repo_path,
@@ -297,6 +332,8 @@ class SymbolIndexSwift(BaseExtractor):
                         "run_id": ctx.run_id,
                         "freshness_decision": "skip",
                         "freshness_reason": "body_hash_match",
+                        "baseline_state": fast_skip_reason,
+                        "graph_refresh": "full",
                         "file_count": len(current_body_hashes),
                     },
                 )
@@ -632,6 +669,32 @@ async def _read_swift_symbol_baseline_commit(
     if not baseline.commit_sha:
         return None, "baseline_commit_missing"
     return baseline.commit_sha, None
+
+
+async def _current_swift_baseline_fast_skip_reason(
+    driver: AsyncDriver,
+    *,
+    project_id: str,
+    commit_sha: str,
+    body_hash_manifest_digest: str,
+) -> str | None:
+    baseline = await load_extractor_baseline(
+        driver,
+        project_id=project_id,
+        extractor=SymbolIndexSwift.name,
+        baseline_kind=_SWIFT_SYMBOL_BASELINE_KIND,
+    )
+    if baseline is None:
+        return "missing"
+    if baseline.status != BASELINE_STATUS_VALID:
+        return "invalid"
+    if baseline.state_version != _SWIFT_SYMBOL_BASELINE_STATE_VERSION:
+        return "invalid"
+    if baseline.commit_sha != commit_sha:
+        return "stale_commit"
+    if baseline.body_hash_manifest_digest != body_hash_manifest_digest:
+        return "stale_body_hash_manifest"
+    return None
 
 
 async def _write_swift_symbol_baseline(
