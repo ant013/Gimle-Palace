@@ -190,8 +190,8 @@ async def test_call_edge_swift_uses_real_baseline_delta_scope(
     stable_file = "Sources/StableCaller.swift"
     changed_path = tmp_path / changed_file
     stable_path = tmp_path / stable_file
-    changed_path.parent.mkdir(parents=True)
-    stable_path.parent.mkdir(parents=True)
+    changed_path.parent.mkdir(parents=True, exist_ok=True)
+    stable_path.parent.mkdir(parents=True, exist_ok=True)
 
     _run(["git", "init", "-q", "-b", "main"], cwd=tmp_path)
     _run(["git", "config", "user.email", "t@t"], cwd=tmp_path)
