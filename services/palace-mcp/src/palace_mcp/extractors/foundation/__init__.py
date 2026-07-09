@@ -58,6 +58,8 @@ from palace_mcp.extractors.foundation.semgrep_runner import (
 from palace_mcp.extractors.foundation.walk import (
     DEFAULT_STOP_DIRS,
     DEFAULT_STOP_PREFIXES,
+    is_repo_relative_path_excluded,
+    project_exclude_globs,
     should_skip_path,
     walk_repo,
 )
@@ -104,7 +106,9 @@ __all__ = [
     "derive_swift_delta_scope",
     "delta_resolution_artifact_path",
     "diff_delta_snapshots",
+    "is_repo_relative_path_excluded",
     "load_extractor_baseline",
+    "project_exclude_globs",
     "read_delta_resolution_baseline_artifact",
     "resolve_delta_resolution",
     "upsert_extractor_baseline",
