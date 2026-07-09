@@ -98,8 +98,15 @@ GitHub PR approval.
 
 ## Deployment
 
-After a PR squash-merges to `develop`, rebuild and restart `palace-mcp` on the
-iMac:
+After a PR squash-merges to `develop`, update the current native macOS
+operator service by restarting the launchd-managed `palace-mcp` process:
+
+```bash
+launchctl kickstart -k gui/$(id -u)/work.ant013.palace-mcp-native
+curl -s http://localhost:8765/healthz
+```
+
+For the Docker iMac/server deployment path only, rebuild and restart via:
 
 ```bash
 bash paperclips/scripts/imac-deploy.sh
