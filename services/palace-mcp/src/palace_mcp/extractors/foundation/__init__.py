@@ -45,6 +45,10 @@ from palace_mcp.extractors.foundation.models import (
     SymbolOccurrence,
     SymbolOccurrenceShadow,
 )
+from palace_mcp.extractors.foundation.incremental_scope import (
+    SwiftDeltaScope,
+    derive_swift_delta_scope,
+)
 from palace_mcp.extractors.foundation.semgrep_runner import (
     SemgrepConfigInvalidError,
     SemgrepInternalError,
@@ -93,9 +97,11 @@ __all__ = [
     "SymbolOccurrence",
     "SymbolOccurrenceShadow",
     "SymbolSnapshot",
+    "SwiftDeltaScope",
     "capture_delta_resolution_baseline",
     "build_valid_extractor_baseline",
     "delete_extractor_baseline",
+    "derive_swift_delta_scope",
     "delta_resolution_artifact_path",
     "diff_delta_snapshots",
     "load_extractor_baseline",

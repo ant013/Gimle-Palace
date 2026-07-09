@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -11,9 +12,13 @@ from neo4j import AsyncDriver
 from palace_mcp.code.indexstore import CallEdgeRecord, CallEdgeScanResult
 from palace_mcp.extractors.base import ExtractorRunContext
 from palace_mcp.extractors.call_edge_swift import CallEdgeSwiftExtractor
+from palace_mcp.extractors.foundation.baseline import (
+    build_valid_extractor_baseline,
+    upsert_extractor_baseline,
+)
 from palace_mcp.extractors.foundation.incremental_scope import (
     IncrementalMode,
-    IncrementalPathScope,
+    SwiftDeltaScope,
 )
 
 
@@ -26,6 +31,31 @@ def _ctx(tmp_path: Path, run_id: str) -> ExtractorRunContext:
         duration_ms=0,
         logger=logging.getLogger("test"),
     )
+
+
+def _swift_delta_scope(changed_file: str) -> SwiftDeltaScope:
+    return SwiftDeltaScope(
+        mode=IncrementalMode.INCREMENTAL,
+        changed_paths={changed_file},
+        removed_paths=set(),
+        reason=None,
+        baseline_state="present",
+        baseline_commit_sha="base-sha",
+        baseline_state_version=1,
+        baseline_invalid_reason=None,
+        baseline_successful_run_id="baseline-run",
+        validated_by="baseline_only",
+    )
+
+
+def _run(args: list[str], cwd: Path) -> None:
+    subprocess.run(args, cwd=cwd, check=True, capture_output=True)
+
+
+def _run_text(args: list[str], cwd: Path) -> str:
+    return subprocess.run(
+        args, cwd=cwd, check=True, capture_output=True, text=True
+    ).stdout.strip()
 
 
 async def _seed_symbol(
@@ -151,6 +181,89 @@ async def test_call_edge_swift_writes_calls_edges_and_replaces_snapshot(
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+async def test_call_edge_swift_uses_real_baseline_delta_scope(
+    driver: AsyncDriver,
+    graphiti_mock: MagicMock,
+    tmp_path: Path,
+) -> None:
+    changed_file = "Sources/ChangedCaller.swift"
+    stable_file = "Sources/StableCaller.swift"
+    changed_path = tmp_path / changed_file
+    stable_path = tmp_path / stable_file
+    changed_path.parent.mkdir(parents=True)
+    stable_path.parent.mkdir(parents=True)
+
+    _run(["git", "init", "-q", "-b", "main"], cwd=tmp_path)
+    _run(["git", "config", "user.email", "t@t"], cwd=tmp_path)
+    _run(["git", "config", "user.name", "T"], cwd=tmp_path)
+    changed_path.write_text("func changed() {}\n", encoding="utf-8")
+    stable_path.write_text("func stable() {}\n", encoding="utf-8")
+    _run(["git", "add", "."], cwd=tmp_path)
+    _run(["git", "commit", "-m", "baseline", "-q"], cwd=tmp_path)
+    baseline_commit = _run_text(["git", "rev-parse", "HEAD"], cwd=tmp_path)
+    changed_path.write_text("func changed() { stable() }\n", encoding="utf-8")
+    _run(["git", "add", "."], cwd=tmp_path)
+    _run(["git", "commit", "-m", "change caller", "-q"], cwd=tmp_path)
+
+    await upsert_extractor_baseline(
+        driver,
+        baseline=build_valid_extractor_baseline(
+            project_id="project/gimle",
+            project_slug="gimle",
+            extractor="symbol_index_swift",
+            baseline_kind="swift_symbol_scope",
+            state_version=1,
+            commit_sha=baseline_commit,
+            run_id="baseline-run",
+        ),
+    )
+    await _seed_symbol(driver, qname="Changed caller", file_path=changed_file)
+    await _seed_symbol(driver, qname="Stable callee", file_path=stable_file)
+
+    store_path = tmp_path / "DataStore"
+    (store_path / "v5").mkdir(parents=True)
+    scan_result = CallEdgeScanResult(
+        edges=(
+            CallEdgeRecord(
+                source="Changed caller",
+                target="Stable callee",
+                source_file=str(changed_path.resolve()),
+            ),
+        ),
+        counters={"calls_seen": 1, "missing_relation": 0},
+        records_scanned=1,
+        occurrences_scanned=1,
+    )
+    collect_mock = MagicMock(return_value=scan_result)
+    extractor = CallEdgeSwiftExtractor()
+
+    with (
+        patch("palace_mcp.mcp_server.get_driver", return_value=driver),
+        patch(
+            "palace_mcp.mcp_server.get_settings",
+            return_value=SimpleNamespace(
+                palace_indexstore_paths={"gimle": str(store_path)},
+                palace_sourcekit_index_store_path=None,
+                palace_incremental_ingest=True,
+            ),
+        ),
+        patch(
+            "palace_mcp.extractors.call_edge_swift.collect_call_edges",
+            collect_mock,
+        ),
+    ):
+        stats = await extractor.run(graphiti=graphiti_mock, ctx=_ctx(tmp_path, "run-2"))
+
+    assert stats.mode is not None
+    assert stats.mode.value == "incremental"
+    assert "validated_by=baseline_only" in (stats.message or "")
+    assert collect_mock.call_args.kwargs["selected_source_files"] == {
+        str(changed_path.resolve())
+    }
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_call_edge_swift_incremental_replaces_changed_callers_only(
     driver: AsyncDriver,
     graphiti_mock: MagicMock,
@@ -206,12 +319,8 @@ async def test_call_edge_swift_incremental_replaces_changed_callers_only(
             ),
         ),
         patch(
-            "palace_mcp.extractors.call_edge_swift.derive_incremental_path_scope",
-            return_value=IncrementalPathScope(
-                mode=IncrementalMode.INCREMENTAL,
-                changed_paths={changed_file},
-                removed_paths=set(),
-            ),
+            "palace_mcp.extractors.call_edge_swift.derive_swift_delta_scope",
+            return_value=_swift_delta_scope(changed_file),
         ),
         patch(
             "palace_mcp.extractors.call_edge_swift.collect_call_edges",
@@ -291,12 +400,8 @@ async def test_call_edge_swift_incremental_deletes_orphan_for_renamed_callee(
             ),
         ),
         patch(
-            "palace_mcp.extractors.call_edge_swift.derive_incremental_path_scope",
-            return_value=IncrementalPathScope(
-                mode=IncrementalMode.INCREMENTAL,
-                changed_paths={changed_file},
-                removed_paths=set(),
-            ),
+            "palace_mcp.extractors.call_edge_swift.derive_swift_delta_scope",
+            return_value=_swift_delta_scope(changed_file),
         ),
         patch(
             "palace_mcp.extractors.call_edge_swift.collect_call_edges",
@@ -368,12 +473,8 @@ async def test_call_edge_swift_incremental_is_group_scoped(
             ),
         ),
         patch(
-            "palace_mcp.extractors.call_edge_swift.derive_incremental_path_scope",
-            return_value=IncrementalPathScope(
-                mode=IncrementalMode.INCREMENTAL,
-                changed_paths={changed_file},
-                removed_paths=set(),
-            ),
+            "palace_mcp.extractors.call_edge_swift.derive_swift_delta_scope",
+            return_value=_swift_delta_scope(changed_file),
         ),
         patch(
             "palace_mcp.extractors.call_edge_swift.collect_call_edges",
