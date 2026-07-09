@@ -19,11 +19,11 @@ Malformed or unknown PR URLs are blockers; comment the reason and keep ownership
 
 Handle only issues containing `UAudit daily version-branch delta audit` and `platform: ios`. Route other platforms to their dispatcher.
 
-Source of truth: `paperclips/projects/uaudit/daily-version-branch-routines.yaml`. Routine: `daily-ios-version-0.49`. Limits: `max_commits=30`, `max_files=300`, `max_diff_lines=3000`.
+Source of truth: `paperclips/projects/uaudit/daily-version-branch-routines.yaml`. Routine: `daily-ios-version-0.50`. Limits: `max_commits=30`, `max_files=300`, `max_diff_lines=3000`.
 
 Decision rules:
-- Fetch authoritative upstream `https://github.com/horizontalsystems/unstoppable-wallet-ios` for `version/0.49`.
-- If cursor SHA equals upstream head, comment `No new commits for iOS version/0.49`, mark done, and stop. Do not create `$RUN`, write status files, send Telegram, or update the cursor.
+- Fetch authoritative upstream `https://github.com/horizontalsystems/unstoppable-wallet-ios` for `version/0.50`.
+- If cursor SHA equals upstream head, comment `No new commits for iOS version/0.50`, mark done, and stop. Do not create `$RUN`, write status files, send Telegram, or update the cursor.
 - If cursor is missing and `initialization_allowed` is false, PATCH `status=blocked` and `assigneeAgentId={{bindings.agents.AUCEO}}`; comment that audit state is missing and AUCEO must authorize initialization.
 - If initialization is explicitly allowed, PATCH to `{{bindings.agents.UWIInfraEngineer}}` with `mode=initialize_cursor`, exact upstream head SHA, and routine id. Infra writes that SHA as baseline and stops.
 - If cursor SHA is absent from fetched upstream object graph, block to AUCEO as history rewrite.
