@@ -21,6 +21,14 @@ from palace_mcp.extractors.foundation.delta_resolution import (
     resolve_delta_resolution,
     write_delta_resolution_baseline_artifact,
 )
+from palace_mcp.extractors.foundation.baseline import (
+    BASELINE_STATUS_VALID,
+    ExtractorBaseline,
+    build_valid_extractor_baseline,
+    delete_extractor_baseline,
+    load_extractor_baseline,
+    upsert_extractor_baseline,
+)
 from palace_mcp.extractors.foundation.models import (
     Ecosystem,
     EvictionRecord,
@@ -53,11 +61,13 @@ from palace_mcp.extractors.foundation.walk import (
 __all__ = [
     "DEFAULT_STOP_DIRS",
     "DEFAULT_STOP_PREFIXES",
+    "BASELINE_STATUS_VALID",
     "DeltaResolutionBaseline",
     "Ecosystem",
     "EdgeDelta",
     "EdgeSnapshot",
     "EvictionRecord",
+    "ExtractorBaseline",
     "ExtractorError",
     "ExtractorErrorCode",
     "ExternalDependency",
@@ -84,10 +94,14 @@ __all__ = [
     "SymbolOccurrenceShadow",
     "SymbolSnapshot",
     "capture_delta_resolution_baseline",
+    "build_valid_extractor_baseline",
+    "delete_extractor_baseline",
     "delta_resolution_artifact_path",
     "diff_delta_snapshots",
+    "load_extractor_baseline",
     "read_delta_resolution_baseline_artifact",
     "resolve_delta_resolution",
+    "upsert_extractor_baseline",
     "write_delta_resolution_baseline_artifact",
     "walk_repo",
 ]

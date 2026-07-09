@@ -34,6 +34,12 @@ from palace_mcp.extractors.foundation.checkpoint import (
     finalize_ingest_run,
     write_checkpoint,
 )
+from palace_mcp.extractors.foundation.baseline import (
+    BASELINE_STATUS_VALID,
+    build_valid_extractor_baseline,
+    load_extractor_baseline,
+    upsert_extractor_baseline,
+)
 from palace_mcp.extractors.foundation.circuit_breaker import (
     check_phase_budget,
     check_resume_budget,
@@ -147,6 +153,8 @@ RETURN collect(DISTINCT f.last_seen_in_commit) AS commits
 _GRAPH_BATCH_SIZE = 500
 _INCREMENTAL_FULL_REPROCESS_THRESHOLD = 0.8
 _GIT_CHANGESET_CAP = 500
+_SWIFT_SYMBOL_BASELINE_KIND = "swift_symbol_scope"
+_SWIFT_SYMBOL_BASELINE_STATE_VERSION = 1
 _SWIFT_SOURCE_SUFFIXES = (".swift", ".swiftinterface")
 _SWIFT_ACCESS_LOOKBACK_LINES = 2
 _SWIFT_ACCESS_MODIFIER_RE = re.compile(
@@ -229,6 +237,20 @@ class SymbolIndexSwift(BaseExtractor):
             previous_body_hashes = await _read_existing_file_body_hashes(
                 driver, project_id=ctx.group_id
             )
+            scip_document_count = _count_scip_documents(scip_index)
+            scip_occurrence_count = _count_scip_occurrences(scip_index)
+            logger.info(
+                "symbol_index_swift.snapshot.loaded",
+                extra={
+                    "extractor": self.name,
+                    "project": ctx.project_slug,
+                    "run_id": ctx.run_id,
+                    "snapshot_scope": "full_scip_parse_and_hash",
+                    "scip_document_count": scip_document_count,
+                    "scip_occurrence_count": scip_occurrence_count,
+                    "body_hash_file_count": len(current_body_hashes),
+                },
+            )
             changed_files: set[str] = set()
             removed_files: set[str] = set()
             incremental_tantivy = False
@@ -236,6 +258,7 @@ class SymbolIndexSwift(BaseExtractor):
             removed_graph_paths: set[str] = set()
             graph_fallback_reason: str | None = None
             previous_commit_sha: str | None = None
+            previous_commit_source: str | None = None
             if (
                 not ctx.force
                 and previous_body_hashes
@@ -252,6 +275,19 @@ class SymbolIndexSwift(BaseExtractor):
                     file_body_hashes=current_body_hashes,
                     selected_paths=None,
                     removed_paths=set(),
+                )
+                await _write_swift_symbol_baseline(
+                    driver,
+                    project_id=ctx.group_id,
+                    project_slug=ctx.project_slug,
+                    run_id=ctx.run_id,
+                    commit_sha=commit_sha,
+                    scip_path=scip_path,
+                    repo_path=ctx.repo_path,
+                    scip_digest=_file_digest(scip_path),
+                    scip_document_count=scip_document_count,
+                    scip_occurrence_count=scip_occurrence_count,
+                    current_body_hashes=current_body_hashes,
                 )
                 logger.info(
                     "symbol_index_swift.freshness.skip",
@@ -298,20 +334,35 @@ class SymbolIndexSwift(BaseExtractor):
                     and changed_ratio < _INCREMENTAL_FULL_REPROCESS_THRESHOLD
                 )
                 if incremental_tantivy:
-                    previous_commit_sha = await _read_existing_commit_sha(
-                        driver, project_id=ctx.group_id
-                    )
                     (
-                        selected_graph_paths,
-                        removed_graph_paths,
+                        previous_commit_sha,
                         graph_fallback_reason,
-                    ) = await _derive_incremental_graph_scope(
-                        repo_path=ctx.repo_path,
-                        previous_commit_sha=previous_commit_sha,
-                        scip_paths=scip_paths,
-                        changed_files=changed_files,
-                        removed_files=removed_files,
+                    ) = await _read_swift_symbol_baseline_commit(
+                        driver,
+                        project_id=ctx.group_id,
+                        extractor_name=self.name,
                     )
+                    if previous_commit_sha is not None:
+                        previous_commit_source = "extractor_baseline"
+                    elif graph_fallback_reason == "baseline_missing":
+                        previous_commit_sha = await _read_existing_commit_sha(
+                            driver, project_id=ctx.group_id
+                        )
+                        if previous_commit_sha is not None:
+                            previous_commit_source = "legacy_file_commits"
+                            graph_fallback_reason = None
+                    if previous_commit_sha is not None:
+                        (
+                            selected_graph_paths,
+                            removed_graph_paths,
+                            graph_fallback_reason,
+                        ) = await _derive_incremental_graph_scope(
+                            repo_path=ctx.repo_path,
+                            previous_commit_sha=previous_commit_sha,
+                            scip_paths=scip_paths,
+                            changed_files=changed_files,
+                            removed_files=removed_files,
+                        )
                     incremental_tantivy = selected_graph_paths is not None
                 logger.info(
                     "symbol_index_swift.tantivy.plan",
@@ -331,6 +382,7 @@ class SymbolIndexSwift(BaseExtractor):
                             else "full"
                         ),
                         "graph_fallback_reason": graph_fallback_reason,
+                        "previous_commit_source": previous_commit_source,
                     },
                 )
                 if (
@@ -475,6 +527,19 @@ class SymbolIndexSwift(BaseExtractor):
                 selected_paths=selected_graph_paths if incremental_tantivy else None,
                 removed_paths=removed_graph_paths,
             )
+            await _write_swift_symbol_baseline(
+                driver,
+                project_id=ctx.group_id,
+                project_slug=ctx.project_slug,
+                run_id=ctx.run_id,
+                commit_sha=commit_sha,
+                scip_path=scip_path,
+                repo_path=ctx.repo_path,
+                scip_digest=_file_digest(scip_path),
+                scip_document_count=scip_document_count,
+                scip_occurrence_count=scip_occurrence_count,
+                current_body_hashes=current_body_hashes,
+            )
             logger.info(
                 "Symbol nodes written to Neo4j: %d; shadow rows: %d; Tantivy occurrences: %d",
                 sym_nodes,
@@ -544,6 +609,101 @@ async def _ingest_batch(
 
 def _load_or_reset_counter(tantivy_path: Path, run_id: str) -> BoundedInDegreeCounter:
     return load_or_reset_in_degree_counter(tantivy_path, run_id, logger=logger)
+
+
+async def _read_swift_symbol_baseline_commit(
+    driver: AsyncDriver,
+    *,
+    project_id: str,
+    extractor_name: str,
+) -> tuple[str | None, str | None]:
+    baseline = await load_extractor_baseline(
+        driver,
+        project_id=project_id,
+        extractor=extractor_name,
+        baseline_kind=_SWIFT_SYMBOL_BASELINE_KIND,
+    )
+    if baseline is None:
+        return None, "baseline_missing"
+    if baseline.status != BASELINE_STATUS_VALID:
+        return None, baseline.invalid_reason or "baseline_invalid"
+    if baseline.state_version != _SWIFT_SYMBOL_BASELINE_STATE_VERSION:
+        return None, "baseline_schema_mismatch"
+    if not baseline.commit_sha:
+        return None, "baseline_commit_missing"
+    return baseline.commit_sha, None
+
+
+async def _write_swift_symbol_baseline(
+    driver: AsyncDriver,
+    *,
+    project_id: str,
+    project_slug: str,
+    run_id: str,
+    commit_sha: str,
+    scip_path: Path,
+    repo_path: Path,
+    scip_digest: str | None,
+    scip_document_count: int,
+    scip_occurrence_count: int,
+    current_body_hashes: dict[str, str],
+) -> None:
+    await upsert_extractor_baseline(
+        driver,
+        baseline=build_valid_extractor_baseline(
+            project_id=project_id,
+            project_slug=project_slug,
+            extractor=SymbolIndexSwift.name,
+            baseline_kind=_SWIFT_SYMBOL_BASELINE_KIND,
+            state_version=_SWIFT_SYMBOL_BASELINE_STATE_VERSION,
+            commit_sha=commit_sha,
+            run_id=run_id,
+            indexed_commit=commit_sha,
+            scip_digest=scip_digest,
+            scip_path=_display_path(repo_path=repo_path, path=scip_path),
+            scip_document_count=scip_document_count,
+            scip_occurrence_count=scip_occurrence_count,
+            body_hash_manifest_digest=_body_hash_manifest_digest(current_body_hashes),
+            file_count=len(current_body_hashes),
+        ),
+    )
+
+
+def _body_hash_manifest_digest(file_body_hashes: dict[str, str]) -> str:
+    digest = hashlib.sha256()
+    for file_path, body_hash in sorted(file_body_hashes.items()):
+        digest.update(file_path.encode("utf-8", errors="surrogateescape"))
+        digest.update(b"\0")
+        digest.update(body_hash.encode("utf-8", errors="surrogateescape"))
+        digest.update(b"\0")
+    return f"sha256:{digest.hexdigest()}"
+
+
+def _file_digest(path: Path) -> str | None:
+    if not path.is_file():
+        return None
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return f"sha256:{digest.hexdigest()}"
+
+
+def _display_path(*, repo_path: Path, path: Path) -> str:
+    try:
+        return path.resolve().relative_to(repo_path.resolve()).as_posix()
+    except ValueError:
+        return str(path)
+
+
+def _count_scip_documents(scip_index: object) -> int:
+    documents = getattr(scip_index, "documents", ())
+    return len(documents)
+
+
+def _count_scip_occurrences(scip_index: object) -> int:
+    documents = getattr(scip_index, "documents", ())
+    return sum(len(getattr(doc, "occurrences", ()) or ()) for doc in documents)
 
 
 def _incremental_ingest_enabled(settings: object) -> bool:
