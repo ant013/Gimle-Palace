@@ -1,14 +1,28 @@
-# Spec — Palace incremental sync maintenance and extractor fallback removal
+# Spec rev2 - Palace incremental sync maintenance and extractor fallback removal
 
-**Status:** draft for operator review (2026-07-09).  
-**Grounded in:** `origin/develop` / `develop` @ `172cf8d1188d694631e80177d4ef052832c72686`.  
-**Owner:** design = Codex; implementation = palace-mcp slice(s) after approval.  
+**Status:** rev2 - revised after four-lens voltAgents review
+(architecture, performance, QA, MCP implementation) on 2026-07-09.  
+**Grounded in:** `origin/develop` / `develop` @
+`172cf8d1188d694631e80177d4ef052832c72686`.  
+**Branch:** `feature/palace-incremental-sync-performance-spec`.  
+**Owner:** design = Codex; implementation = palace-mcp slice(s) after
+operator approval.  
 **Origin:** live dogfood run on 2026-07-09 across HorizontalSystems iOS repos.
+
+## Rev2 verdict
+
+Rev1 identified the right operator pain but was **NO-GO for implementation**:
+it treated `previous_commit_missing` as the main fix while leaving the durable
+baseline authority, commit-field contract, project exclude semantics, hidden
+O(project) work, and live evidence schema under-specified.
+
+Rev2 turns those review findings into binding design decisions. Implementation
+must not start from rev1 behavior or rev1 open questions.
 
 ## Problem
 
 The operator needs Palace to stay synchronized with active iOS repos several
-times per day. The latest measured run completed, but the end-to-end sync took
+times per day. The latest measured run completed, but end-to-end sync took
 about **1h 38m**:
 
 - git updates across 19 HorizontalSystems repos: about **4s**;
@@ -19,8 +33,8 @@ about **1h 38m**:
 - `uw-ios-app` `project_analyze(mode=incremental)`: **3,778s**;
 - `stable-wallet-ios` `project_analyze(mode=incremental)`: **841s**.
 
-Run-level incremental orchestration worked, but the expensive Swift extractors
-still fell back to full work inside the run. The logs showed:
+Run-level incremental orchestration worked, but expensive extractor internals
+still behaved like a full-project run. The logs showed:
 
 - `symbol_index_swift.tantivy.plan` with `tantivy_mode="full_reprocess"`;
 - `graph_mode="full"`;
@@ -28,28 +42,174 @@ still fell back to full work inside the run. The logs showed:
 - body-hash mismatch on a small changed-file set for `uw-ios-app`, and a larger
   changed/removed set for `stable-wallet-ios`.
 
-That means `project_analyze` selected incremental correctly, but the extractor
-could not prove a safe previous baseline and chose the full path.
+Removing `previous_commit_missing` is necessary, but not sufficient. The
+current implementation still has hidden O(project) work in incremental-looking
+paths:
 
-## Clarification: do not exclude the UW project
+- `symbol_index_swift` parses the SCIP snapshot before decisions, hashes all
+  SCIP source files, reads all stored file hashes, loops occurrences for the
+  in-degree counter, and may refresh graph state over the full snapshot.
+- `call_edge_swift` can select changed source files, but IndexStore collection
+  still walks global unit/record state before filtering.
 
-Do **not** exclude the real `unstoppable-wallet-ios` project from Palace. It is
-the main `uw-ios-app` target and must remain fully indexed.
+The target is therefore not "make the mode label say incremental." The target
+is a measurable reduction in graph/analyze work after SCIP exists.
 
-The exclusion discussed here is only for the nested path:
+## Non-negotiable design decisions
 
-```text
-stable-wallet-ios/unstoppable/
+### D1. Baseline authority is Neo4j
+
+The durable baseline authority is a Neo4j node, not a local JSON file:
+
+```cypher
+(:ExtractorBaseline {
+  project_id,
+  project_slug,
+  extractor,
+  baseline_kind,
+  state_version,
+  commit_sha,
+  indexed_commit,
+  scip_digest,
+  scip_path,
+  scip_document_count,
+  scip_occurrence_count,
+  body_hash_manifest_digest,
+  file_count,
+  successful_run_id,
+  status,
+  invalid_reason,
+  updated_at
+})
 ```
 
-`stable-wallet-ios` contains `unstoppable/` as a submodule or embedded checkout.
-When Palace scans `stable-wallet-ios`, audit-style filesystem walkers can walk
-that subtree and scan the whole UW app again as if it were part of stable. That
-duplicates work and pollutes stable's scope. The intended policy is:
+Required identity:
 
-- `uw-ios-app`: scan `/.../unstoppable-wallet-ios` normally;
-- `stable-wallet-ios`: scan stable's own files, but exclude `unstoppable/**`
-  plus generated/build/vendor trees.
+```text
+(project_id, extractor, baseline_kind)
+```
+
+For this work:
+
+```text
+extractor = "symbol_index_swift"
+baseline_kind = "swift_symbol_scope"
+state_version = 1
+```
+
+Local JSON artifacts may still be written for evidence/debugging, but they are
+not authoritative for incremental decisions.
+
+### D2. Durable baseline is distinct from delta-resolution artifacts
+
+Existing run-scoped delta-resolution artifacts are not replaced by this
+baseline. They are captured before some graph mutations so companion extractors
+such as `dead_code` can compare before/after state.
+
+The new `:ExtractorBaseline` is written only after `symbol_index_swift` has
+completed successfully and its graph/Tantivy state is safe to use as the next
+run's base. A failed or partial run must not advance it.
+
+### D3. Commit contract uses real Palace fields
+
+Do not introduce or validate against a fictional `:Project.commit_sha`.
+
+Verification and delta derivation must use:
+
+- project-level current indexed commit: `Project.indexed_commit` where the
+  existing project model/reporting exposes it;
+- file-level commit fields: `coalesce(f.last_seen_in_commit, f.commit_sha)`;
+- durable baseline commit: `:ExtractorBaseline.commit_sha`;
+- repo HEAD: `git rev-parse HEAD`.
+
+Acceptance must compare these fields explicitly. If a field is absent for a
+project, the report must say which contract is unavailable and why.
+
+### D4. One shared Swift delta scope
+
+`symbol_index_swift`, `call_edge_swift`, and Swift audit extractors must not
+derive incompatible changed-file scopes.
+
+Introduce a shared Swift delta scope contract:
+
+```text
+SwiftDeltaScope {
+  project_id
+  project_slug
+  baseline_commit_sha
+  head_commit_sha
+  mode: full | incremental | skip
+  reason
+  changed_paths
+  removed_paths
+  scip_paths_digest
+  body_hash_manifest_digest
+  validated_by: symbol_index_swift | baseline_only
+}
+```
+
+For runs where `symbol_index_swift` executes, it is the preferred producer of
+the validated scope because it can intersect git changes, SCIP document paths,
+and body hashes. `call_edge_swift` consumes that scope when present. If the
+scope is absent, `call_edge_swift` may use a baseline-only git diff scope, but
+the report must label it as less validated.
+
+### D5. `stable-wallet-ios/unstoppable/**` is a repo-relative path glob
+
+Do **not** exclude the real `unstoppable-wallet-ios` Palace project. It remains
+the main `uw-ios-app` target.
+
+The exclusion applies only when scanning the `stable-wallet-ios` project:
+
+```text
+unstoppable/**
+```
+
+Matcher semantics:
+
+- input path is POSIX repo-relative;
+- glob is anchored at the stable repo root;
+- `unstoppable/**` excludes `stable-wallet-ios/unstoppable/...`;
+- it must not exclude `Sources/UnstoppableFeature.swift`;
+- it must not affect the separate `uw-ios-app` project.
+
+This is not just an audit-only rule. It applies to all stable project file
+enumeration paths that can contribute stable-owned files or findings:
+
+- semgrep-backed extractors;
+- shared filesystem walkers;
+- hotspot/file inventory walkers;
+- any generic project file inventory used by analyze/status.
+
+SCIP emit remains governed by the stable emit script; this spec requires Palace
+file enumeration not to treat the nested UW checkout as stable-owned input.
+
+### D6. Operator wrapper is observability, not the main latency fix
+
+Git sync took about 4 seconds in the measured run. The sequential update/status
+wrapper is still useful because it answers "all repos updated?" and prevents
+ambiguous state, but it is not the performance solution. The performance
+solution is extractor delta correctness plus removal or scheduling of hidden
+O(project) work.
+
+### D7. Performance gates require internal counters
+
+A run is not accepted as "incremental" merely because checkpoint mode says so.
+Every relevant extractor must expose counters in structured report metadata:
+
+- SCIP parse time and bytes;
+- SCIP documents scanned;
+- SCIP occurrences iterated;
+- source files hashed;
+- Neo4j file-hash rows read;
+- Neo4j symbols/files/edges upserted and deleted;
+- Tantivy docs deleted and written;
+- IndexStore units, records, and occurrences visited;
+- changed and removed path counts;
+- fallback reason.
+
+The performance gates in this spec are invalid unless these counters are
+available in the evidence bundle.
 
 ## Assumptions
 
@@ -57,272 +217,335 @@ duplicates work and pollutes stable's scope. The intended policy is:
 - The hot path is iOS Swift sync for `uw-ios-app` and `stable-wallet-ios`.
 - `xcodebuild` / SCIP emit time is a real floor; this spec targets graph/analyze
   work after SCIP is emitted.
-- Existing incremental work is partially live:
-  - `project_analyze` accepts and reports `mode=incremental`;
-  - `symbol_index_swift` can attempt selected-path Tantivy/graph work when
-    `PALACE_INCREMENTAL_INGEST=true`;
-  - `call_edge_swift` has an incremental selected-source path;
-  - audit extractors vary by extractor and still need scope hygiene.
-- A one-time full baseline per project is acceptable after a schema or state
-  migration. Repeated full rebuilds during normal sync are not acceptable.
+- A one-time full baseline per project is acceptable after adding the baseline
+  schema or invalidating state.
+- Repeated full rebuilds during normal small syncs are not acceptable.
+- Global analysis that cannot be made file-local must move off the hot path and
+  carry `stale_since` metadata.
 
 ## Scope
 
-This spec covers a repeatable operator workflow and the code changes required
-to make that workflow fast and trustworthy:
+In scope:
 
-1. sequential repo sync/update workflow for all mounted repos;
-2. direct verification queries after sync, not just "command exited 0";
-3. durable baseline state so Swift extractors do not fall back with
-   `previous_commit_missing`;
-4. project-scoped path exclusions so stable does not scan nested UW;
-5. performance acceptance gates for 1-file, 10-file, and no-change updates.
+1. durable Swift baseline state in Neo4j;
+2. shared Swift delta scope;
+3. removal of normal `previous_commit_missing` fallback after a valid baseline;
+4. instrumentation that proves or falsifies hidden O(project) work;
+5. file-scoped or scheduled behavior for `symbol_index_swift` and
+   `call_edge_swift`;
+6. project-level repo-relative exclude globs, especially stable's
+   `unstoppable/**`;
+7. sequential repo sync/status wrapper with direct verification queries;
+8. live evidence bundles for no-change, 1-file, 10-file, stable-exclude, and
+   fallback scenarios.
 
 Out of scope:
 
 - replacing SCIP emit or removing the `xcodebuild` floor;
 - changing git remotes or branch policies in upstream HorizontalSystems repos;
 - excluding `uw-ios-app` from Palace;
-- broad extractor rewrites unrelated to sync latency.
+- broad extractor rewrites unrelated to sync correctness/latency;
+- changing existing run-scoped delta-resolution artifacts except to document
+  their separation from durable baseline state.
 
 ## Current Code Facts
 
-- `services/palace-mcp/src/palace_mcp/project_analyze.py` decides run-level
-  `full` vs `incremental`, creates per-extractor checkpoints, skips known global
-  extractors on incremental runs, and reports per-checkpoint mode.
-- `services/palace-mcp/src/palace_mcp/extractors/symbol_index_swift.py`:
-  - compares current SCIP file body hashes with `:File.body_hash`;
+- `project_analyze.py` decides run-level `full` vs `incremental`, creates
+  per-extractor checkpoints, skips known global extractors on incremental runs,
+  and reports per-checkpoint mode.
+- `symbol_index_swift.py`:
+  - compares current SCIP file body hashes with stored `:File.body_hash`;
   - attempts incremental only when `PALACE_INCREMENTAL_INGEST` is enabled and
-    the changed ratio is below threshold;
-  - calls `_read_existing_commit_sha()` before deriving the incremental graph
-    scope;
-  - returns `previous_commit_missing` when existing `:File.commit_sha` values
-    do not yield exactly one previous commit;
-  - falls back to full graph/Tantivy work when selected paths cannot be derived.
-- `services/palace-mcp/src/palace_mcp/extractors/call_edge_swift.py` already
-  has selected-source incremental mechanics, but it requires a configured v5
-  IndexStore path and still needs operational baseline evidence.
-- `services/palace-mcp/src/palace_mcp/extractors/foundation/walk.py` and
-  `semgrep_runner.py` support extra directory excludes, but there is no accepted
-  project-level exclude contract yet for `stable-wallet-ios/unstoppable/**`.
+    changed ratio is below threshold;
+  - currently calls `_read_existing_commit_sha()` before deriving incremental
+    graph scope;
+  - returns `previous_commit_missing` when stored file commit state does not
+    yield exactly one previous commit;
+  - still performs full-snapshot work in paths that can be labelled incremental.
+- `call_edge_swift.py`:
+  - can pass `selected_source_files` to IndexStore collection;
+  - still derives scope independently from shared file commit aggregation;
+  - returns `MISSING_INPUT` when no v5 IndexStore is configured;
+  - emits useful scan counters only in a free-form message today.
+- `walk.py` and `semgrep_runner.py` support additive directory-name excludes,
+  not repo-relative glob semantics.
+- Some extractors bypass shared walkers/runners and must be inventoried before
+  claiming project-level excludes.
 
-## Target Workflow
+## Implementation Phases
 
-### Phase 0 — Manual Baseline and Observability
+### Phase 0 - Baseline schema, reporting, and migration
 
-1. Run a one-time full baseline for each Palace project that lacks valid Swift
-   baseline state.
-2. Record a durable per-project baseline after every successful
-   `symbol_index_swift` run:
-   - project slug and `group_id`;
-   - repo HEAD commit;
-   - SCIP file path and digest;
-   - body-hash manifest digest and file count;
-   - previous successful `symbol_index_swift` run id;
-   - schema/state version;
-   - timestamp and extractor mode.
-3. Expose baseline health in the analyze report and logs:
-   - `baseline_state=present|missing|invalid`;
+1. Add `:ExtractorBaseline` schema/support for the identity in D1.
+2. Add read/write helpers, preferably near existing extractor foundation code.
+3. Write baseline only after successful `symbol_index_swift` finalization.
+4. Do not advance baseline on:
+   - extractor exception;
+   - partial Tantivy write;
+   - graph write failure;
+   - `SUCCEEDED_WITH_SKIPS` where `symbol_index_swift` did not establish a new
+     safe base.
+5. Add report metadata:
+   - `baseline_state=missing|present|invalid`;
    - `baseline_commit_sha`;
-   - explicit fallback reason when invalid.
+   - `baseline_state_version`;
+   - `baseline_invalid_reason`;
+   - `baseline_successful_run_id`.
 
 Acceptance:
 
-- A fresh project reports `baseline_state=missing` and requires one full run.
-- A second run with no content changes reports `body_hash_match` and skips
-  Swift reingest.
-- A second run with one changed Swift file does not report
+- Fresh project reports `baseline_state=missing` and requires one full
+  baseline.
+- A valid baseline is readable by `symbol_index_swift` and shared delta scope.
+- A failed/partial run does not change `:ExtractorBaseline.successful_run_id` or
+  `commit_sha`.
+- Schema mismatch produces explicit full fallback with
+  `baseline_state=invalid`, not `previous_commit_missing`.
+
+### Phase 1 - Shared Swift delta scope
+
+1. Implement `SwiftDeltaScope` helper.
+2. Derive scope from:
+   - baseline commit;
+   - repo HEAD;
+   - git diff from baseline to HEAD;
+   - SCIP document paths when available;
+   - current body-hash manifest when available.
+3. Preserve hard full fallbacks for:
+   - missing baseline;
+   - invalid baseline schema;
+   - `git_diff_error`;
+   - `git_diff_truncated`;
+   - `scip_path_mismatch`;
+   - `body_hash_changed_mismatch`;
+   - `body_hash_removed_mismatch`;
+   - high changed ratio.
+4. Store the resolved scope in structured run/checkpoint metadata or a
+   run-scoped artifact referenced by the checkpoint.
+5. Make `call_edge_swift` consume the produced scope when available.
+
+Acceptance:
+
+- After a successful baseline, a 1-file Swift change does not produce
   `previous_commit_missing`.
+- Each allowed fallback reason has a unit test and appears verbatim in the
+  report.
+- `call_edge_swift` reports whether its scope was `validated_by=symbol_index_swift`
+  or `validated_by=baseline_only`.
+- `call_edge_swift` integration tests stop patching scope derivation for the
+  baseline happy path; at least one test exercises real baseline-derived scope.
 
-### Phase 1 — Sequential Repo Sync Command
+### Phase 2 - `symbol_index_swift` hidden O(project) reduction
 
-Add or update an operator script/runbook that performs repo updates in a stable
-order:
+This phase is required before claiming the Phase 6 performance SLA.
 
-1. enumerate mounted repos under the configured HorizontalSystems root;
-2. for each repo:
-   - `git fetch --prune`;
-   - resolve the expected branch or explicit configured ref;
-   - fast-forward only when clean and fast-forwardable;
-   - for repos without upstream tracking, compare to the explicit remote branch;
-   - update submodules only where the project policy requires it;
-3. collect per-repo status:
-   - local HEAD SHA;
-   - upstream/ref SHA;
-   - ahead/behind counts;
-   - dirty tracked files;
-   - dirty untracked files;
-   - submodule SHA and dirty state.
+Required behavior:
+
+1. No-change path:
+   - must not iterate all SCIP occurrences;
+   - must not refresh the full graph state;
+   - should validate baseline/scip/body-hash digest cheaply and skip.
+2. Changed-file path:
+   - avoid repeated full SCIP occurrence passes;
+   - filter by selected paths as early as possible;
+   - update only changed/removed Tantivy docs;
+   - update only changed/removed graph files/symbols plus the minimum liveness
+     metadata needed to protect unchanged symbols from prune;
+   - update or deliberately defer the in-degree counter instead of rebuilding it
+     from every USE occurrence on every small change.
+3. If a full SCIP parse is unavoidable for a protobuf-level reason, it must be
+   measured separately and bounded in the SLA as "parse floor", not hidden
+   inside graph update time.
+
+Acceptance:
+
+- No-change `uw-ios-app` after valid baseline: `symbol_index_swift` structured
+  counters show zero full occurrence iteration and no full graph refresh.
+- 1-file and 10-file changes: occurrence iteration and writes are proportional
+  to selected files or explicitly reported as unavoidable parse floor.
+- `symbol_index_swift` no longer reports `mode=incremental` while doing
+  full-snapshot graph/Tantivy work.
+
+### Phase 3 - `call_edge_swift` hot-path policy
+
+`call_edge_swift` must not silently spend O(project) work on every small update.
+
+Implementation may choose one of two accepted strategies:
+
+1. **True file-scoped IndexStore path**
+   - use `SwiftDeltaScope`;
+   - visit only units/records needed for changed caller/callee files;
+   - replace caller edges for changed files;
+   - delete stale callee edges for changed/removed files;
+   - expose IndexStore units/records/occurrences visited.
+2. **Scheduled/stale policy**
+   - if IndexStore cannot provide efficient file-scoped collection, remove
+     `call_edge_swift` from the ordinary hot path;
+   - mark call graph results with `stale_since=<baseline_commit_or_head>`;
+   - run call-edge refresh on a schedule or explicit full/deep sync.
+
+Acceptance:
+
+- The implementation must pick one strategy before merge.
+- If strategy 1 is picked, a 1-file change proves bounded IndexStore counters.
+- If strategy 2 is picked, ordinary incremental sync does not block on
+  `call_edge_swift`, and the report visibly marks call graph freshness.
+- Expected `MISSING_INPUT` for IndexStore is controlled by a per-project
+  allowlist in the operator report schema, not hidden as generic success.
+
+### Phase 4 - Stable project exclude contract
+
+1. Add project-level repo-relative exclude globs to settings/config.
+2. Define one matcher used by all Palace file enumeration paths.
+3. Configure `stable-wallet-ios` with:
+
+```text
+unstoppable/**
+```
+
+4. Inventory extractors and classify each as:
+   - `honors_project_excludes`;
+   - `does_not_enumerate_files`;
+   - `must_be_updated`;
+   - `out_of_hot_path_stale_since`.
+5. Update semgrep-backed and walker-backed extractors that are in stable's hot
+   path.
+
+Acceptance:
+
+- Fixture: `stable-wallet-ios/unstoppable/App.swift` is excluded.
+- Fixture: `stable-wallet-ios/Sources/UnstoppableFeature.swift` is not excluded.
+- Fixture/live config: separate `uw-ios-app` project still indexes/scans the
+  real `unstoppable-wallet-ios` repo.
+- A stable analyze evidence bundle lists zero scanned paths under
+  `unstoppable/`.
+
+### Phase 5 - Sequential sync/status wrapper
+
+Add or update an operator wrapper/runbook that performs:
+
+1. repo enumeration from configured HorizontalSystems root;
+2. per-repo `git fetch --prune`;
+3. fast-forward only when clean and fast-forwardable;
+4. explicit remote/ref comparison for repos without upstream tracking;
+5. submodule update only where project policy requires it;
+6. SCIP emit per project;
+7. `project_analyze(mode=incremental)` per project;
+8. direct git and Palace verification;
+9. JSON and Markdown status output.
+
+The wrapper must report, per repo/project:
+
+- local HEAD SHA;
+- upstream/ref SHA;
+- ahead/behind counts;
+- dirty tracked files;
+- dirty untracked files;
+- submodule SHA and dirty state;
+- SCIP metadata;
+- analyze run id/status;
+- checkpoint modes/outcomes;
+- expected and unexpected `MISSING_INPUT`;
+- elapsed times for git, SCIP, analyze, and total.
 
 Acceptance:
 
 - 19/19 HorizontalSystems repos report `ahead=0`, `behind=0` or a named
   intentional exception.
-- Repos without upstream tracking are not marked "unknown" if the explicit
-  configured ref matches.
+- Repos without upstream tracking are not marked unknown when explicit ref
+  matches.
 - Dirty pre-existing files are reported, not reverted.
-- The script prints total git-update wall time.
+- Git sync remains measured separately from SCIP/analyze latency.
 
-### Phase 2 — SCIP Emit Per Project
+### Phase 6 - Live evidence and performance gates
 
-Run SCIP emit after git sync, project by project:
+Use real repos, not toy-only fixtures, for final validation.
 
-1. `uw-ios-app`: emit from the real `unstoppable-wallet-ios` repo.
-2. `stable-wallet-ios`: emit from stable only; do not treat
-   `stable-wallet-ios/unstoppable/` as stable-owned source.
-3. Store artifact metadata:
-   - SCIP path;
-   - byte size;
-   - document count;
-   - occurrence count;
-   - wrapper exit code;
-   - underlying `xcodebuild` exit code when available;
-   - elapsed seconds.
+Evidence bundle schema:
 
-Acceptance:
+```text
+scenario
+project_slug
+before_sha
+after_sha
+changed_paths
+removed_paths
+scip_path
+scip_digest
+scip_document_count
+scip_occurrence_count
+git_elapsed_s
+scip_elapsed_s
+analyze_elapsed_s
+total_elapsed_s
+analysis_run_id
+checkpoint_summary
+baseline_state
+swift_delta_scope
+fallback_reasons
+extractor_counters
+expected_missing_input
+unexpected_missing_input
+smoke_query_results
+```
 
-- SCIP emit can be nonzero internally only when the wrapper still emits a valid
-  SCIP and records the build failure reason.
-- No Palace analyze run starts without a fresh SCIP artifact or an explicit
-  "reuse existing SCIP" decision in the report.
+Required scenarios:
 
-### Phase 3 — Palace Analyze Incremental
-
-For each updated project, run `project_analyze(mode=incremental)` only after its
-SCIP artifact and baseline state are known.
-
-Required extractor behavior:
-
-1. `symbol_index_swift`:
-   - uses durable baseline state, not only current `:File.commit_sha`
-     aggregation, to derive `previous_commit_sha`;
-   - falls back to full only for first baseline, forced run, schema mismatch,
-     truncated git diff, SCIP/git path mismatch, or high changed ratio;
-   - logs `graph_mode=incremental` for small Swift changes;
-   - deletes/upserts only changed/removed file docs in Tantivy;
-   - keeps live unchanged symbols fresh and protected from prune.
-2. `call_edge_swift`:
-   - uses the same change-set contract;
-   - skips clean runs;
-   - replaces caller edges for changed caller files;
-   - deletes stale callee edges when changed files rename or move symbols;
-   - reports `MISSING_INPUT` only when IndexStore is genuinely unavailable and
-     the project policy allows the degraded mode.
-3. Audit extractors:
-   - consume project-level exclude paths;
-   - for stable, exclude `unstoppable/**`;
-   - use changed-file scope where the extractor has a safe per-file replace
-     contract;
-   - mark inherently global findings with `stale_since` instead of blocking the
-     hot path.
-
-Acceptance:
-
-- Small `uw-ios-app` update: no `symbol_index_swift` full fallback after a
-  valid baseline exists.
-- Small `stable-wallet-ios` update: stable analyze does not scan files under
-  `unstoppable/**`.
-- Incremental run report lists per-extractor mode as
-  `incremental|skipped|stale|missing_input`, not an ambiguous run-level summary.
-
-### Phase 4 — Direct Verification Queries
-
-After each sync, run direct checks and save a compact status artifact:
-
-Git checks:
-
-- repo HEAD equals expected remote/ref for every configured repo;
-- submodule SHA equals expected SHA where submodules are pinned;
-- tracked dirty files are listed.
-
-Palace checks:
-
-- latest `AnalysisRun` per project has the expected HEAD commit;
-- latest run status is `SUCCEEDED` or `SUCCEEDED_WITH_SKIPS`;
-- no checkpoint has `RUN_FAILED`;
-- no checkpoint has unexpected `MISSING_INPUT`;
-- `symbol_index_swift` log/metadata for small changes has
-  `graph_mode=incremental`;
-- no `graph_fallback_reason=previous_commit_missing` after baseline;
-- `:Project.commit_sha`, `:File.commit_sha`, and baseline commit agree;
-- navigation smoke queries return data:
-  - `semantic_search`;
-  - `find_references`;
-  - `get_code_snippet`;
-  - `trace_call_path` when IndexStore is available.
-
-Acceptance:
-
-- The operator can answer "all updated?" from one status report.
-- The report includes elapsed times for git, SCIP, analyze, and total.
-- The report includes explicit exceptions instead of hiding skips.
-
-### Phase 5 — Performance Gates
-
-Use real repos, not toy-only fixtures, for final validation:
-
-| Scenario | Expected graph/analyze behavior | Target after SCIP |
+| Scenario | Required behavior | Target after SCIP |
 |---|---|---|
-| no source changes | Swift symbol skip, call-edge skip | `< 2 min` |
-| 1 Swift file changed | file-scoped symbol/Tantivy/call-edge work | `< 5 min` |
-| 10 Swift files changed | file-scoped graph work, no full fallback | `< 10 min` |
-| high churn / refactor | explicit full fallback with reason | no silent fallback |
+| no source changes | Swift symbol skip, no full occurrence iteration | `< 2 min` |
+| 1 Swift file changed | file-scoped symbol/Tantivy work, no hidden full graph refresh | `< 5 min` |
+| 10 Swift files changed | file-scoped graph work, no silent full fallback | `< 10 min` |
+| stable with nested UW | zero scanned stable paths under `unstoppable/` | `< 5 min` graph/analyze |
+| high churn/refactor | explicit full fallback with reason | no silent fallback |
 
 End-to-end time can exceed these targets because SCIP emit is still bounded by
 `xcodebuild`. The operator-facing SLA is:
 
 ```text
-SCIP emit time + <10 minutes graph/analyze time for ordinary small updates.
+SCIP emit time + <10 minutes graph/analyze time for ordinary small uw-ios-app updates.
+SCIP emit time + <5 minutes graph/analyze time for ordinary small stable-wallet-ios updates.
 ```
+
+## Operator verification contract
+
+The report must not use vague checks like "query returns data." It must define
+exact smoke inputs and success conditions per project.
+
+Minimum Palace checks:
+
+- latest `AnalysisRun` for the project has expected HEAD/indexed commit;
+- run status is `SUCCEEDED` or `SUCCEEDED_WITH_SKIPS`;
+- no checkpoint has `RUN_FAILED`;
+- no checkpoint has unexpected `MISSING_INPUT`;
+- expected `MISSING_INPUT` is listed by `(project, extractor, reason)`;
+- `symbol_index_swift` has no `previous_commit_missing` after valid baseline;
+- baseline commit and run metadata match the real contract from D3;
+- `semantic_search`, `find_references`, `get_code_snippet`, and
+  `trace_call_path` checks assert `ok`, warning state, and minimum result count
+  only where deterministic.
 
 ## Affected Areas
 
 - `services/palace-mcp/src/palace_mcp/project_analyze.py`
+- `services/palace-mcp/src/palace_mcp/extractors/base.py`
+- `services/palace-mcp/src/palace_mcp/extractors/runner.py`
 - `services/palace-mcp/src/palace_mcp/extractors/symbol_index_swift.py`
 - `services/palace-mcp/src/palace_mcp/extractors/call_edge_swift.py`
 - `services/palace-mcp/src/palace_mcp/extractors/foundation/incremental_scope.py`
+- new or updated Swift delta/baseline helper under extractor foundation
 - `services/palace-mcp/src/palace_mcp/extractors/foundation/walk.py`
 - `services/palace-mcp/src/palace_mcp/extractors/foundation/semgrep_runner.py`
-- audit extractors that run semgrep or filesystem walkers
-- project configuration / settings for per-project exclude paths
+- semgrep-backed extractors, especially direct semgrep callers
+- hotspot/file inventory walkers
+- settings/config for per-project exclude globs and expected missing-input
+  allowlists
 - operator scripts/runbooks for repo sync, SCIP emit, analyze, and status
 - integration tests under `services/palace-mcp/tests/extractors/integration/`
-- unit tests for settings, path-scope, and fallback decision logging
+- unit tests for settings, path-scope, baseline state, and fallback decision
+  logging
 
-## Implementation Slices
-
-1. **Baseline state and fallback diagnostics**
-   - Add durable Swift symbol baseline state.
-   - Write state only after successful `symbol_index_swift`.
-   - Read baseline before `_derive_incremental_graph_scope`.
-   - Add tests for missing, valid, schema-mismatched, and corrupted baseline.
-
-2. **Remove `previous_commit_missing` for normal incremental runs**
-   - Prefer durable baseline commit over ambiguous `:File.commit_sha` aggregate.
-   - Preserve current safety fallbacks for mismatched paths or truncated diffs.
-   - Add an integration test proving one changed file uses incremental mode
-     after a baseline.
-
-3. **Stable path-exclude contract**
-   - Add project-level exclude globs.
-   - Thread excludes into shared walkers and semgrep-backed extractors.
-   - Configure stable to exclude `unstoppable/**`.
-   - Add a fixture test where stable contains a nested `unstoppable/` tree and
-     the extractor never receives those paths.
-
-4. **Operator sync/status wrapper**
-   - Implement the sequential repo sync + SCIP + analyze runner or document it
-     as a single runbook command if code already exists.
-   - Emit JSON and Markdown status with timings.
-   - Include direct git and Palace verification results.
-
-5. **Live performance validation**
-   - Run baseline full once.
-   - Run no-change, 1-file, and 10-file updates on real `uw-ios-app`.
-   - Run stable with nested `unstoppable/` present and verify it is excluded.
-   - Record actual timings in `docs/research/` or an audit report.
-
-## Verification Plan
+## Test Plan
 
 Local checks for palace-mcp changes:
 
@@ -336,45 +559,62 @@ uv run pytest
 
 Targeted tests before full suite:
 
-- `uv run pytest tests/extractors/unit/test_symbol_index_swift.py`
-- `uv run pytest tests/extractors/integration/test_symbol_index_swift_integration.py`
-- `uv run pytest tests/extractors/unit/test_incremental_scope.py`
-- `uv run pytest tests/extractors/integration/test_call_edge_swift_integration.py`
-- semgrep/audit extractor tests touched by path excludes
-- operator wrapper tests if a new script is added
+- baseline helper unit tests;
+- `uv run pytest tests/extractors/unit/test_symbol_index_swift.py`;
+- `uv run pytest tests/extractors/integration/test_symbol_index_swift_integration.py`;
+- `uv run pytest tests/extractors/unit/test_incremental_scope.py`;
+- `uv run pytest tests/extractors/integration/test_call_edge_swift_integration.py`;
+- project-exclude matcher tests;
+- semgrep/audit extractor tests touched by path excludes;
+- operator wrapper tests if a script is added.
+
+Required negative tests:
+
+- missing baseline -> full fallback;
+- schema mismatch -> full fallback;
+- `git_diff_error` -> full fallback;
+- `git_diff_truncated` -> full fallback;
+- `scip_path_mismatch` -> full fallback;
+- `body_hash_changed_mismatch` -> full fallback;
+- `body_hash_removed_mismatch` -> full fallback;
+- failed/partial `symbol_index_swift` does not advance durable baseline;
+- stable `unstoppable/**` excluded;
+- `Sources/UnstoppableFeature.swift` not excluded;
+- real `uw-ios-app` not affected by stable excludes;
+- unexpected `MISSING_INPUT` fails the operator report.
 
 Live verification:
 
 - run git sync across all configured repos;
 - emit SCIP for `uw-ios-app` and `stable-wallet-ios`;
 - run `project_analyze(mode=incremental)` for both;
-- inspect logs/status for absent `previous_commit_missing`;
+- inspect structured status for absent `previous_commit_missing`;
+- verify expected/actual missing-input classification;
 - run direct Palace graph/search smoke queries;
-- archive elapsed-time report.
+- commit or attach evidence bundles under `docs/research/` or the agreed
+  audit-report location.
 
 ## Risks
 
-- Durable baseline state can make an unsafe incremental decision if written
-  before a failed or partial run. Mitigation: write only after successful
-  extractor finalization and include schema/digest checks.
-- Path excludes can hide real stable-owned code if globs are too broad.
-  Mitigation: use project-specific `unstoppable/**`, not a global
-  `unstoppable*` rule.
-- `xcodebuild` remains the dominant cost for some changes. Mitigation: report
-  SCIP time separately from graph/analyze time.
-- Audit extractors may not all have safe per-file replacement semantics.
-  Mitigation: only scope extractors that have delete/replace tests; mark global
-  results stale otherwise.
+- Baseline split-brain if local artifacts are treated as authority. Mitigation:
+  Neo4j `:ExtractorBaseline` is the only authority.
+- Unsafe baseline advancement after partial failure. Mitigation: write baseline
+  only after successful extractor finalization and test failure cases.
+- Hidden O(project) loops can survive behind an incremental mode label.
+  Mitigation: structured counters and Phase 2/3 gates.
+- Path excludes can hide real stable-owned code if matching is too broad.
+  Mitigation: anchored repo-relative glob semantics and negative tests.
+- IndexStore may not support efficient file-scoped call-edge extraction.
+  Mitigation: choose scheduled/stale policy instead of blocking hot sync.
+- `xcodebuild` remains dominant for some changes. Mitigation: report SCIP time
+  separately from graph/analyze time.
 
 ## Open Questions
 
-1. Where should the durable baseline live: Neo4j `:ExtractorBaseline`, local
-   JSON artifact under the repo runtime state, or both?
-2. Should `stable-wallet-ios/unstoppable/` be excluded only from audit walkers,
-   or also from any generic file inventory extractor that contributes stable
-   project files?
-3. Should the operator wrapper live under `paperclips/scripts/`, `services/`,
-   or a new `scripts/` path?
-4. What is the acceptable stable end-to-end target after SCIP: `<5 min` or
-   `<10 min`?
+No blocking design questions remain for implementation planning. The remaining
+operator-tunable values are thresholds, not architecture:
+
+- exact changed-ratio threshold for full fallback;
+- final evidence artifact location if `docs/research/` is not preferred;
+- final schedule for stale/global extractors after the hot path is fixed.
 
