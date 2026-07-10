@@ -65,6 +65,7 @@ async def run_semgrep(
     target: Path,
     timeout_s: int = 120,
     extra_args: list[str] | None = None,
+    exclude_globs: frozenset[str] = frozenset(),
 ) -> list[dict[str, Any]]:
     """Invoke semgrep with stop-list-aware enumeration, return raw results.
 
@@ -79,6 +80,7 @@ async def run_semgrep(
         extra_args=extra_args,
         skip_test_paths=True,
         test_path_parts=_TEST_PATH_PARTS,
+        exclude_globs=exclude_globs,
     )
 
 

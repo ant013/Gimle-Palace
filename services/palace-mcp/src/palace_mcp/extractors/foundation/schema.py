@@ -130,6 +130,11 @@ EXPECTED_SCHEMA = SchemaDefinition(
             properties=("qualified_name", "group_id"),
             type="UNIQUE",
         ),
+        ConstraintSpec(
+            name="extractor_baseline_unique",
+            label="ExtractorBaseline",
+            properties=("project_id", "extractor", "baseline_kind"),
+        ),
     ],
     indexes=[
         IndexSpec(

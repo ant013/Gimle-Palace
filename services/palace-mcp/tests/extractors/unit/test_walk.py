@@ -7,6 +7,8 @@ from pathlib import Path
 from palace_mcp.extractors.foundation.walk import (
     DEFAULT_STOP_DIRS,
     DEFAULT_STOP_PREFIXES,
+    is_repo_relative_path_excluded,
+    project_exclude_globs,
     should_skip_path,
     walk_repo,
 )
@@ -77,6 +79,46 @@ def test_suffixes_filter(tmp_path: Path):
     assert out == {"Sources/Main.swift"}
 
 
+def test_repo_relative_exclude_globs_are_anchored(tmp_path: Path):
+    _write(tmp_path / "unstoppable" / "App.swift")
+    _write(tmp_path / "unstoppable" / "Nested" / "Feature.swift")
+    _write(tmp_path / "Sources" / "UnstoppableFeature.swift")
+
+    out = {
+        p.relative_to(tmp_path).as_posix()
+        for p in walk_repo(
+            tmp_path,
+            suffixes=frozenset({".swift"}),
+            exclude_globs=frozenset({"unstoppable/**"}),
+        )
+    }
+
+    assert out == {"Sources/UnstoppableFeature.swift"}
+
+
+def test_repo_relative_exclude_glob_predicate():
+    globs = frozenset({"unstoppable/**"})
+
+    assert (
+        is_repo_relative_path_excluded("unstoppable/App.swift", exclude_globs=globs)
+        is True
+    )
+    assert (
+        is_repo_relative_path_excluded(
+            "unstoppable/Nested/Feature.swift",
+            exclude_globs=globs,
+        )
+        is True
+    )
+    assert (
+        is_repo_relative_path_excluded(
+            "Sources/UnstoppableFeature.swift",
+            exclude_globs=globs,
+        )
+        is False
+    )
+
+
 def test_all_default_stop_dirs_excluded(tmp_path: Path):
     """Spot-check several DEFAULT_STOP_DIRS entries are pruned."""
     for stop_dir in (".build", "Pods", "Carthage", "vendor", "DerivedData", ".swiftpm"):
@@ -111,6 +153,36 @@ def test_should_skip_path_extra_excludes():
 def test_should_skip_path_extra_prefixes():
     assert should_skip_path([".custom-build-x"], extra_prefixes=(".custom-",)) is True
     assert should_skip_path(["Sources"], extra_prefixes=(".custom-",)) is False
+
+
+def test_should_skip_path_honors_repo_relative_exclude_globs():
+    assert (
+        should_skip_path(
+            ["unstoppable", "App.swift"],
+            exclude_globs=frozenset({"unstoppable/**"}),
+        )
+        is True
+    )
+    assert (
+        should_skip_path(
+            ["Sources", "UnstoppableFeature.swift"],
+            exclude_globs=frozenset({"unstoppable/**"}),
+        )
+        is False
+    )
+
+
+def test_project_exclude_globs_reads_per_project_settings():
+    class Settings:
+        palace_project_exclude_globs = {
+            "stable-wallet-ios": ["unstoppable/**"],
+            "uw-ios-app": [],
+        }
+
+    assert project_exclude_globs(Settings(), "stable-wallet-ios") == frozenset(
+        {"unstoppable/**"}
+    )
+    assert project_exclude_globs(Settings(), "uw-ios-app") == frozenset()
 
 
 def test_default_stop_prefixes_constant():

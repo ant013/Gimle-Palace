@@ -361,6 +361,15 @@ class Settings(BaseSettings):
             "re-ingest stale-file checks."
         ),
     )
+    palace_project_exclude_globs: Annotated[dict[str, list[str]], NoDecode] = Field(
+        default_factory=lambda: {"stable-wallet-ios": ["unstoppable/**"]},
+        description=(
+            "JSON-encoded dict mapping project slug to repo-relative exclude globs. "
+            "Patterns are anchored at the project repo root; for example "
+            "'unstoppable/**' excludes stable-wallet-ios/unstoppable/... but not "
+            "the separate unstoppable-wallet-ios project."
+        ),
+    )
 
     @field_validator("palace_periodic_reingest_ignore_globs", mode="before")
     @classmethod
@@ -375,4 +384,17 @@ class Settings(BaseSettings):
             except json.JSONDecodeError:
                 return [part.strip() for part in value.split(",") if part.strip()]
             return cast(object, parsed)
+        return value
+
+    @field_validator("palace_project_exclude_globs", mode="before")
+    @classmethod
+    def parse_project_exclude_globs(
+        cls, value: object
+    ) -> dict[str, list[str]] | object:
+        if value is None:
+            return {}
+        if isinstance(value, str):
+            if value.strip() == "":
+                return {}
+            return cast(object, json.loads(value))
         return value

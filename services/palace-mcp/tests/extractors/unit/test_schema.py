@@ -18,30 +18,27 @@ from palace_mcp.extractors.foundation.schema import (
 
 
 class TestSchemaDefinition:
-    def test_has_nine_constraints(self) -> None:
-        # 3 original + 6 git_history + 2 dead_symbol_binary_surface + 1 symbol_unique
-        assert len(EXPECTED_SCHEMA.constraints) == 12
+    def test_has_thirteen_constraints(self) -> None:
+        # 12 previous + extractor_baseline_unique
+        assert len(EXPECTED_SCHEMA.constraints) == 13
 
     def test_has_nine_indexes(self) -> None:
-        # symbol_qname_group_lookup dropped (superseded by symbol_unique constraint)
-        # and symbol_group_run_lookup was added for incremental liveness bumps.
         assert len(EXPECTED_SCHEMA.indexes) == 9
 
     def test_has_one_fulltext(self) -> None:
         assert len(EXPECTED_SCHEMA.fulltext_indexes) == 1
 
-    def test_total_twenty_one_objects(self) -> None:
-        # 12 constraints + 9 indexes + 1 fulltext
+    def test_total_twenty_three_objects(self) -> None:
         total = (
             len(EXPECTED_SCHEMA.constraints)
             + len(EXPECTED_SCHEMA.indexes)
             + len(EXPECTED_SCHEMA.fulltext_indexes)
         )
-        assert total == 22
+        assert total == 23
 
     def test_all_names_unique(self) -> None:
         names = EXPECTED_SCHEMA.all_names()
-        assert len(names) == 22
+        assert len(names) == 23
 
     def test_expected_names_present(self) -> None:
         names = EXPECTED_SCHEMA.all_names()
@@ -56,6 +53,7 @@ class TestSchemaDefinition:
         assert "binary_surface_record_lookup" in names
         assert "symbol_embedding_idx" in names
         assert "symbol_group_run_lookup" in names
+        assert "extractor_baseline_unique" in names
         assert "symbol_qn_fulltext" in names
 
     def test_symbol_embedding_idx_present(self) -> None:

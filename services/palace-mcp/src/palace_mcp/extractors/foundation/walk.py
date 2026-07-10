@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Iterator
+from fnmatch import fnmatchcase
 from pathlib import Path
 
 DEFAULT_STOP_DIRS: frozenset[str] = frozenset(
@@ -48,6 +49,7 @@ def should_skip_path(
     *,
     extra_excludes: frozenset[str] = frozenset(),
     extra_prefixes: tuple[str, ...] = (),
+    exclude_globs: frozenset[str] = frozenset(),
 ) -> bool:
     """Return True if any path component belongs to a stop-list directory.
 
@@ -60,7 +62,31 @@ def should_skip_path(
             return True
         if any(part.startswith(prefix) for prefix in stop_prefixes):
             return True
+    if exclude_globs and is_repo_relative_path_excluded(
+        Path(*parts).as_posix(),
+        exclude_globs=exclude_globs,
+    ):
+        return True
     return False
+
+
+def project_exclude_globs(settings: object, project_slug: str) -> frozenset[str]:
+    configured = getattr(settings, "palace_project_exclude_globs", {}) or {}
+    if not isinstance(configured, dict):
+        return frozenset()
+    raw_patterns = configured.get(project_slug) or []
+    if not isinstance(raw_patterns, list):
+        return frozenset()
+    return frozenset(str(pattern) for pattern in raw_patterns if str(pattern).strip())
+
+
+def is_repo_relative_path_excluded(
+    relative_path: str | Path,
+    *,
+    exclude_globs: frozenset[str],
+) -> bool:
+    path = _normalize_repo_relative_path(relative_path)
+    return any(_matches_repo_relative_glob(path, pattern) for pattern in exclude_globs)
 
 
 def walk_repo(
@@ -69,6 +95,7 @@ def walk_repo(
     suffixes: frozenset[str] | None = None,
     extra_excludes: frozenset[str] = frozenset(),
     extra_prefixes: tuple[str, ...] = (),
+    exclude_globs: frozenset[str] = frozenset(),
 ) -> Iterator[Path]:
     """Yield regular files under *root*, pruning stop-list directories before descent.
 
@@ -80,6 +107,7 @@ def walk_repo(
         suffixes: If provided, only yield files whose suffix is in this set.
         extra_excludes: Additional directory names to prune (additive to DEFAULT_STOP_DIRS).
         extra_prefixes: Additional directory name prefixes to prune (additive to DEFAULT_STOP_PREFIXES).
+        exclude_globs: Repo-relative glob patterns anchored at root.
     """
     stop_dirs = DEFAULT_STOP_DIRS | extra_excludes
     stop_prefixes = DEFAULT_STOP_PREFIXES + extra_prefixes
@@ -91,6 +119,10 @@ def walk_repo(
             for d in dirnames
             if d not in stop_dirs
             and not any(d.startswith(pfx) for pfx in stop_prefixes)
+            and not is_repo_relative_path_excluded(
+                Path(dirpath, d).relative_to(root),
+                exclude_globs=exclude_globs,
+            )
         ]
         for filename in filenames:
             if suffixes is not None and Path(filename).suffix not in suffixes:
@@ -98,4 +130,23 @@ def walk_repo(
             full = Path(dirpath) / filename
             if not full.is_file():
                 continue
+            if is_repo_relative_path_excluded(
+                full.relative_to(root),
+                exclude_globs=exclude_globs,
+            ):
+                continue
             yield full
+
+
+def _normalize_repo_relative_path(relative_path: str | Path) -> str:
+    return Path(relative_path).as_posix().lstrip("./")
+
+
+def _matches_repo_relative_glob(path: str, pattern: str) -> bool:
+    normalized_pattern = _normalize_repo_relative_path(pattern)
+    if fnmatchcase(path, normalized_pattern):
+        return True
+    if normalized_pattern.endswith("/**"):
+        root = normalized_pattern[:-3].rstrip("/")
+        return path == root or path.startswith(f"{root}/")
+    return False

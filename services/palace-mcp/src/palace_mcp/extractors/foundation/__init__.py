@@ -21,6 +21,14 @@ from palace_mcp.extractors.foundation.delta_resolution import (
     resolve_delta_resolution,
     write_delta_resolution_baseline_artifact,
 )
+from palace_mcp.extractors.foundation.baseline import (
+    BASELINE_STATUS_VALID,
+    ExtractorBaseline,
+    build_valid_extractor_baseline,
+    delete_extractor_baseline,
+    load_extractor_baseline,
+    upsert_extractor_baseline,
+)
 from palace_mcp.extractors.foundation.models import (
     Ecosystem,
     EvictionRecord,
@@ -37,6 +45,10 @@ from palace_mcp.extractors.foundation.models import (
     SymbolOccurrence,
     SymbolOccurrenceShadow,
 )
+from palace_mcp.extractors.foundation.incremental_scope import (
+    SwiftDeltaScope,
+    derive_swift_delta_scope,
+)
 from palace_mcp.extractors.foundation.semgrep_runner import (
     SemgrepConfigInvalidError,
     SemgrepInternalError,
@@ -46,6 +58,8 @@ from palace_mcp.extractors.foundation.semgrep_runner import (
 from palace_mcp.extractors.foundation.walk import (
     DEFAULT_STOP_DIRS,
     DEFAULT_STOP_PREFIXES,
+    is_repo_relative_path_excluded,
+    project_exclude_globs,
     should_skip_path,
     walk_repo,
 )
@@ -53,11 +67,13 @@ from palace_mcp.extractors.foundation.walk import (
 __all__ = [
     "DEFAULT_STOP_DIRS",
     "DEFAULT_STOP_PREFIXES",
+    "BASELINE_STATUS_VALID",
     "DeltaResolutionBaseline",
     "Ecosystem",
     "EdgeDelta",
     "EdgeSnapshot",
     "EvictionRecord",
+    "ExtractorBaseline",
     "ExtractorError",
     "ExtractorErrorCode",
     "ExternalDependency",
@@ -83,11 +99,19 @@ __all__ = [
     "SymbolOccurrence",
     "SymbolOccurrenceShadow",
     "SymbolSnapshot",
+    "SwiftDeltaScope",
     "capture_delta_resolution_baseline",
+    "build_valid_extractor_baseline",
+    "delete_extractor_baseline",
+    "derive_swift_delta_scope",
     "delta_resolution_artifact_path",
     "diff_delta_snapshots",
+    "is_repo_relative_path_excluded",
+    "load_extractor_baseline",
+    "project_exclude_globs",
     "read_delta_resolution_baseline_artifact",
     "resolve_delta_resolution",
+    "upsert_extractor_baseline",
     "write_delta_resolution_baseline_artifact",
     "walk_repo",
 ]
