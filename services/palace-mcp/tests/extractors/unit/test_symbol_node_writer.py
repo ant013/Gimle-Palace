@@ -17,6 +17,7 @@ from palace_mcp.extractors.foundation.symbol_node_writer import (
     _MERGE_SYMBOLS,
     _SOFT_DELETE_ABSENT,
     _SOFT_DELETE_FILE_SCOPED,
+    build_symbol_shadow_rows,
     build_symbol_node_rows,
     soft_delete_symbols,
     soft_delete_symbols_for_paths,
@@ -78,6 +79,13 @@ class TestMergeQueryClearsDeletedAt:
         )
         for query in queries:
             assert "last_seen_in_run_id" in query
+
+    def test_backed_by_symbol_shadow_lookup_uses_symbol_id(self) -> None:
+        from palace_mcp.extractors.foundation.symbol_node_writer import (
+            _MERGE_BACKED_BY_SYMBOL_SHADOWS,
+        )
+
+        assert "symbol_id: r.symbol_id" in _MERGE_BACKED_BY_SYMBOL_SHADOWS
 
     def test_delete_stale_relationships_query_targets_expected_scope(self) -> None:
         assert (
@@ -141,6 +149,37 @@ class TestBuildSymbolNodeRows:
         )
         assert rows[0]["line_start"] == 42
         assert rows[0]["line_end"] is None
+
+
+class TestBuildSymbolShadowRows:
+    def test_rows_include_symbol_id_for_composite_shadow_lookup(self) -> None:
+        from palace_mcp.extractors.scip_parser import ScipSymbolInfo
+
+        si = ScipSymbolInfo(
+            qualified_name="App.Foo",
+            scip_kind_name="Class",
+            module_name="App",
+            relationships=(),
+        )
+        rows = build_symbol_shadow_rows([si], "project/test", {"App.Foo": 123456789})
+        assert rows == [
+            {
+                "qualified_name": "App.Foo",
+                "group_id": "project/test",
+                "symbol_id": 123456789,
+            }
+        ]
+
+    def test_rows_skip_shadow_backing_when_symbol_id_missing(self) -> None:
+        from palace_mcp.extractors.scip_parser import ScipSymbolInfo
+
+        si = ScipSymbolInfo(
+            qualified_name="App.Foo",
+            scip_kind_name="Class",
+            module_name="App",
+            relationships=(),
+        )
+        assert build_symbol_shadow_rows([si], "project/test", {}) == []
 
 
 class TestSoftDeleteSymbols:

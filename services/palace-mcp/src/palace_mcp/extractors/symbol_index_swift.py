@@ -17,6 +17,7 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 import re
+from time import perf_counter
 from typing import ClassVar
 
 from graphiti_core import Graphiti
@@ -136,6 +137,28 @@ DELETE old
 WITH f
 MATCH (run:IngestRun {run_id: $run_id})
 MERGE (f)-[:LAST_SEEN_IN]->(run)
+"""
+
+_CLEAR_ABSENT_FILE_HASHES_CYPHER = """
+MATCH (f:File {project_id: $project_id})
+WHERE f.body_hash IS NOT NULL
+  AND f.last_symbol_index_run_id IS NOT NULL
+  AND NOT f.path IN $current_paths
+SET f.last_symbol_index_removed_in_run_id = $run_id,
+    f.last_symbol_index_removed_at = datetime($observed_at),
+    f.last_symbol_index_removed_in_commit = $commit_sha
+REMOVE f.body_hash
+"""
+
+_CLEAR_REMOVED_FILE_HASHES_CYPHER = """
+MATCH (f:File {project_id: $project_id})
+WHERE f.body_hash IS NOT NULL
+  AND f.last_symbol_index_run_id IS NOT NULL
+  AND f.path IN $removed_paths
+SET f.last_symbol_index_removed_in_run_id = $run_id,
+    f.last_symbol_index_removed_at = datetime($observed_at),
+    f.last_symbol_index_removed_in_commit = $commit_sha
+REMOVE f.body_hash
 """
 
 _READ_FILE_HASHES_CYPHER = """
@@ -960,9 +983,9 @@ async def _write_file_body_hashes(
     file_body_hashes: dict[str, str],
     observed_at: datetime,
     commit_sha: str,
+    prune_absent_paths: bool,
+    removed_paths: set[str],
 ) -> int:
-    if not file_body_hashes:
-        return 0
     rows = [
         {"path": path, "body_hash": body_hash}
         for path, body_hash in sorted(file_body_hashes.items())
@@ -977,6 +1000,26 @@ async def _write_file_body_hashes(
                 run_id=run_id,
                 observed_at=observed_at_str,
                 commit_sha=commit_sha,
+            )
+            await result.consume()
+        if prune_absent_paths:
+            result = await session.run(
+                _CLEAR_ABSENT_FILE_HASHES_CYPHER,
+                project_id=project_id,
+                run_id=run_id,
+                observed_at=observed_at_str,
+                commit_sha=commit_sha,
+                current_paths=sorted(file_body_hashes),
+            )
+            await result.consume()
+        elif removed_paths:
+            result = await session.run(
+                _CLEAR_REMOVED_FILE_HASHES_CYPHER,
+                project_id=project_id,
+                run_id=run_id,
+                observed_at=observed_at_str,
+                commit_sha=commit_sha,
+                removed_paths=sorted(removed_paths),
             )
             await result.consume()
     return len(rows)
@@ -996,10 +1039,24 @@ async def _refresh_graph_state(
     removed_paths: set[str],
 ) -> tuple[int, int, int]:
     # Keep graph-layer freshness aligned even when Tantivy ingest is skipped.
+    refresh_started_at = perf_counter()
     selected_file_paths = None if selected_paths is None else set(selected_paths)
     affected_paths = set(removed_paths)
     if selected_file_paths is not None:
         affected_paths |= selected_file_paths
+    graph_mode = "full" if selected_file_paths is None else "incremental"
+    logger.info(
+        "symbol_index_swift.graph_refresh.start",
+        extra={
+            "project_id": project_id,
+            "run_id": run_id,
+            "graph_mode": graph_mode,
+            "selected_file_count": (
+                None if selected_file_paths is None else len(selected_file_paths)
+            ),
+            "removed_file_count": len(removed_paths),
+        },
+    )
 
     def _iter_graph_occurrences() -> Iterable[SymbolOccurrence]:
         if selected_file_paths is None:
@@ -1011,15 +1068,28 @@ async def _refresh_graph_state(
 
     def_file_paths: dict[str, str] = {}
     def_line_starts: dict[str, int] = {}
+    def_symbol_ids: dict[str, int] = {}
+    phase_started_at = perf_counter()
     for occ in _iter_graph_occurrences():
         if occ.kind in (SymbolKind.DEF, SymbolKind.DECL):
             def_file_paths.setdefault(occ.symbol_qualified_name, occ.file_path)
+            def_symbol_ids.setdefault(occ.symbol_qualified_name, occ.symbol_id)
             # SCIP ranges are 0-based; snippet windows / get_code_snippet are
             # 1-based. Record the declaration line so the snippet windows on the
             # symbol instead of falling back to the file head (dogfood W8c).
             def_line_starts.setdefault(occ.symbol_qualified_name, occ.line + 1)
+    logger.info(
+        "symbol_index_swift.graph_refresh.definitions",
+        extra={
+            "project_id": project_id,
+            "run_id": run_id,
+            "definition_count": len(def_file_paths),
+            "duration_ms": int((perf_counter() - phase_started_at) * 1000),
+        },
+    )
 
     graph_seen_at = datetime.now(tz=timezone.utc)
+    phase_started_at = perf_counter()
     symbol_infos = tuple(iter_scip_symbol_infos(scip_index))
     if selected_file_paths is not None:
         symbol_infos = tuple(
@@ -1033,14 +1103,44 @@ async def _refresh_graph_state(
         def_file_paths=def_file_paths,
         def_line_starts=def_line_starts,
     )
+    logger.info(
+        "symbol_index_swift.graph_refresh.symbol_infos",
+        extra={
+            "project_id": project_id,
+            "run_id": run_id,
+            "symbol_info_count": len(symbol_infos),
+            "duration_ms": int((perf_counter() - phase_started_at) * 1000),
+        },
+    )
+    phase_started_at = perf_counter()
     shadow_rows = _build_shadow_rows(
         occurrences=_iter_graph_occurrences(),
         symbol_infos=symbol_infos,
         group_id=project_id,
         seen_at=graph_seen_at,
     )
+    logger.info(
+        "symbol_index_swift.graph_refresh.shadow_rows_built",
+        extra={
+            "project_id": project_id,
+            "run_id": run_id,
+            "shadow_row_count": len(shadow_rows),
+            "duration_ms": int((perf_counter() - phase_started_at) * 1000),
+        },
+    )
+    phase_started_at = perf_counter()
     shadow_count = await _write_shadow_rows(driver, shadow_rows)
+    logger.info(
+        "symbol_index_swift.graph_refresh.shadow_rows_written",
+        extra={
+            "project_id": project_id,
+            "run_id": run_id,
+            "shadow_row_count": shadow_count,
+            "duration_ms": int((perf_counter() - phase_started_at) * 1000),
+        },
+    )
 
+    phase_started_at = perf_counter()
     sym_nodes = 0
     seen_qnames: set[str] = set()
     sym_batch: list[ScipSymbolInfo] = []
@@ -1059,6 +1159,7 @@ async def _refresh_graph_state(
                 seen_at=graph_seen_at,
                 commit_sha=commit_sha,
                 def_line_starts=def_line_starts,
+                def_symbol_ids=def_symbol_ids,
             )
             sym_batch = []
     if sym_batch:
@@ -1072,8 +1173,19 @@ async def _refresh_graph_state(
             seen_at=graph_seen_at,
             commit_sha=commit_sha,
             def_line_starts=def_line_starts,
+            def_symbol_ids=def_symbol_ids,
         )
+    logger.info(
+        "symbol_index_swift.graph_refresh.symbol_nodes_written",
+        extra={
+            "project_id": project_id,
+            "run_id": run_id,
+            "symbol_node_count": sym_nodes,
+            "duration_ms": int((perf_counter() - phase_started_at) * 1000),
+        },
+    )
 
+    phase_started_at = perf_counter()
     deleted_count = 0
     if selected_file_paths is None and seen_qnames:
         deleted_count = await soft_delete_symbols(
@@ -1099,7 +1211,17 @@ async def _refresh_graph_state(
             changed_file_paths=affected_paths,
             run_id=run_id,
         )
+    logger.info(
+        "symbol_index_swift.graph_refresh.soft_delete",
+        extra={
+            "project_id": project_id,
+            "run_id": run_id,
+            "deleted_count": deleted_count,
+            "duration_ms": int((perf_counter() - phase_started_at) * 1000),
+        },
+    )
 
+    phase_started_at = perf_counter()
     await _write_file_body_hashes(
         driver,
         project_id=project_id,
@@ -1107,6 +1229,28 @@ async def _refresh_graph_state(
         file_body_hashes=file_body_hashes,
         observed_at=graph_seen_at,
         commit_sha=commit_sha,
+        prune_absent_paths=selected_file_paths is None,
+        removed_paths=removed_paths,
+    )
+    logger.info(
+        "symbol_index_swift.graph_refresh.file_hashes_written",
+        extra={
+            "project_id": project_id,
+            "run_id": run_id,
+            "file_count": len(file_body_hashes),
+            "duration_ms": int((perf_counter() - phase_started_at) * 1000),
+        },
+    )
+    logger.info(
+        "symbol_index_swift.graph_refresh.done",
+        extra={
+            "project_id": project_id,
+            "run_id": run_id,
+            "symbol_node_count": sym_nodes,
+            "shadow_row_count": shadow_count,
+            "deleted_count": deleted_count,
+            "duration_ms": int((perf_counter() - refresh_started_at) * 1000),
+        },
     )
     return sym_nodes, shadow_count, deleted_count
 
@@ -1252,10 +1396,11 @@ async def _write_shadow_rows(
         return 0
     async with driver.session() as session:
         for i in range(0, len(rows), _GRAPH_BATCH_SIZE):
-            await session.run(
+            result = await session.run(
                 _MERGE_SYMBOL_OCCURRENCE_SHADOWS,
                 rows=rows[i : i + _GRAPH_BATCH_SIZE],
             )
+            await result.consume()
     return len(rows)
 
 
