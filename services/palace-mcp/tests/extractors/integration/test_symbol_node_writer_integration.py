@@ -130,6 +130,7 @@ class TestSymbolSoftDelete:
             run_id=_RUN_ID,
             seen_at=_NOW,
             commit_sha=_HEAD_SHA,
+            def_symbol_ids={_SYM_BALANCE.qualified_name: 101},
         )
 
         async with driver.session() as session:
@@ -140,12 +141,14 @@ class TestSymbolSoftDelete:
                     group_id: $group_id
                 })-[:BACKED_BY_SYMBOL]->(:SymbolOccurrenceShadow {
                     symbol_qualified_name: $qualified_name,
-                    group_id: $group_id
+                    group_id: $group_id,
+                    symbol_id: $symbol_id
                 })
                 RETURN count(*) AS n
                 """,
                 qualified_name=_SYM_BALANCE.qualified_name,
                 group_id=_GROUP,
+                symbol_id=101,
             )
             record = await result.single()
 

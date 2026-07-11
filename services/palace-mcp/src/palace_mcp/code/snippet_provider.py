@@ -53,6 +53,9 @@ class SnippetResult:
     end_line: int
     byte_count: int
     line_count: int
+    total_lines: int = 0
+    truncated_lines: int = 0
+    truncated_reason: str | None = None
     indexed_commit: str | None = None
     commits_behind_head: int | None = None
     truncated: bool = False
@@ -76,6 +79,8 @@ def resolve_snippet(
     commit_sha: str | None = None,
     repos_root: Path | None = None,
     freshness: FreshnessResult | None = None,
+    max_lines: int | None = None,
+    max_bytes: int | None = None,
 ) -> tuple[SnippetResult | None, str | None, str | None]:
     """Read and validate a snippet from the local repo filesystem.
 
@@ -115,41 +120,76 @@ def resolve_snippet(
     except OSError as exc:
         return None, "snippet_read_error", str(exc)
 
+    line_cap = max_lines if max_lines is not None else _MAX_SNIPPET_LINES
+    byte_cap = max_bytes if max_bytes is not None else _MAX_SNIPPET_BYTES
+
     all_lines = text.splitlines()
     total = len(all_lines)
+
+    truncated = False
+    truncated_reason: str | None = None
+    truncated_lines = 0
+
+    if total == 0:
+        # Empty file: no inverted range, no truncation.
+        return (
+            SnippetResult(
+                source="",
+                language=_LANGUAGE_MAP.get(abs_path.suffix.lower(), ""),
+                start_line=1,
+                end_line=0,
+                byte_count=0,
+                line_count=0,
+                total_lines=0,
+                indexed_commit=freshness_result.indexed_commit,
+                commits_behind_head=freshness_result.commits_behind_head,
+                stale=freshness_result.stale,
+            ),
+            None,
+            None,
+        )
 
     start = max(1, line_start or 1)
     end = min(total, line_end or total)
     if start > end:
         start = 1
-        end = min(total, _MAX_SNIPPET_LINES)
+        end = min(total, line_cap)
 
-    truncated = False
-    if (end - start + 1) > _MAX_SNIPPET_LINES:
-        end = start + _MAX_SNIPPET_LINES - 1
+    if (end - start + 1) > line_cap:
+        truncated_lines = (end - start + 1) - line_cap
+        end = start + line_cap - 1
         truncated = True
+        truncated_reason = "lines"
 
+    range_lines = end - start + 1
     snippet_lines = all_lines[start - 1 : end]
     source = "\n".join(snippet_lines)
 
     encoded = source.encode("utf-8")
-    if len(encoded) > _MAX_SNIPPET_BYTES:
+    if len(encoded) > byte_cap:
         # Truncate at UTF-8 boundary to honour byte cap.
-        source = encoded[:_MAX_SNIPPET_BYTES].decode("utf-8", errors="ignore")
+        source = encoded[:byte_cap].decode("utf-8", errors="ignore")
         truncated = True
+        if truncated_reason is None:
+            truncated_reason = "bytes"
 
     language = _LANGUAGE_MAP.get(abs_path.suffix.lower(), "")
     byte_count = len(source.encode("utf-8"))
     line_count = source.count("\n") + 1 if source else 0
+    if truncated_reason == "bytes":
+        truncated_lines = max(truncated_lines, range_lines - line_count)
 
     return (
         SnippetResult(
             source=source,
             language=language,
             start_line=start,
-            end_line=start + line_count - 1,
+            end_line=start + line_count - 1 if line_count else start - 1,
             byte_count=byte_count,
             line_count=line_count,
+            total_lines=total,
+            truncated_lines=truncated_lines,
+            truncated_reason=truncated_reason,
             indexed_commit=freshness_result.indexed_commit,
             commits_behind_head=freshness_result.commits_behind_head,
             truncated=truncated,

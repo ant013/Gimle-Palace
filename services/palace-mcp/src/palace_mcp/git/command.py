@@ -17,7 +17,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 ALLOWED_VERBS: frozenset[str] = frozenset(
-    {"log", "show", "blame", "diff", "ls-tree", "cat-file", "status"}
+    {"log", "show", "blame", "diff", "ls-tree", "cat-file", "status", "rev-parse"}
 )
 
 DEFAULT_TIMEOUT_S: float = 10.0

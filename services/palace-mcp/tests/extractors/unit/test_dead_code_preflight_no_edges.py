@@ -19,6 +19,7 @@ with a message pointing the operator to run `codebase_memory_bridge` first.
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -55,7 +56,9 @@ async def test_dead_code_returns_missing_input_when_zero_edges():
     ctx.run_id = "test-run-id"
     ctx.project_slug = "uw-ios-baseline"
     ctx.group_id = "project/uw-ios-baseline"
+    ctx.repo_path = Path("/tmp/uw-ios-baseline")
     ctx.logger = MagicMock()
+    ctx.force = False
 
     settings = MagicMock()
     settings.palace_max_occurrences_total = 10_000_000
