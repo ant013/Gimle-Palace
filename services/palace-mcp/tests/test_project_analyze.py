@@ -717,6 +717,49 @@ async def test_default_executor_passes_skipped_symbol_index_run_id_to_prune(
 
 
 @pytest.mark.asyncio
+async def test_default_executor_passes_symbol_index_run_id_to_dead_code(
+    monkeypatch,
+) -> None:
+    store = InMemoryAnalysisRunStore()
+    service = _build_service(store=store)
+    started = await service.start_run(
+        slug="tron-kit",
+        parent_mount="hs",
+        relative_path="TronKit.Swift",
+        language_profile="swift_kit",
+        extractors=["symbol_index_swift", "dead_code"],
+        idempotency_key="dead-code-companion-run",
+    )
+    symbol_checkpoint = started.run.checkpoints[0].model_copy(
+        update={
+            "status": AnalysisCheckpointStatus.OK,
+            "ingest_run_id": "symbol-run-123",
+        }
+    )
+    run = started.run.model_copy(
+        update={"checkpoints": [symbol_checkpoint, started.run.checkpoints[1]]}
+    )
+    recorded: dict[str, object] = {}
+
+    async def _fake_run_extractor(**kwargs: object) -> dict[str, object]:
+        recorded.update(kwargs)
+        return {
+            "ok": True,
+            "run_id": "dead-code-run-456",
+            "outcome": "ok",
+        }
+
+    monkeypatch.setattr("palace_mcp.project_analyze.run_extractor", _fake_run_extractor)
+
+    executor = service._default_executor(graphiti=object())
+    attempt = await executor("dead_code", run)
+
+    assert attempt.status == AnalysisCheckpointStatus.OK
+    assert attempt.ingest_run_id == "dead-code-run-456"
+    assert recorded["companion_run_id"] == "symbol-run-123"
+
+
+@pytest.mark.asyncio
 async def test_default_executor_skips_prune_when_symbol_index_skip_has_no_run_id() -> (
     None
 ):

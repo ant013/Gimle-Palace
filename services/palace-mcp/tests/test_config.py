@@ -104,3 +104,24 @@ class TestCodebaseMemoryBinary:
 
             s = Settings()
         assert s.codebase_memory_mcp_binary == "/usr/local/bin/codebase-memory-mcp"
+
+    def test_project_exclude_globs_default_stable_unstoppable(self) -> None:
+        with patch.dict(os.environ, _BASE_ENV, clear=True):
+            from palace_mcp.config import Settings
+
+            s = Settings()
+        assert s.palace_project_exclude_globs == {
+            "stable-wallet-ios": ["unstoppable/**"]
+        }
+
+    def test_project_exclude_globs_from_env_json(self) -> None:
+        env = {
+            **_BASE_ENV,
+            "PALACE_PROJECT_EXCLUDE_GLOBS": '{"stable-wallet-ios":["unstoppable/**"],"uw-ios-app":[]}',
+        }
+        with patch.dict(os.environ, env, clear=True):
+            from palace_mcp.config import Settings
+
+            s = Settings()
+        assert s.palace_project_exclude_globs["stable-wallet-ios"] == ["unstoppable/**"]
+        assert s.palace_project_exclude_globs["uw-ios-app"] == []

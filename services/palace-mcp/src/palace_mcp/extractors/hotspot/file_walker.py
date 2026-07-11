@@ -40,9 +40,14 @@ def _has_subseq(parts: tuple[str, ...], subseq: tuple[str, ...]) -> bool:
     return any(parts[i : i + n] == subseq for i in range(len(parts) - n + 1))
 
 
+def is_supported_path(relative_path: str) -> bool:
+    rel = Path(relative_path)
+    return rel.suffix in _LIZARD_EXTENSIONS and not _has_subseq(
+        rel.parts, _FIXTURE_STOP_PARTS
+    )
+
+
 def _walk(root: Path) -> Iterator[Path]:
     for p in walk_repo(root, suffixes=_LIZARD_EXTENSIONS):
-        rel_parts = p.relative_to(root).parts
-        if _has_subseq(rel_parts, _FIXTURE_STOP_PARTS):
-            continue
-        yield p
+        if is_supported_path(p.relative_to(root).as_posix()):
+            yield p

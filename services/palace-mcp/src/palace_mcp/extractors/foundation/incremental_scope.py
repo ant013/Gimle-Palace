@@ -8,9 +8,16 @@ from typing import Callable
 
 from neo4j import AsyncDriver
 
+from palace_mcp.extractors.foundation.baseline import (
+    BASELINE_STATUS_VALID,
+    load_extractor_baseline,
+)
 from palace_mcp.git.command import GitError, GitTimeout, run_git
 
 _GIT_CHANGESET_CAP = 500
+_SWIFT_SYMBOL_BASELINE_KIND = "swift_symbol_scope"
+_SWIFT_SYMBOL_BASELINE_STATE_VERSION = 1
+_SWIFT_SOURCE_SUFFIXES = (".swift", ".swiftinterface")
 
 _READ_FILE_COMMITS_CYPHER = """
 MATCH (f:File {project_id: $project_id})
@@ -63,6 +70,21 @@ class IncrementalPathScope:
     changed_paths: set[str]
     removed_paths: set[str]
     reason: str | None = None
+
+
+@dataclass(frozen=True)
+class SwiftDeltaScope:
+    mode: IncrementalMode
+    changed_paths: set[str]
+    removed_paths: set[str]
+    reason: str | None
+    baseline_state: str
+    baseline_commit_sha: str | None
+    baseline_state_version: int | None
+    baseline_invalid_reason: str | None
+    baseline_successful_run_id: str | None
+    validated_by: str | None
+    changed_ratio: float | None = None
 
 
 def incremental_ingest_enabled(settings: object) -> bool:
@@ -131,6 +153,169 @@ async def derive_incremental_path_scope(
     )
 
 
+async def derive_swift_delta_scope(
+    driver: AsyncDriver,
+    *,
+    repo_path: Path,
+    project_id: str,
+    settings: object,
+    force: bool = False,
+    scip_paths: set[str] | None = None,
+    body_changed_paths: set[str] | None = None,
+    body_removed_paths: set[str] | None = None,
+    changed_ratio: float | None = None,
+    full_reprocess_threshold: float = 0.8,
+    extractor_name: str = "symbol_index_swift",
+) -> SwiftDeltaScope:
+    if force or not incremental_ingest_enabled(settings):
+        return _swift_delta_scope(
+            mode=IncrementalMode.FULL,
+            reason="incremental_disabled",
+        )
+
+    baseline = await load_extractor_baseline(
+        driver,
+        project_id=project_id,
+        extractor=extractor_name,
+        baseline_kind=_SWIFT_SYMBOL_BASELINE_KIND,
+    )
+    if baseline is None:
+        return _swift_delta_scope(
+            mode=IncrementalMode.FULL,
+            reason="baseline_missing",
+            baseline_state="missing",
+        )
+    if baseline.status != BASELINE_STATUS_VALID:
+        invalid_reason = baseline.invalid_reason or "baseline_invalid"
+        return _swift_delta_scope(
+            mode=IncrementalMode.FULL,
+            reason=invalid_reason,
+            baseline_state="invalid",
+            baseline_commit_sha=baseline.commit_sha,
+            baseline_state_version=baseline.state_version,
+            baseline_invalid_reason=invalid_reason,
+            baseline_successful_run_id=baseline.successful_run_id,
+        )
+    if baseline.state_version != _SWIFT_SYMBOL_BASELINE_STATE_VERSION:
+        return _swift_delta_scope(
+            mode=IncrementalMode.FULL,
+            reason="baseline_schema_mismatch",
+            baseline_state="invalid",
+            baseline_commit_sha=baseline.commit_sha,
+            baseline_state_version=baseline.state_version,
+            baseline_invalid_reason="baseline_schema_mismatch",
+            baseline_successful_run_id=baseline.successful_run_id,
+        )
+    if changed_ratio is not None and changed_ratio >= full_reprocess_threshold:
+        return _swift_delta_scope(
+            mode=IncrementalMode.FULL,
+            reason="high_changed_ratio",
+            baseline_state="present",
+            baseline_commit_sha=baseline.commit_sha,
+            baseline_state_version=baseline.state_version,
+            baseline_successful_run_id=baseline.successful_run_id,
+            changed_ratio=changed_ratio,
+        )
+
+    try:
+        git_changes = await _read_git_change_set(repo_path, baseline.commit_sha)
+    except (GitError, GitTimeout):
+        return _swift_delta_scope(
+            mode=IncrementalMode.FULL,
+            reason="git_diff_error",
+            baseline_state="present",
+            baseline_commit_sha=baseline.commit_sha,
+            baseline_state_version=baseline.state_version,
+            baseline_successful_run_id=baseline.successful_run_id,
+            changed_ratio=changed_ratio,
+        )
+
+    if git_changes.truncated:
+        return _swift_delta_scope(
+            mode=IncrementalMode.FULL,
+            reason="git_diff_truncated",
+            baseline_state="present",
+            baseline_commit_sha=baseline.commit_sha,
+            baseline_state_version=baseline.state_version,
+            baseline_successful_run_id=baseline.successful_run_id,
+            changed_ratio=changed_ratio,
+        )
+
+    git_changed = _filter_swift_paths(git_changes.changed | git_changes.added)
+    git_removed = _filter_swift_paths(git_changes.removed)
+    selected_paths = git_changed
+    validated_by = "baseline_only"
+    if scip_paths is not None:
+        selected_paths = git_changed & scip_paths
+        if git_changed - scip_paths:
+            return _swift_delta_scope(
+                mode=IncrementalMode.FULL,
+                reason="scip_path_mismatch",
+                baseline_state="present",
+                baseline_commit_sha=baseline.commit_sha,
+                baseline_state_version=baseline.state_version,
+                baseline_successful_run_id=baseline.successful_run_id,
+                changed_ratio=changed_ratio,
+                validated_by="symbol_index_swift",
+            )
+        validated_by = "symbol_index_swift"
+
+    if body_changed_paths is not None:
+        scoped_body_changes = _filter_swift_paths(body_changed_paths)
+        if scoped_body_changes != selected_paths:
+            return _swift_delta_scope(
+                mode=IncrementalMode.FULL,
+                reason="body_hash_changed_mismatch",
+                baseline_state="present",
+                baseline_commit_sha=baseline.commit_sha,
+                baseline_state_version=baseline.state_version,
+                baseline_successful_run_id=baseline.successful_run_id,
+                changed_ratio=changed_ratio,
+                validated_by=validated_by,
+            )
+        validated_by = "symbol_index_swift"
+
+    if body_removed_paths is not None:
+        scoped_body_removals = _filter_swift_paths(body_removed_paths)
+        if scoped_body_removals != git_removed:
+            return _swift_delta_scope(
+                mode=IncrementalMode.FULL,
+                reason="body_hash_removed_mismatch",
+                baseline_state="present",
+                baseline_commit_sha=baseline.commit_sha,
+                baseline_state_version=baseline.state_version,
+                baseline_successful_run_id=baseline.successful_run_id,
+                changed_ratio=changed_ratio,
+                validated_by=validated_by,
+            )
+        validated_by = "symbol_index_swift"
+
+    if not selected_paths and not git_removed:
+        return _swift_delta_scope(
+            mode=IncrementalMode.SKIP,
+            reason="no_relevant_changes",
+            baseline_state="present",
+            baseline_commit_sha=baseline.commit_sha,
+            baseline_state_version=baseline.state_version,
+            baseline_successful_run_id=baseline.successful_run_id,
+            changed_ratio=changed_ratio,
+            validated_by=validated_by,
+        )
+
+    return _swift_delta_scope(
+        mode=IncrementalMode.INCREMENTAL,
+        reason=None,
+        changed_paths=selected_paths,
+        removed_paths=git_removed,
+        baseline_state="present",
+        baseline_commit_sha=baseline.commit_sha,
+        baseline_state_version=baseline.state_version,
+        baseline_successful_run_id=baseline.successful_run_id,
+        changed_ratio=changed_ratio,
+        validated_by=validated_by,
+    )
+
+
 async def read_existing_commit_sha(
     driver: AsyncDriver, *, project_id: str
 ) -> str | None:
@@ -151,6 +336,39 @@ def _filter_paths(
     if path_filter is None:
         return set(paths)
     return {path for path in paths if path_filter(path)}
+
+
+def _filter_swift_paths(paths: set[str]) -> set[str]:
+    return {path for path in paths if path.endswith(_SWIFT_SOURCE_SUFFIXES)}
+
+
+def _swift_delta_scope(
+    *,
+    mode: IncrementalMode,
+    reason: str | None,
+    changed_paths: set[str] | None = None,
+    removed_paths: set[str] | None = None,
+    baseline_state: str = "unknown",
+    baseline_commit_sha: str | None = None,
+    baseline_state_version: int | None = None,
+    baseline_invalid_reason: str | None = None,
+    baseline_successful_run_id: str | None = None,
+    validated_by: str | None = None,
+    changed_ratio: float | None = None,
+) -> SwiftDeltaScope:
+    return SwiftDeltaScope(
+        mode=mode,
+        changed_paths=set() if changed_paths is None else changed_paths,
+        removed_paths=set() if removed_paths is None else removed_paths,
+        reason=reason,
+        baseline_state=baseline_state,
+        baseline_commit_sha=baseline_commit_sha,
+        baseline_state_version=baseline_state_version,
+        baseline_invalid_reason=baseline_invalid_reason,
+        baseline_successful_run_id=baseline_successful_run_id,
+        validated_by=validated_by,
+        changed_ratio=changed_ratio,
+    )
 
 
 async def _read_git_change_set(repo_path: Path, base_commit: str) -> _GitChangeSet:

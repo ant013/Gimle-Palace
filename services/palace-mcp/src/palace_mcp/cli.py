@@ -40,7 +40,7 @@ from palace_mcp.extractors.foundation.profiles import get_ordered_extractors
 
 _SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
 _DEFAULT_MCP_URL = "http://localhost:8000/mcp"
-_DEFAULT_PROJECT_ANALYZE_URL = "http://localhost:8080/mcp"
+_DEFAULT_PROJECT_ANALYZE_URL = "http://localhost:8765/mcp"
 _DEFAULT_API_URL = "http://localhost:3100"
 _DEFAULT_COMPANY_ID = "9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64"
 _DEFAULT_PROJECT_ANALYZE_POLL_SECONDS = 2
@@ -1494,29 +1494,35 @@ def _cmd_project_analyze(args: argparse.Namespace) -> int:
                 emit_scip=args.emit_scip,
             )
 
+        manage_runtime = bool(getattr(args, "manage_runtime", False))
+
         runtime_stage_used = False
         runtime_stage_root: str | None = None
-        if _host_path_requires_staging(spec.repo_path):
+        if manage_runtime and _host_path_requires_staging(spec.repo_path):
             spec = stage_project_runtime_spec(spec)
             runtime_stage_used = True
             runtime_stage_root = (
                 str(spec.host_mount_path) if spec.host_mount_path is not None else None
             )
 
-        if args.language_profile == "swift_kit":
+        if manage_runtime and args.language_profile == "swift_kit":
             env_changed, merged_mapping = merge_scip_index_env_mapping(
                 env_file=spec.env_file,
                 slug=spec.slug,
                 container_scip_path=spec.container_scip_path,
             )
 
-        override_changed = write_project_analyze_compose_override(spec)
-        recreate_palace = env_changed or override_changed
-        resolved_mcp_url = ensure_project_analyze_runtime(
-            spec=spec,
-            mcp_url=args.url,
-            recreate_palace=recreate_palace,
-        )
+        override_changed = False
+        recreate_palace = False
+        resolved_mcp_url = args.url
+        if manage_runtime:
+            override_changed = write_project_analyze_compose_override(spec)
+            recreate_palace = env_changed or override_changed
+            resolved_mcp_url = ensure_project_analyze_runtime(
+                spec=spec,
+                mcp_url=args.url,
+                recreate_palace=recreate_palace,
+            )
 
         repo_head_sha = _git_head_sha(spec.repo_path)
         idempotency_key = build_project_analyze_idempotency_key(
@@ -1764,7 +1770,15 @@ def build_parser() -> argparse.ArgumentParser:
     analyze_p.add_argument(
         "--url",
         default=_DEFAULT_PROJECT_ANALYZE_URL,
-        help="Host-published palace-mcp MCP URL",
+        help="Host-published palace-mcp MCP URL; defaults to native macOS port 8765",
+    )
+    analyze_p.add_argument(
+        "--manage-runtime",
+        action="store_true",
+        help=(
+            "Legacy mode: write compose/env runtime files and start/recreate the "
+            "project-analyze runtime. Disabled by default for native MCP usage."
+        ),
     )
     analyze_p.add_argument(
         "--report-out",
@@ -1777,7 +1791,10 @@ def build_parser() -> argparse.ArgumentParser:
     analyze_p.add_argument(
         "--env-file",
         default=str(_DEFAULT_ENV_FILE),
-        help="Env file used for docker compose and PALACE_SCIP_INDEX_PATHS merge",
+        help=(
+            "Env file used only with --manage-runtime for compose and "
+            "PALACE_SCIP_INDEX_PATHS merge"
+        ),
     )
     analyze_p.add_argument(
         "--manifest",

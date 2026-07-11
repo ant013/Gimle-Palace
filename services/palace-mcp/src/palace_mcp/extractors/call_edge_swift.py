@@ -17,7 +17,7 @@ from palace_mcp.extractors.base import (
 )
 from palace_mcp.extractors.foundation.incremental_scope import (
     IncrementalMode,
-    derive_incremental_path_scope,
+    derive_swift_delta_scope,
 )
 
 _BATCH_SIZE = 500
@@ -166,13 +166,12 @@ class CallEdgeSwiftExtractor(BaseExtractor):
                 next_action="Rebuild the project with a v5 IndexStore, then rerun call_edge_swift.",
             )
 
-        scope = await derive_incremental_path_scope(
+        scope = await derive_swift_delta_scope(
             driver,
             repo_path=ctx.repo_path,
             project_id=ctx.group_id,
             settings=settings,
             force=ctx.force,
-            path_filter=lambda path: path.endswith(".swift"),
         )
         if scope.mode == IncrementalMode.SKIP:
             return ExtractorStats(
@@ -247,6 +246,8 @@ class CallEdgeSwiftExtractor(BaseExtractor):
                 f"records_scanned={scan.records_scanned}, "
                 f"occurrences_scanned={scan.occurrences_scanned}, "
                 f"scope_reason={scope.reason}, "
+                f"validated_by={scope.validated_by}, "
+                f"baseline_state={scope.baseline_state}, "
                 f"changed_or_removed_files={len(incremental_paths)})"
             ),
             mode=(

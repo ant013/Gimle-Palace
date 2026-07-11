@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pygit2
 
-BASE_TS = 1746230400  # 2026-05-03 00:00 UTC — within 90-day window
+BASE_TS = 1777766400  # 2026-05-03 00:00 UTC — within 90-day window
 
 FIXTURE_SRC = Path(__file__).parent / "src"
 

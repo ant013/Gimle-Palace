@@ -29,7 +29,7 @@ from palace_mcp.extractors.foundation.incremental_scope import (
     derive_incremental_path_scope,
 )
 from palace_mcp.extractors.foundation.scope_tagging import ScopeTaggedWriter
-from palace_mcp.extractors.foundation.walk import walk_repo
+from palace_mcp.extractors.foundation.walk import project_exclude_globs, walk_repo
 
 if TYPE_CHECKING:
     from palace_mcp.audit.contracts import AuditContract, Severity
@@ -310,6 +310,7 @@ class ErrorHandlingPolicyExtractor(BaseExtractor):
             if scope.mode == IncrementalMode.INCREMENTAL
             else None,
             timeout_s=timeout_s,
+            exclude_globs=project_exclude_globs(settings, ctx.project_slug),
         )
         findings = _dedup_findings(
             _normalise_results(raw_findings, repo_root=ctx.repo_path)
@@ -321,6 +322,7 @@ class ErrorHandlingPolicyExtractor(BaseExtractor):
             selected_paths=scope.changed_paths
             if scope.mode == IncrementalMode.INCREMENTAL
             else None,
+            exclude_globs=project_exclude_globs(settings, ctx.project_slug),
         )
         catch_sites = _mark_swallowed_sites(catch_sites=catch_sites, findings=findings)
 
@@ -361,10 +363,19 @@ async def _run_semgrep(
     target: Path,
     target_paths: list[Path] | None,
     timeout_s: int,
+    exclude_globs: frozenset[str] = frozenset(),
 ) -> list[dict[str, Any]]:
     """Invoke semgrep as async subprocess and return raw results."""
 
     targets = target_paths if target_paths is not None else [target]
+    if target_paths is None and exclude_globs and target.is_dir():
+        targets = sorted(
+            walk_repo(
+                target,
+                suffixes=frozenset({".swift"}),
+                exclude_globs=exclude_globs,
+            )
+        )
     if not targets:
         return []
 
@@ -534,10 +545,19 @@ def _has_suppression_marker(*, repo_root: Path, finding: ErrorFinding) -> bool:
 
 
 def _collect_catch_sites(
-    repo_root: Path, *, selected_paths: set[str] | None = None
+    repo_root: Path,
+    *,
+    selected_paths: set[str] | None = None,
+    exclude_globs: frozenset[str] = frozenset(),
 ) -> list[CatchSite]:
     sites: list[CatchSite] = []
-    for path in sorted(walk_repo(repo_root, suffixes=frozenset({".swift"}))):
+    for path in sorted(
+        walk_repo(
+            repo_root,
+            suffixes=frozenset({".swift"}),
+            exclude_globs=exclude_globs,
+        )
+    ):
         if not path.is_file():
             continue
         rel_path = path.relative_to(repo_root).as_posix()

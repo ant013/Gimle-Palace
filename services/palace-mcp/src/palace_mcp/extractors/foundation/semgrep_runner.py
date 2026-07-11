@@ -59,6 +59,7 @@ async def run_semgrep(
     skip_test_paths: bool = False,
     test_path_parts: frozenset[str] | None = None,
     extra_excludes: frozenset[str] = frozenset(),
+    exclude_globs: frozenset[str] = frozenset(),
 ) -> list[dict[str, Any]]:
     """Invoke semgrep with stop-list-aware file enumeration.
 
@@ -78,7 +79,12 @@ async def run_semgrep(
         )
         file_targets = sorted(
             p
-            for p in walk_repo(target, suffixes=suffixes, extra_excludes=extra_excludes)
+            for p in walk_repo(
+                target,
+                suffixes=suffixes,
+                extra_excludes=extra_excludes,
+                exclude_globs=exclude_globs,
+            )
             if not skip_test_paths
             or not _is_test_path(p, relative_to=target, test_parts=parts)
         )

@@ -75,6 +75,14 @@ class TestSettingsFoundationDefaults:
         s = Settings()
         assert s.palace_incremental_ingest is False
 
+    def test_incremental_deadcode_threshold_default(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        for k, v in _minimal_env().items():
+            monkeypatch.setenv(k, v)
+        s = Settings()
+        assert s.palace_incremental_deadcode_full_threshold == 0.2
+
     def test_scip_index_paths_default_empty(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -117,6 +125,15 @@ class TestSettingsFoundationOverrides:
         s = Settings()
         assert s.palace_incremental_ingest is True
 
+    def test_incremental_deadcode_threshold_override(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        for k, v in _minimal_env().items():
+            monkeypatch.setenv(k, v)
+        monkeypatch.setenv("PALACE_INCREMENTAL_DEADCODE_FULL_THRESHOLD", "0.35")
+        s = Settings()
+        assert s.palace_incremental_deadcode_full_threshold == 0.35
+
     def test_max_occurrences_total_override(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -130,6 +147,15 @@ class TestSettingsFoundationOverrides:
         for k, v in _minimal_env().items():
             monkeypatch.setenv(k, v)
         monkeypatch.setenv("PALACE_IMPORTANCE_THRESHOLD_USE", "1.1")
+        with pytest.raises(ValidationError):
+            Settings()
+
+    def test_incremental_deadcode_threshold_bounds(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        for k, v in _minimal_env().items():
+            monkeypatch.setenv(k, v)
+        monkeypatch.setenv("PALACE_INCREMENTAL_DEADCODE_FULL_THRESHOLD", "1.1")
         with pytest.raises(ValidationError):
             Settings()
 
