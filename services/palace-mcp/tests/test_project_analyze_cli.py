@@ -12,7 +12,7 @@ import pytest
 import palace_mcp.cli as cli
 
 
-def test_project_analyze_parser_defaults_to_host_port_8080() -> None:
+def test_project_analyze_parser_defaults_to_native_port_8765() -> None:
     parser = cli.build_parser()
     args = parser.parse_args(
         [
@@ -27,7 +27,8 @@ def test_project_analyze_parser_defaults_to_host_port_8080() -> None:
         ]
     )
     assert args.mode == "full"
-    assert args.url == "http://localhost:8080/mcp"
+    assert args.url == "http://localhost:8765/mcp"
+    assert args.manage_runtime is False
 
 
 def test_project_analyze_parser_accepts_incremental_mode() -> None:
@@ -47,6 +48,90 @@ def test_project_analyze_parser_accepts_incremental_mode() -> None:
         ]
     )
     assert args.mode == "incremental"
+
+
+def test_project_analyze_parser_accepts_legacy_runtime_management() -> None:
+    parser = cli.build_parser()
+    args = parser.parse_args(
+        [
+            "project",
+            "analyze",
+            "--repo-path",
+            "/tmp/TronKit.Swift",
+            "--slug",
+            "tron-kit",
+            "--language-profile",
+            "swift_kit",
+            "--manage-runtime",
+        ]
+    )
+    assert args.manage_runtime is True
+
+
+def test_project_analyze_does_not_manage_runtime_by_default(
+    tmp_path: Path, monkeypatch
+) -> None:
+    repo_path = tmp_path / "TronKit.Swift"
+    repo_path.mkdir()
+
+    def fail_runtime_call(*_: object, **__: object) -> object:
+        raise AssertionError("runtime management must be opt-in")
+
+    monkeypatch.setattr(cli, "_host_path_requires_staging", fail_runtime_call)
+    monkeypatch.setattr(cli, "stage_project_runtime_spec", fail_runtime_call)
+    monkeypatch.setattr(cli, "merge_scip_index_env_mapping", fail_runtime_call)
+    monkeypatch.setattr(
+        cli, "write_project_analyze_compose_override", fail_runtime_call
+    )
+    monkeypatch.setattr(cli, "ensure_project_analyze_runtime", fail_runtime_call)
+    monkeypatch.setattr(cli, "_git_head_sha", lambda _path: "abc123")
+    monkeypatch.setattr(
+        cli,
+        "ensure_swift_scip_artifact",
+        lambda **_: {"metadata": {"repo_head_sha": "abc123"}},
+    )
+    monkeypatch.setattr(cli, "get_ordered_extractors", lambda _profile: ("heartbeat",))
+
+    seen_url: list[str] = []
+
+    async def _fake_run_project_analyze_to_terminal(
+        **kwargs: object,
+    ) -> dict[str, object]:
+        seen_url.append(str(kwargs["url"]))
+        return {
+            "ok": True,
+            "run_id": "run-123",
+            "status": "SUCCEEDED",
+            "run": {"report_markdown": "# AnalysisRun run-123\n"},
+        }
+
+    monkeypatch.setattr(
+        cli,
+        "_run_project_analyze_to_terminal",
+        _fake_run_project_analyze_to_terminal,
+    )
+
+    args = SimpleNamespace(
+        repo_path=str(repo_path),
+        slug="tron-kit",
+        language_profile="swift_kit",
+        bundle=None,
+        name=None,
+        extractors=None,
+        emit_scip="auto",
+        depth="full",
+        mode="incremental",
+        url="http://localhost:8765/mcp",
+        report_out=None,
+        summary_out=None,
+        env_file=str(tmp_path / ".env"),
+        manifest=str(tmp_path / "missing-manifest.json"),
+        audit=True,
+        manage_runtime=False,
+    )
+
+    assert cli._cmd_project_analyze(args) == 0
+    assert seen_url == ["http://localhost:8765/mcp"]
 
 
 def test_stage_project_runtime_spec_switches_to_stage_mount(
@@ -541,6 +626,7 @@ def test_project_analyze_writes_summary_and_report(
         env_file=str(env_file),
         manifest=str(tmp_path / "missing-manifest.json"),
         audit=True,
+        manage_runtime=True,
     )
 
     exit_code = cli._cmd_project_analyze(args)
@@ -692,6 +778,7 @@ def test_project_analyze_uw_ios_app_routes_through_uw_emitter(
         env_file=str(env_file),
         manifest=str(tmp_path / "missing-manifest.json"),
         audit=True,
+        manage_runtime=True,
     )
 
     exit_code = cli._cmd_project_analyze(args)
@@ -846,6 +933,7 @@ def test_project_analyze_hs_swift_kit_routes_through_kit_emitter(
         env_file=str(env_file),
         manifest=str(tmp_path / "missing-manifest.json"),
         audit=True,
+        manage_runtime=True,
     )
 
     exit_code = cli._cmd_project_analyze(args)
@@ -992,6 +1080,7 @@ def test_project_analyze_full_run_uses_staged_paths_for_colima_docker_host(
         env_file=str(env_file),
         manifest=str(tmp_path / "missing-manifest.json"),
         audit=True,
+        manage_runtime=True,
     )
 
     exit_code = cli._cmd_project_analyze(args)

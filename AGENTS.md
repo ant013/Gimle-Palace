@@ -18,6 +18,14 @@ operational: load detailed runbooks only when the task touches that area.
 - Operator/Board writing uses a separate clone such as `~/<project>-board/` or
   `~/Android/<project>/`; never use `/Users/Shared/Ios/<project>/` for
   spec/plan writing.
+- On the MacBook operator setup, Palace runs natively via launchd on
+  `http://127.0.0.1:8765/mcp`. Do not start Docker, docker compose, Colima, or
+  iMac deploy scripts unless the user explicitly asks for that legacy/remote
+  path.
+- Clean iOS repository copies live under
+  `/Users/Shared/Ios/Gimle-Repos/HorizontalSystems/`. Do not use
+  `/Users/ant013/Ios/HorizontalSystems/` or working product checkouts for Palace
+  sync/update jobs unless the user explicitly overrides this.
 
 Before any git history or branch operation in a new run:
 
@@ -98,8 +106,20 @@ GitHub PR approval.
 
 ## Deployment
 
+Default MacBook operator runtime is native `palace-mcp` on port `8765`, managed
+by `~/Library/LaunchAgents/work.ant013.palace-mcp-native.plist`. After updating
+the local service source, restart that launchd job and verify:
+
+```bash
+launchctl kickstart -k gui/$(id -u)/work.ant013.palace-mcp-native
+curl -sf http://127.0.0.1:8765/healthz
+```
+
+The iMac deploy path below is legacy/remote production only. Do not run it for
+MacBook native work unless the user explicitly asks for iMac deployment.
+
 After a PR squash-merges to `develop`, rebuild and restart `palace-mcp` on the
-iMac:
+iMac only when that remote deployment was requested:
 
 ```bash
 bash paperclips/scripts/imac-deploy.sh
@@ -115,6 +135,11 @@ Paperclip reads rendered `AGENTS.md` files fresh on each agent run; no restart
 is required for role-file updates.
 
 ## MCP And Project Tools
+
+For MacBook native operation, use `http://127.0.0.1:8765/mcp`. `palace-mcp`
+must not manage Docker as a side effect of CLI analysis. If runtime management is
+needed for a legacy Docker path, it must be selected explicitly with
+`project analyze --manage-runtime`.
 
 `palace-mcp` exposes read-only git tools mounted under `/repos/<slug>`:
 
