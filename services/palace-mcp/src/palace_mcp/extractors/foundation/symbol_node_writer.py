@@ -154,7 +154,8 @@ UNWIND $rows AS r
 MATCH (symbol:Symbol {qualified_name: r.qualified_name, group_id: r.group_id})
 MATCH (shadow:SymbolOccurrenceShadow {
     symbol_qualified_name: r.qualified_name,
-    group_id: r.group_id
+    group_id: r.group_id,
+    symbol_id: r.symbol_id
 })
 MERGE (symbol)-[:BACKED_BY_SYMBOL]->(shadow)
 """
@@ -214,20 +215,26 @@ def build_symbol_node_rows(
 def build_symbol_shadow_rows(
     symbol_infos: list["ScipSymbolInfo"],
     group_id: str,
-) -> list[dict[str, str]]:
+    symbol_ids: dict[str, int] | None = None,
+) -> list[dict[str, str | int]]:
     """Build Symbol→shadow link rows for non-callable SCIP kinds."""
-    rows: list[dict[str, str]] = []
+    rows: list[dict[str, str | int]] = []
     seen_qnames: set[str] = set()
+    ids = symbol_ids or {}
     for si in symbol_infos:
         if si.scip_kind_name not in _SCIP_KINDS_WITH_SHADOW_BACKING:
             continue
         if si.qualified_name in seen_qnames:
+            continue
+        symbol_id = ids.get(si.qualified_name)
+        if symbol_id is None:
             continue
         seen_qnames.add(si.qualified_name)
         rows.append(
             {
                 "qualified_name": si.qualified_name,
                 "group_id": group_id,
+                "symbol_id": symbol_id,
             }
         )
     return rows
@@ -244,6 +251,7 @@ async def write_symbol_nodes(
     seen_at: datetime,
     commit_sha: str,
     def_line_starts: dict[str, int] | None = None,
+    def_symbol_ids: dict[str, int] | None = None,
     recipe: "Recipe | None" = None,
 ) -> int:
     """Write :Symbol nodes and edges to Neo4j in UNWIND batches.
@@ -264,7 +272,7 @@ async def write_symbol_nodes(
 
     async with driver.session() as session:
         for i in range(0, len(node_rows), _BATCH_SIZE):
-            await session.run(
+            result = await session.run(
                 _MERGE_SYMBOLS,
                 rows=node_rows[i : i + _BATCH_SIZE],
                 project_id=project_id,
@@ -272,14 +280,16 @@ async def write_symbol_nodes(
                 seen_at=seen_at.isoformat(),
                 commit_sha=commit_sha,
             )
+            await result.consume()
 
-    shadow_rows = build_symbol_shadow_rows(symbol_infos, group_id)
+    shadow_rows = build_symbol_shadow_rows(symbol_infos, group_id, def_symbol_ids)
     async with driver.session() as session:
         for i in range(0, len(shadow_rows), _BATCH_SIZE):
-            await session.run(
+            result = await session.run(
                 _MERGE_BACKED_BY_SYMBOL_SHADOWS,
                 rows=shadow_rows[i : i + _BATCH_SIZE],
             )
+            await result.consume()
 
     edges_by_type: dict[str, list[dict[str, str]]] = {k: [] for k in _EDGE_QUERIES}
     for si in symbol_infos:
@@ -297,11 +307,12 @@ async def write_symbol_nodes(
         for rel_type, edge_rows in edges_by_type.items():
             cypher = _EDGE_QUERIES[rel_type]
             for i in range(0, len(edge_rows), _BATCH_SIZE):
-                await session.run(
+                result = await session.run(
                     cypher,
                     rows=edge_rows[i : i + _BATCH_SIZE],
                     run_id=run_id,
                 )
+                await result.consume()
 
     return len(node_rows)
 

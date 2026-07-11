@@ -18,9 +18,9 @@ from palace_mcp.extractors.foundation.schema import (
 
 
 class TestSchemaDefinition:
-    def test_has_thirteen_constraints(self) -> None:
-        # 12 previous + extractor_baseline_unique
-        assert len(EXPECTED_SCHEMA.constraints) == 13
+    def test_has_fourteen_constraints(self) -> None:
+        # 12 previous + shadow_symbol_unique + extractor_baseline_unique
+        assert len(EXPECTED_SCHEMA.constraints) == 14
 
     def test_has_nine_indexes(self) -> None:
         assert len(EXPECTED_SCHEMA.indexes) == 9
@@ -28,17 +28,17 @@ class TestSchemaDefinition:
     def test_has_one_fulltext(self) -> None:
         assert len(EXPECTED_SCHEMA.fulltext_indexes) == 1
 
-    def test_total_twenty_three_objects(self) -> None:
+    def test_total_twenty_four_objects(self) -> None:
         total = (
             len(EXPECTED_SCHEMA.constraints)
             + len(EXPECTED_SCHEMA.indexes)
             + len(EXPECTED_SCHEMA.fulltext_indexes)
         )
-        assert total == 23
+        assert total == 24
 
     def test_all_names_unique(self) -> None:
         names = EXPECTED_SCHEMA.all_names()
-        assert len(names) == 23
+        assert len(names) == 24
 
     def test_expected_names_present(self) -> None:
         names = EXPECTED_SCHEMA.all_names()
@@ -48,6 +48,7 @@ class TestSchemaDefinition:
         assert "dead_symbol_candidate_id_unique" in names
         assert "binary_surface_record_id_unique" in names
         assert "shadow_evict_r1" in names
+        assert "shadow_symbol_unique" in names
         assert "shadow_count_by_group" in names
         assert "dead_symbol_candidate_lookup" in names
         assert "binary_surface_record_lookup" in names
@@ -69,6 +70,17 @@ class TestSchemaDefinition:
         assert idx.type == "VECTOR"
         assert idx.vector_dimensions == 1536
         assert idx.vector_similarity_function == "cosine"
+
+    def test_shadow_symbol_unique_matches_write_path(self) -> None:
+        constraint = next(
+            c for c in EXPECTED_SCHEMA.constraints if c.name == "shadow_symbol_unique"
+        )
+        assert constraint.label == "SymbolOccurrenceShadow"
+        assert constraint.properties == (
+            "group_id",
+            "symbol_qualified_name",
+            "symbol_id",
+        )
 
 
 class TestCypherGeneration:

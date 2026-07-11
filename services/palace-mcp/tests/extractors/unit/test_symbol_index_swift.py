@@ -44,6 +44,7 @@ from palace_mcp.extractors.symbol_index_swift import (
     _ingest_batch,
     _is_vendor,
     _read_swift_symbol_baseline_commit,
+    _write_file_body_hashes,
     _with_access_modifiers,
 )
 from tests.extractors.fixtures.scip_factory import (
@@ -1967,3 +1968,53 @@ def test_build_file_body_hashes_skips_missing_files(tmp_path: Path) -> None:
     ]
     hashes = _build_file_body_hashes(tmp_path, occurrences)  # type: ignore[arg-type]
     assert set(hashes) == {"present.swift"}
+
+
+@pytest.mark.asyncio
+async def test_write_file_body_hashes_prunes_absent_paths_after_full_refresh() -> None:
+    driver = _make_driver()
+    observed_at = datetime(2026, 7, 11, tzinfo=timezone.utc)
+
+    written = await _write_file_body_hashes(
+        driver,
+        project_id="project/uw-ios-mini",
+        run_id="run-1",
+        file_body_hashes={"Sources/App/Current.swift": "hash-current"},
+        observed_at=observed_at,
+        commit_sha="commit-1",
+        prune_absent_paths=True,
+        removed_paths=set(),
+    )
+
+    session = driver.session.return_value.__aenter__.return_value
+    assert written == 1
+    assert session.run.await_count == 2
+    prune_call = session.run.await_args_list[1]
+    assert "NOT f.path IN $current_paths" in prune_call.args[0]
+    assert prune_call.kwargs["current_paths"] == ["Sources/App/Current.swift"]
+    assert prune_call.kwargs["run_id"] == "run-1"
+
+
+@pytest.mark.asyncio
+async def test_write_file_body_hashes_clears_incremental_removed_paths() -> None:
+    driver = _make_driver()
+    observed_at = datetime(2026, 7, 11, tzinfo=timezone.utc)
+
+    written = await _write_file_body_hashes(
+        driver,
+        project_id="project/uw-ios-mini",
+        run_id="run-2",
+        file_body_hashes={},
+        observed_at=observed_at,
+        commit_sha="commit-2",
+        prune_absent_paths=False,
+        removed_paths={"Sources/App/Removed.swift"},
+    )
+
+    session = driver.session.return_value.__aenter__.return_value
+    assert written == 0
+    assert session.run.await_count == 1
+    removed_call = session.run.await_args_list[0]
+    assert "f.path IN $removed_paths" in removed_call.args[0]
+    assert removed_call.kwargs["removed_paths"] == ["Sources/App/Removed.swift"]
+    assert removed_call.kwargs["run_id"] == "run-2"
