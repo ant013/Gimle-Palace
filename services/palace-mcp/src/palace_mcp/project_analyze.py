@@ -335,7 +335,12 @@ async def _read_project_head_sha(driver: AsyncDriver, slug: str) -> str | None:
             run_git,
             ["rev-parse", "HEAD"],
             repo_path=repo_path,
-            max_stdout_lines=1,
+            # Cap must exceed the expected 1 line: run_git flags truncated
+            # whenever output EXACTLY fills the cap (cap reached = producer
+            # killed), so cap=1 marked every valid single-line sha truncated
+            # and silently degraded incremental analyzes to full
+            # (effective_mode_reason=repo_head_unavailable).
+            max_stdout_lines=2,
         )
     except (GitError, GitTimeout):
         return None
