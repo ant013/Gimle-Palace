@@ -3,6 +3,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 VENV = REPO / "paperclips" / "scripts" / "versions.env"
+EXPECTED_TELEGRAM_PLUGIN_SHA = "84c492d987ad0c16dcd224294b0747d60cd0d41f"
 
 
 def test_versions_env_exists():
@@ -75,6 +76,6 @@ def test_telegram_plugin_pinned_by_sha():
     m = re.search(r'TELEGRAM_PLUGIN_REF="([^"]+)"', text)
     assert m
     ref = m.group(1)
-    # Should be 7-40 hex chars (SHA), not branch name like "main" or "HEAD"
-    assert re.match(r"^[0-9a-f]{7,40}$", ref), \
-        f"TELEGRAM_PLUGIN_REF must be SHA, got {ref!r}"
+    assert re.fullmatch(r"[0-9a-f]{40}", ref), \
+        f"TELEGRAM_PLUGIN_REF must be a full immutable SHA, got {ref!r}"
+    assert ref == EXPECTED_TELEGRAM_PLUGIN_SHA
