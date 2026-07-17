@@ -100,7 +100,9 @@ def namespace_fixture_payload() -> dict[str, object]:
 def _namespace_driver() -> MagicMock:
     async def _run(_query: str, **params: object) -> object:
         result = MagicMock()
-        value = params["value"]
+        # Namespace resolution passes value=; GET_PROJECT (used by the native
+        # handlers to read repo_path off the :Project node) passes slug=.
+        value = params.get("value", params.get("slug"))
         if value in {_SLUG, _CM_PROJECT_NAME}:
             row = {"p": {"slug": _SLUG, "cm_project_name": _CM_PROJECT_NAME}}
         else:

@@ -36,6 +36,10 @@ class Issue:
     issue_number: int = 0
     origin_kind: str | None = None
     parent_id: str | None = None
+    # GIM-1704 (2026-06-22): the currently-executing run, if any. A set
+    # execution_run_id WITHOUT an active_run_id is a stale GHOST LOCK (a dead run
+    # left the lock set) — used by detection to tell a live run from a ghost.
+    active_run_id: str | None = None
 
 
 async def _sleep(seconds: float) -> None:
@@ -52,6 +56,7 @@ def _issue_from_json(data: dict[str, Any]) -> Issue:
         id=str(data["id"]),
         assignee_agent_id=data.get("assigneeAgentId"),
         execution_run_id=data.get("executionRunId"),
+        active_run_id=data.get("activeRunId"),
         status=str(data.get("status", "")),
         updated_at=_parse_iso(str(data.get("updatedAt", "1970-01-01T00:00:00Z"))),
         issue_number=int(data.get("issueNumber") or 0),

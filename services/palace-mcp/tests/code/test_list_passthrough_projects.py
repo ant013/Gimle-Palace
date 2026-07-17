@@ -15,6 +15,7 @@ def test_build_passthrough_project_listing_returns_current_tool_split() -> None:
             "palace.code.detect_changes",
             "palace.code.get_architecture",
             "palace.code.get_code_snippet",
+            "palace.code.search_code",
         ],
-        "cm_only": ["palace.code.search_code"],
+        "cm_only": [],
     }

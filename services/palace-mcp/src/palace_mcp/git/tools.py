@@ -6,6 +6,7 @@ import asyncio
 import logging
 import re
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from palace_mcp.git.command import (
@@ -17,7 +18,7 @@ from palace_mcp.git.command import (
 from palace_mcp.git.path_resolver import (
     InvalidPath,
     ProjectNotRegistered,
-    resolve_project,
+    resolve_registered_project,
     validate_rel_path,
 )
 from palace_mcp.git.schemas import (
@@ -62,6 +63,29 @@ def _error(code: str, message: str, project: str | None = None) -> dict[str, Any
     return out
 
 
+async def _resolve_repo_path(project: str) -> Path:
+    """Resolve a registered project's on-disk repo path via its :Project node.
+
+    Honors the absolute ``repo_path`` persisted on the node (native layout) and
+    the ``parent_mount``/``relative_path`` sibling-mount layout; falls back to
+    the legacy ``/repos/<slug>`` layout only when no node exists. This mirrors
+    ``code.native_detect_changes._resolve_repo_path`` so palace.git.* works on
+    native deployments (no ``/repos`` bind-mount), not only under Docker.
+    """
+    from palace_mcp.mcp_server import get_driver
+    from palace_mcp.memory.cypher import GET_PROJECT
+
+    driver = get_driver()
+    project_node: Any | None = None
+    if driver is not None:
+        async with driver.session() as session:
+            result = await session.run(GET_PROJECT, slug=project)
+            row = await result.single()
+        if row is not None:
+            project_node = row["p"]
+    return resolve_registered_project(project, project_node=project_node)
+
+
 # ---------------------------------------------------------------------------
 # palace.git.log
 # ---------------------------------------------------------------------------
@@ -101,13 +125,13 @@ async def palace_git_log(
 ) -> dict[str, Any]:
     """Return commit log for `project`. Capped at LOG_CAP_N entries."""
     try:
-        repo_path = resolve_project(project)
+        repo_path = await _resolve_repo_path(project)
     except InvalidSlug:
         return _error("invalid_slug", f"invalid slug: {project!r}", project)
     except ProjectNotRegistered:
         return _error(
             "project_not_registered",
-            f"no mounted repo at /repos/{project}",
+            f"project not registered or repo path not found: {project}",
             project,
         )
 
@@ -210,13 +234,13 @@ async def palace_git_show(
 ) -> dict[str, Any]:
     """Show a commit (path=None) or file at ref (path=<file>)."""
     try:
-        repo_path = resolve_project(project)
+        repo_path = await _resolve_repo_path(project)
     except InvalidSlug:
         return _error("invalid_slug", f"invalid slug: {project!r}", project)
     except ProjectNotRegistered:
         return _error(
             "project_not_registered",
-            f"no mounted repo at /repos/{project}",
+            f"project not registered or repo path not found: {project}",
             project,
         )
 
@@ -411,13 +435,13 @@ async def palace_git_blame(
     line_end: int | None = None,
 ) -> dict[str, Any]:
     try:
-        repo_path = resolve_project(project)
+        repo_path = await _resolve_repo_path(project)
     except InvalidSlug:
         return _error("invalid_slug", f"invalid slug: {project!r}", project)
     except ProjectNotRegistered:
         return _error(
             "project_not_registered",
-            f"no mounted repo at /repos/{project}",
+            f"project not registered or repo path not found: {project}",
             project,
         )
     if not _valid_ref(ref):
@@ -508,13 +532,13 @@ async def palace_git_diff(
     if mode not in ("full", "stat"):
         return _error("invalid_mode", f"mode must be full|stat, got {mode!r}", project)
     try:
-        repo_path = resolve_project(project)
+        repo_path = await _resolve_repo_path(project)
     except InvalidSlug:
         return _error("invalid_slug", f"invalid slug: {project!r}", project)
     except ProjectNotRegistered:
         return _error(
             "project_not_registered",
-            f"no mounted repo at /repos/{project}",
+            f"project not registered or repo path not found: {project}",
             project,
         )
     for r, name in [(ref_a, "ref_a"), (ref_b, "ref_b")]:
@@ -610,13 +634,13 @@ async def palace_git_ls_tree(
     recursive: bool = False,
 ) -> dict[str, Any]:
     try:
-        repo_path = resolve_project(project)
+        repo_path = await _resolve_repo_path(project)
     except InvalidSlug:
         return _error("invalid_slug", f"invalid slug: {project!r}", project)
     except ProjectNotRegistered:
         return _error(
             "project_not_registered",
-            f"no mounted repo at /repos/{project}",
+            f"project not registered or repo path not found: {project}",
             project,
         )
     if not _valid_ref(ref):

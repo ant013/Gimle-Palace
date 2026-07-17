@@ -245,7 +245,12 @@ async def scan_died_mid_work(
             continue
         if issue.assignee_agent_id is None:
             continue
-        if issue.execution_run_id is not None:
+        # GIM-1704 (2026-06-22): an executionRunId with NO active run is a stale
+        # GHOST LOCK (a dead run left the lock set) — recoverable, NOT "running".
+        # Skip only issues with a genuinely live run (active_run_id present); let
+        # ghost-locked stuck issues fall through to recovery (trigger_respawn's
+        # release path clears the stale lock, then respawns).
+        if issue.active_run_id is not None:
             continue
         if issue.id in live_children_by_parent:
             log.info(

@@ -62,6 +62,13 @@ logger = logging.getLogger(__name__)
 _T = TypeVar("_T")
 _EXPECTED_PROFILE_SLUGS = frozenset({"uw-ios-app", "uw-ios-baseline"})
 _INCREMENTAL_FULL_REPROCESS_THRESHOLD = 0.8
+# The analyze lease must outlive the longest single extractor that runs WITHOUT an
+# intermediate checkpoint save — otherwise the run flips to RESUMABLE mid-extractor while
+# the background task is still working, racing readers (the bloat-guard / orchestrator).
+# symbol_index_swift.timeout_s = 3600s; 65min gives headroom. embedding_symbol (up to ~10h
+# on a full uw embed) is the LAST step and is recovered via analyze_resume, so it need not
+# fit the lease.
+_DEFAULT_LEASE_SECONDS = 3900
 _INCREMENTAL_GLOBAL_EXTRACTORS = frozenset(
     {"dead_code", "hotspot", "cross_module_contract"}
 )
@@ -1071,7 +1078,7 @@ class ProjectAnalysisService:
         add_to_bundle_func: Callable[..., Awaitable[Any]] = add_to_bundle,
         audit_runner: AuditRunner = run_audit,
         ensure_schema_func: SchemaEnsurer = ensure_project_analyze_schema,
-        lease_seconds: int = 900,
+        lease_seconds: int = _DEFAULT_LEASE_SECONDS,
         lease_owner: str | None = None,
         clock: Clock = _utc_now,
         neo4j_retry_attempts: int = 3,

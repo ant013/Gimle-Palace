@@ -4,7 +4,7 @@ Types here are the wire contract between MCP clients and the palace-mcp
 service. Keep them stable — changes are breaking.
 """
 
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -29,7 +29,11 @@ class LookupRequest(BaseModel):
     filters: dict[str, Any] = Field(default_factory=dict)
     offset: int = Field(default=0, ge=0)
     limit: int = Field(default=20, ge=1, le=100)
-    order_by: Literal["created_at", "name"] = "created_at"
+    # Free-form "<column> [asc|desc]"; parsed + whitelisted in lookup._safe_order_by.
+    order_by: str = "created_at"
+    # Embedding vectors are stripped from response properties by default
+    # (internal ranking artifact, ~32K chars/node); opt in only if truly needed.
+    include_embeddings: bool = False
 
 
 class LookupResponseItem(BaseModel):
@@ -72,6 +76,7 @@ class ProjectInfo(BaseModel):
     # GIM-182: parent mount for shared-prefix repo layouts
     parent_mount: str | None = None
     relative_path: str | None = None
+    # Absolute on-disk repo path persisted on the :Project node (native layout).
     repo_path: str | None = None
     # GIM-283-1: language profile for audit extractor scoping
     language_profile: str | None = None

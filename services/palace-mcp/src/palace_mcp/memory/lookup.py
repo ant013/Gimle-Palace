@@ -31,10 +31,27 @@ logger = logging.getLogger(__name__)
 _RELATED_FRAGMENTS: dict[EntityType, str] = {}
 
 
-def _serialize_props(props: dict[str, Any]) -> dict[str, Any]:
-    """Convert neo4j temporal/spatial types to JSON-safe primitives."""
+def _is_embedding_key(key: str) -> bool:
+    """Vector-artifact property keys: graphiti `name_embedding`/`fact_embedding`
+    and the bare `embedding` on :Symbol. NOT `embedding_input_hash` (real field)."""
+    return key == "embedding" or key.endswith("_embedding")
+
+
+def _serialize_props(
+    props: dict[str, Any], *, include_embeddings: bool = False
+) -> dict[str, Any]:
+    """Convert neo4j temporal/spatial types to JSON-safe primitives.
+
+    By default drops embedding vectors (1536-dim ≈ 32K chars each) — they are an
+    internal ranking artifact, dominate the read payload (a single lookup of 8
+    Decision nodes was 276K chars, ~95% embeddings), and no read consumer needs
+    them (decide returns only the dim; prime reads only `body`). Pass
+    include_embeddings=True to retain them.
+    """
     out: dict[str, Any] = {}
     for k, v in props.items():
+        if not include_embeddings and _is_embedding_key(k):
+            continue
         if hasattr(v, "iso_format"):
             out[k] = v.iso_format()
         elif isinstance(v, (list, tuple)):
@@ -42,6 +59,26 @@ def _serialize_props(props: dict[str, Any]) -> dict[str, Any]:
         else:
             out[k] = v
     return out
+
+
+_ALLOWED_ORDER_COLUMNS = {"created_at", "updated_at", "name"}
+
+
+def _safe_order_by(order_by: str) -> tuple[str, str]:
+    """Parse a user ``order_by`` (e.g. ``"created_at desc"``) into (column, direction).
+
+    Whitelists the column (defends against Cypher injection via interpolation) and
+    parses an optional ASC/DESC direction. Falls back to ``("created_at", "DESC")``
+    for anything unrecognised so the query is always valid and never raises.
+    """
+    tokens = (order_by or "").strip().split()
+    column = tokens[0] if tokens else "created_at"
+    direction = tokens[1].upper() if len(tokens) > 1 else "DESC"
+    if column not in _ALLOWED_ORDER_COLUMNS:
+        column = "created_at"
+    if direction not in {"ASC", "DESC"}:
+        direction = "DESC"
+    return column, direction
 
 
 def _build_query(
@@ -52,11 +89,12 @@ def _build_query(
     offset: int = 0,
 ) -> str:
     where = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
-    # order_by is a Literal union of known column names; limit/offset are validated ints.
+    order_col, order_dir = _safe_order_by(order_by)
+    # order_col/order_dir are whitelisted; limit/offset are validated ints.
     return f"""
         MATCH (n:{entity_type})
         {where}
-        ORDER BY n.{order_by} DESC
+        ORDER BY n.{order_col} {order_dir}
         SKIP {offset}
         LIMIT {limit}
         RETURN n AS node
@@ -107,7 +145,7 @@ async def perform_lookup(
     items: list[LookupResponseItem] = []
     for row in rows:
         node = row["node"]
-        props = _serialize_props(dict(node))
+        props = _serialize_props(dict(node), include_embeddings=req.include_embeddings)
         node_id = props.get("uuid") or props.get("id", "")
         props.pop("group_id", None)
         items.append(

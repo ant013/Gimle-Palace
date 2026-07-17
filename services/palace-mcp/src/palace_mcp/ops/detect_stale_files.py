@@ -89,6 +89,15 @@ def _should_ignore(path: str, ignore_globs: list[str]) -> bool:
 
 
 def _repo_path_for_project(project: ProjectInfo, workspace_root: Path) -> Path | None:
+    # Native layout: the :Project node carries an absolute repo_path (canonical
+    # Gimle-Repos checkout). Honour it first. The `/repos-{mount}` form below is the
+    # Docker-container bind-mount convention, which does not exist on native — using it
+    # made this detector inert (every native project resolved to a missing path, so
+    # requires_reingest was always False).
+    if project.repo_path:
+        candidate = Path(project.repo_path)
+        if candidate.is_absolute():
+            return candidate
     relative = project.relative_path or project.slug
     if not relative:
         return None
