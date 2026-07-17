@@ -80,7 +80,11 @@ The old company itself is explicitly outside the deletion boundary.
   English.
 - Commits use the configured operator identity and contain no
   `Co-authored-by:` trailer.
-- The new Paperclip company is named `ThorChainKit`, with issue prefix `THOR`.
+- The new Paperclip company is named `ThorChainKit`, with issue prefix `THR`.
+  Paperclip 2026.618.0 derives a three-letter prefix from the create-time name,
+  so bootstrap creates the company with temporary name `THR`, verifies the
+  returned prefix, and then renames it to `ThorChainKit` through the supported
+  company update API. Any mismatch is rolled back before agent creation.
 - All five agents use `adapterType=codex_local`, model `gpt-5.6-sol`, and
   `modelReasoningEffort=xhigh`.
 - Each Paperclip agent has `maxConcurrentRuns=1`. Bounded Codex review
@@ -351,7 +355,7 @@ refactor unrelated projects or rewrite the UAA framework.
 
 1. Validate optional `paperclip_role`, `paperclip_icon`, and `workflow_role`.
 2. Create a new company with both the manifest display name and exact
-   `project.issue_prefix`; fail if `THOR` is already allocated.
+   `project.issue_prefix`; fail if `THR` is already allocated.
 3. Use explicit role/icon for live hire payloads; preserve current profile
    fallback for existing assemblies.
 4. Select canary CTO and handoff source by `workflow_role=inner_orchestrator`.
@@ -386,7 +390,7 @@ refactor unrelated projects or rewrite the UAA framework.
    ID before any cleanup decision.
 7. Verify Board-authorized create/delete access without printing credentials;
    company-scoped or expired credentials block the rollout.
-8. Verify issue prefix `THOR` is free.
+8. Verify issue prefix `THR` is free.
 9. Abort on any company/path identity mismatch or any workspace path outside
    `/Users/ant013/Data/AI/paperclip/workspace/<exact-name>`.
 
@@ -418,7 +422,7 @@ No mutation follows if either backup or export verification fails.
 4. Index the exact local repository with codebase-memory and record the returned
    project slug/freshness in host-local bindings.
 5. Build and validate all five ThorChain bundles from the merged Palace commit.
-6. Create the ThorChain company with prefix `THOR`; bootstrap five agents in
+6. Create the ThorChain company with prefix `THR`; bootstrap five agents in
    topological order; record every returned UUID.
 7. Create the planned Paperclip project and primary local workspace bound to the
    new repository.
@@ -504,7 +508,7 @@ company during a failed pre-acceptance bootstrap and only by its recorded UUID.
 - Existing Trading/Gimle/UAudit builds remain byte/contract compatible where
   the new optional fields are absent.
 - Bootstrap maps explicit Paperclip roles/icons and retains profile fallback.
-- Bootstrap creates the new company with exact manifest prefix `THOR`, rejects
+- Bootstrap creates the new company with exact manifest prefix `THR`, rejects
   collisions, and never changes an existing company's prefix implicitly.
 - Canary and smoke select `inner_orchestrator`, not CEO.
 - Workflow-role probes enforce CEO/CTO/reviewer/implementer/QA boundaries.
@@ -550,7 +554,7 @@ narrow suite is green.
 - Runtime version is exactly 2026.618.0 and bound to loopback.
 - The exact ThorChain repository is indexed and current in codebase-memory; each
   bundle names the returned project slug and the exact local Serena boundary.
-- New company prefix is `THOR`; one planned project and one primary workspace
+- New company prefix is `THR`; one planned project and one primary workspace
   point to the exact local repo and `main`.
 - Five live agents match the identity table and all report `gpt-5.6-sol/xhigh`.
 - The three disposable CodeReviewer workers report the same model in runtime
@@ -594,7 +598,7 @@ The task is complete only when all of the following are true:
 
 ## 16. Open Questions
 
-None. Approval of this revision selects `THOR`, `main`, the exact five-agent
+None. Approval of this revision selects `THR`, `main`, the exact five-agent
 topology, English-only repository content, preservation of the old company and
 agents, and recoverable archival rather than physical deletion of old checkout
 directories.
