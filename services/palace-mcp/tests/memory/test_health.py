@@ -100,8 +100,13 @@ def _make_mock_driver_v2(
     ingest_row: dict[str, Any] | None,
     slugs: list[str],
     per_project_rows: list[dict[str, Any]],
+    project_nodes: list[dict[str, Any]] | None = None,
 ) -> MagicMock:
-    """Mock driver for Task 7: handles 4 queries (counts, ingest, slugs, per-project)."""
+    """Mock driver: handles 5 queries (counts, ingest, slugs, per-project, projects).
+
+    project_nodes feeds LIST_PROJECTS, which get_health resolves to
+    git_repos_available; defaults to none so repo resolution yields an empty list.
+    """
 
     async def _read_fn(fn: Any, *args: Any, **kwargs: Any) -> Any:
         call_count = 0
@@ -125,8 +130,10 @@ def _make_mock_driver_v2(
                 return result
             elif call_count == 3:
                 return _AsyncRows([{"slug": s} for s in slugs])
-            else:
+            elif call_count == 4:
                 return _AsyncRows(per_project_rows)
+            else:
+                return _AsyncRows([{"p": n} for n in (project_nodes or [])])
 
         tx = MagicMock()
         tx.run = _run

@@ -560,11 +560,16 @@ async def palace_memory_lookup(
     project: str | None = None,
 ) -> dict[str, Any]:
     """Look up Paperclip entities from the Neo4j knowledge graph."""
+    from pydantic import ValidationError
+
     driver = _driver
     if driver is None:
         handle_tool_error(DriverUnavailableError("Neo4j driver not initialised"))
     if entity_type not in VALID_ENTITY_TYPES:
         handle_tool_error(UnknownEntityTypeError(entity_type))
+    # Clamp limit to the server cap instead of rejecting — skills/callers may pass
+    # larger values (e.g. 200); cap response size rather than crash.
+    limit = min(max(int(limit), 1), 100)
     try:
         req = LookupRequest(
             entity_type=entity_type,
@@ -578,6 +583,8 @@ async def palace_memory_lookup(
         return resp.model_dump()
     except UnknownProjectError as exc:
         return {"ok": False, "error": "unknown_project", "message": str(exc)}
+    except ValidationError as exc:
+        return {"ok": False, "error": "invalid_request", "message": str(exc)}
     except Exception as exc:
         handle_tool_error(exc)
 

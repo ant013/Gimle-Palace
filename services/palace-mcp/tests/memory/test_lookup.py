@@ -2,8 +2,53 @@
 and LookupResponse.warnings field (GIM-37).
 """
 
-from palace_mcp.memory.lookup import _build_query
-from palace_mcp.memory.schema import LookupResponse, LookupResponseItem
+from palace_mcp.memory.lookup import _build_query, _safe_order_by, _serialize_props
+from palace_mcp.memory.schema import LookupRequest, LookupResponse, LookupResponseItem
+
+
+# --- _serialize_props: embedding strip default-on (276K→~14K read payload) ---
+
+
+def test_serialize_props_strips_embeddings_by_default() -> None:
+    out = _serialize_props(
+        {
+            "name": "x",
+            "body": "y",
+            "name_embedding": [0.1] * 1536,
+            "embedding": [0.2] * 768,
+            "fact_embedding": [0.3] * 100,
+        }
+    )
+    assert out == {"name": "x", "body": "y"}
+
+
+def test_serialize_props_keeps_embedding_input_hash() -> None:
+    # Regression guard: a real non-vector field must NOT be false-stripped.
+    out = _serialize_props({"embedding_input_hash": "abc123", "name": "x"})
+    assert out == {"embedding_input_hash": "abc123", "name": "x"}
+
+
+def test_serialize_props_include_embeddings_true_keeps_them() -> None:
+    out = _serialize_props(
+        {"name": "x", "name_embedding": [0.1, 0.2]}, include_embeddings=True
+    )
+    assert out["name_embedding"] == [0.1, 0.2]
+
+
+def test_lookup_request_include_embeddings_defaults_false() -> None:
+    assert LookupRequest(entity_type="Decision").include_embeddings is False
+    assert LookupRequest(
+        entity_type="Decision", include_embeddings=True
+    ).include_embeddings
+
+
+def test_safe_order_by_neutralizes_injection() -> None:
+    # Defensive: unknown/injection columns fall back to the safe default.
+    assert _safe_order_by("created_at} RETURN n.name_embedding //") == (
+        "created_at",
+        "DESC",
+    )
+    assert _safe_order_by("name asc") == ("name", "ASC")
 
 
 def test_build_query_contains_entity_label_and_limit() -> None:
