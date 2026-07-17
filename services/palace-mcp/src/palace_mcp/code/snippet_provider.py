@@ -17,8 +17,6 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
-
 from palace_mcp.git.path_resolver import (
     InvalidPath,
     PathTraversalDetectedError,
@@ -26,6 +24,8 @@ from palace_mcp.git.path_resolver import (
     resolve_project,
     validate_rel_path,
 )
+
+logger = logging.getLogger(__name__)
 
 _MAX_SNIPPET_LINES: int = 200
 _MAX_SNIPPET_BYTES: int = 16_384
@@ -83,6 +83,7 @@ class FreshnessResult:
     stale: bool | None = None
     freshness_state: str = FRESHNESS_UNKNOWN
     freshness_reason: str | None = None
+    tree_head: str | None = None
 
 
 def resolve_snippet(
@@ -270,6 +271,7 @@ def inspect_freshness(
                 commits_behind_head=0,
                 stale=False,
                 freshness_state=FRESHNESS_CURRENT,
+                tree_head=head,
             )
 
         behind_result = subprocess.run(
@@ -294,6 +296,7 @@ def inspect_freshness(
             commits_behind_head=behind,
             stale=behind > 0,
             freshness_state=FRESHNESS_BEHIND if behind > 0 else FRESHNESS_CURRENT,
+            tree_head=head,
         )
     except subprocess.TimeoutExpired:
         return _unknown_freshness(commit_sha, "timeout")

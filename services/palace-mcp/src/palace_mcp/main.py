@@ -1,12 +1,11 @@
 import asyncio
 import logging
-import os
 import time
 from collections.abc import AsyncGenerator, Coroutine
 from contextlib import asynccontextmanager
 from importlib.metadata import version
 from pathlib import Path
-from typing import IO, Annotated, cast
+from typing import Any, IO, Annotated, cast
 
 from fastapi import Depends, FastAPI, Request, Response
 from neo4j import AsyncDriver, AsyncGraphDatabase
@@ -33,6 +32,7 @@ from palace_mcp.mcp_server import (
     set_settings,
 )
 from palace_mcp.memory.constraints import ensure_schema
+from palace_mcp.runtime_identity import resolve_git_identity
 from palace_mcp.memory.logging_setup import configure_json_logging
 
 _mcp_asgi_app: Starlette = build_mcp_asgi_app()
@@ -166,11 +166,16 @@ def create_app() -> FastAPI:
             )
 
     @app.get("/version")
-    async def get_version() -> dict[str, str]:
+    async def get_version() -> dict[str, Any]:
+        identity = resolve_git_identity()
         return {
             "service": "palace-mcp",
             "version": version("palace-mcp"),
-            "git_sha": os.environ.get("PALACE_GIT_SHA", "unknown"),
+            "git_sha": identity.git_sha,
+            "git_sha_source": identity.git_sha_source,
+            "git_sha_label": identity.git_sha_label,
+            "git_dirty": identity.git_dirty,
+            "source_checkout": identity.source_checkout,
         }
 
     return app

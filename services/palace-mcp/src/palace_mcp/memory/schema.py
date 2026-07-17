@@ -72,6 +72,7 @@ class ProjectInfo(BaseModel):
     # GIM-182: parent mount for shared-prefix repo layouts
     parent_mount: str | None = None
     relative_path: str | None = None
+    repo_path: str | None = None
     # GIM-283-1: language profile for audit extractor scoping
     language_profile: str | None = None
     expected_profile: bool = False
@@ -83,6 +84,18 @@ class ProjectInfo(BaseModel):
     last_ingest_finished_at: str | None = None
     indexed_commit: str | None = None
     commits_behind_head: int | None = None
+    # F2/F4 (Sprint-1 reliability): honest freshness/identity metadata.
+    indexed_commit_source: str | None = None
+    indexed_commit_status: str | None = None
+    dominant_symbol_commit: str | None = None
+    stale: bool | None = None
+    freshness_state: str = "unknown"
+    freshness_reason: str | None = None
+    commits_behind_local_tree: int | None = None
+    tree_head: str | None = None
+    origin_checked: bool = False
+    commits_behind_origin: int | None = None
+    identity_check: str = "unchecked"
 
 
 class BridgeHealthInfo(BaseModel):

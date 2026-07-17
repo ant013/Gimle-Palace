@@ -286,6 +286,7 @@ SET p.group_id            = 'project/' + $slug,
     p.repo_url            = $repo_url,
     p.parent_mount        = $parent_mount,
     p.relative_path       = $relative_path,
+    p.repo_path           = coalesce($repo_path, p.repo_path),
     p.language_profile    = coalesce($language_profile, p.language_profile),
     p.expected_profile    = $expected_profile,
     p.source              = 'paperclip',
@@ -369,6 +370,32 @@ LIMIT 1
 # (symbol_node_writer); only some extractors set `commit_sha`. Coalesce both so
 # the indexed commit surfaces for SCIP-indexed projects. Exclude :Deprecated so
 # pruned (stale) nodes from an earlier snapshot don't outvote the live commit.
+# F2 (Sprint-1 reliability): authoritative project-level indexed commit,
+# written at symbol_index_* checkpoint success from the extractor baseline
+# (ingest-time tree HEAD — what symbols were actually stamped with).
+# Monotonic: a resumed/older run never regresses the field.
+SET_PROJECT_INDEXED_COMMIT = """
+MATCH (p:Project {slug: $slug})
+WHERE p.indexed_at IS NULL OR p.indexed_at <= $indexed_at
+SET p.indexed_commit = $indexed_commit,
+    p.indexed_at = $indexed_at,
+    p.indexed_commit_status = 'ok',
+    p.indexed_commit_checked_at = $indexed_at
+RETURN p.indexed_commit AS indexed_commit
+""".strip()
+
+# Writer decline is persisted, not just logged: absence must be
+# payload-diagnosable (legacy-null vs broken-now).
+MARK_PROJECT_INDEXED_COMMIT_UNAVAILABLE = """
+MATCH (p:Project {slug: $slug})
+SET p.indexed_commit_status = 'unavailable',
+    p.indexed_commit_checked_at = $now
+""".strip()
+
+# Dominant per-symbol commit vote. NOT an indexed-commit source: after any
+# incremental ingest the vote is a previous run's sha (unchanged symbols keep
+# old last_seen_in_commit). Survives only as the dominant_symbol_commit
+# diagnostic; no lag math may consume it.
 PROJECT_INDEXED_COMMIT = """
 MATCH (n)
 WHERE n.group_id = $group_id

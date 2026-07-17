@@ -30,6 +30,8 @@ from palace_mcp.extractors.runner import run_extractor
 from palace_mcp.git.command import GitError, GitTimeout, run_git
 from palace_mcp.memory.bundle import add_to_bundle, register_bundle
 from palace_mcp.memory.cypher import (
+    MARK_PROJECT_INDEXED_COMMIT_UNAVAILABLE,
+    SET_PROJECT_INDEXED_COMMIT,
     ACQUIRE_ANALYSIS_LOCK,
     CREATE_CONSTRAINTS,
     CREATE_INDEXES,
@@ -39,7 +41,6 @@ from palace_mcp.memory.cypher import (
     GET_ACTIVE_ANALYSIS_RUN,
     GET_ANALYSIS_RUN_WITH_CHECKPOINTS,
     MARK_ANALYSIS_RUN_RESUMABLE,
-    PROJECT_INDEXED_COMMIT,
     UPDATE_ANALYSIS_RUN_LEASE,
     UPDATE_ANALYSIS_RUN_PROGRESS,
     UPSERT_ANALYSIS_CHECKPOINT,
@@ -361,15 +362,75 @@ async def _count_project_files(driver: AsyncDriver, project_id: str) -> int:
 
 
 async def _read_project_indexed_commit(driver: AsyncDriver, slug: str) -> str | None:
+    """Authoritative project-level indexed commit (:Project.indexed_commit).
+
+    F2 (Sprint-1 reliability): the dominant per-symbol vote is NOT consulted —
+    after any incremental ingest the vote is a previous run's sha, which made
+    incremental-vs-full planning (and overview lag) wrong. Null (legacy,
+    pre-backfill) honestly plans as full.
+    """
     async with driver.session() as session:
         result = await session.run(
-            PROJECT_INDEXED_COMMIT,
-            group_id=f"project/{slug}",
+            "MATCH (p:Project {slug: $slug}) RETURN p.indexed_commit AS commit_sha",
+            slug=slug,
         )
         row = await result.single()
     if row is None or row["commit_sha"] is None:
         return None
     return str(row["commit_sha"]) or None
+
+
+_BASELINE_INDEXED_COMMIT = """
+MATCH (b:ExtractorBaseline {project_id: $project_id, extractor: $extractor})
+RETURN coalesce(b.indexed_commit, b.commit_sha) AS commit
+ORDER BY b.updated_at DESC
+LIMIT 1
+""".strip()
+
+
+async def _record_project_indexed_commit(
+    driver: AsyncDriver, slug: str, extractor: str, *, now_iso: str
+) -> None:
+    """F2 writer: persist the authoritative indexed commit after symbol_index OK.
+
+    Source = the extractor's own baseline (ingest-time tree HEAD — what the
+    symbols were actually stamped with; language-agnostic). Monotonic via
+    indexed_at guard. A decline is PERSISTED (indexed_commit_status =
+    'unavailable'), never just logged: absence must be diagnosable from the
+    payload (legacy-null vs broken-now).
+    """
+    try:
+        async with driver.session() as session:
+            result = await session.run(
+                _BASELINE_INDEXED_COMMIT,
+                project_id=f"project/{slug}",
+                extractor=extractor,
+            )
+            row = await result.single()
+            commit = str(row["commit"]) if row is not None and row["commit"] else None
+            if commit:
+                await session.run(
+                    SET_PROJECT_INDEXED_COMMIT,
+                    slug=slug,
+                    indexed_commit=commit,
+                    indexed_at=now_iso,
+                )
+            else:
+                await session.run(
+                    MARK_PROJECT_INDEXED_COMMIT_UNAVAILABLE,
+                    slug=slug,
+                    now=now_iso,
+                )
+                logger.warning(
+                    "project_analyze.indexed_commit_unavailable",
+                    extra={"project": slug, "extractor": extractor},
+                )
+    except Exception:  # noqa: BLE001 — best-effort metadata; never fail the run
+        logger.warning(
+            "project_analyze.indexed_commit_write_failed",
+            extra={"project": slug, "extractor": extractor},
+            exc_info=True,
+        )
 
 
 async def _resolve_run_mode_plan(
@@ -1421,6 +1482,18 @@ class ProjectAnalysisService:
                     ),
                 ),
             )
+            # F2: symbol_index success is the moment the project's authoritative
+            # indexed commit becomes known — persist it (monotonic, best-effort).
+            if (
+                updated_checkpoint.extractor.startswith("symbol_index_")
+                and attempt.status is AnalysisCheckpointStatus.OK
+            ):
+                await _record_project_indexed_commit(
+                    self._require_driver(),
+                    run.slug,
+                    updated_checkpoint.extractor,
+                    now_iso=_iso(checkpoint_updated_at),
+                )
             if (
                 attempt.status in FAILING_ANALYSIS_CHECKPOINT_STATUSES
                 and not run.continue_on_failure

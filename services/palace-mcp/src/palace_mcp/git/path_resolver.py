@@ -204,3 +204,51 @@ def _node_value(project_node: Any | None, key: str) -> str | None:
         except (KeyError, TypeError):
             value = None
     return value if isinstance(value, str) and value else None
+
+
+def registration_identity_check(
+    slug: str,
+    *,
+    project_node: object | None,
+    repos_root: Path | None = None,
+) -> str:
+    """Cross-check a project's registered repo_path vs its mount layout.
+
+    Returns "ok" | "repo_path_missing" | "path_mismatch" | "unresolved".
+    Both sides are symlink-normalized (.resolve()) — this host mounts repos
+    through symlink aliases, and naive string comparison would false-positive.
+    F3 (Sprint-1 reliability): the hd-wallet-kit defect was repo_path and
+    relative_path silently resolving to two different valid repos.
+    """
+    if repos_root is None:
+        repos_root = REPOS_ROOT
+    repo_path_value = _node_value(project_node, "repo_path")
+    parent_mount = _node_value(project_node, "parent_mount")
+    relative_path = _node_value(project_node, "relative_path")
+
+    tier1: Path | None = None
+    if repo_path_value:
+        candidate = Path(str(repo_path_value))
+        if candidate.is_absolute() and candidate.is_dir():
+            tier1 = candidate.resolve()
+
+    tier2: Path | None = None
+    if (
+        parent_mount
+        and relative_path
+        and _PARENT_MOUNT_RE.match(parent_mount)
+        and _RELATIVE_PATH_RE.match(relative_path)
+        and all(part != ".." for part in relative_path.split("/"))
+    ):
+        mount_root = repos_root.parent / f"{repos_root.name}-{parent_mount}"
+        candidate = mount_root / relative_path
+        if candidate.is_dir():
+            tier2 = candidate.resolve()
+
+    if repo_path_value and tier1 is None:
+        return "repo_path_missing"
+    if tier1 is not None and tier2 is not None:
+        return "ok" if tier1 == tier2 else "path_mismatch"
+    if tier1 is not None or tier2 is not None:
+        return "ok"
+    return "unresolved"

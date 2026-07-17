@@ -43,6 +43,8 @@ import json
 import logging
 import os
 import time
+
+from palace_mcp.runtime_identity import resolve_git_identity
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
@@ -195,9 +197,21 @@ def assert_unique_tool_names(names: list[str]) -> None:
 
 class HealthStatusResponse(BaseModel):
     neo4j: Literal["reachable", "unreachable"]
-    git_sha: str
+    # F5 (Sprint-1 reliability): git_sha is the RESOLVED serving-checkout sha
+    # (None when resolution failed — the env label is git_sha_label, never
+    # presented as a sha).
+    git_sha: str | None
+    git_sha_source: str = "unknown"
+    git_sha_label: str | None = None
+    git_dirty: bool | None = None
+    git_sha_resolved_at: str | None = None
+    git_sha_error: str | None = None
+    source_checkout: str | None = None
     code_loaded_at: str
     uptime_seconds: int
+    # F3: registry identity warnings (repo_path/relative_path mismatches) —
+    # surfaced where MCP consumers actually look, not only in server logs.
+    project_integrity_warnings: list[str] = []
 
 
 class ProjectAnalyzeRequest(BaseModel):
@@ -503,11 +517,28 @@ async def palace_health_status() -> HealthStatusResponse:
             logger.warning("MCP palace.health.status neo4j check failed: %s", exc)
             neo4j_status = "unreachable"
 
+    identity = resolve_git_identity()
+    integrity_warnings: list[str] = []
+    if _driver is not None and neo4j_status == "reachable":
+        try:
+            from palace_mcp.memory.project_tools import project_integrity_warnings
+
+            integrity_warnings = await project_integrity_warnings(_driver)
+        except Exception as exc:  # noqa: BLE001 — health must not fail on sweep
+            logger.warning("project integrity sweep failed: %s", exc)
+            integrity_warnings = [f"integrity_sweep_failed: {str(exc)[:120]}"]
     return HealthStatusResponse(
         neo4j=neo4j_status,
-        git_sha=os.environ.get("PALACE_GIT_SHA", "unknown"),
+        git_sha=identity.git_sha,
+        git_sha_source=identity.git_sha_source,
+        git_sha_label=identity.git_sha_label,
+        git_dirty=identity.git_dirty,
+        git_sha_resolved_at=identity.git_sha_resolved_at,
+        git_sha_error=identity.git_sha_error,
+        source_checkout=identity.source_checkout,
         code_loaded_at=_code_loaded_at,
         uptime_seconds=int(time.monotonic() - _start_time),
+        project_integrity_warnings=integrity_warnings,
     )
 
 
@@ -653,6 +684,7 @@ async def palace_memory_register_project(
     repo_url: str | None = None,
     parent_mount: str | None = None,
     relative_path: str | None = None,
+    repo_path: str | None = None,
     language_profile: str | None = None,
     expected_profile: bool = False,
 ) -> dict[str, Any]:
@@ -671,6 +703,7 @@ async def palace_memory_register_project(
             repo_url=repo_url,
             parent_mount=parent_mount,
             relative_path=relative_path,
+            repo_path=repo_path,
             language_profile=language_profile,
             expected_profile=expected_profile,
         )

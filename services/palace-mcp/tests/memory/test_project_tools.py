@@ -29,6 +29,7 @@ def _make_project_row(
     framework: str | None = None,
     repo_url: str | None = None,
     repo_path: str | None = None,
+    indexed_commit: str | None = None,
     expected_profile: bool = False,
 ) -> dict[str, Any]:
     return {
@@ -41,6 +42,7 @@ def _make_project_row(
             "framework": framework,
             "repo_url": repo_url,
             "repo_path": repo_path,
+            "indexed_commit": indexed_commit,
             "expected_profile": expected_profile,
             "source_created_at": _NOW,
             "source_updated_at": _NOW,
@@ -338,6 +340,7 @@ async def test_get_project_overview_reports_freshness_metadata(
         "Gimle",
         ["infra"],
         repo_path=str(repo_path),
+        indexed_commit=indexed_commit,
     )
     driver = _make_mock_driver_for_overview(
         project_row,
@@ -348,4 +351,42 @@ async def test_get_project_overview_reports_freshness_metadata(
     info = await get_project_overview(driver, slug="gimle")
 
     assert info.indexed_commit == indexed_commit
+    assert info.indexed_commit_source == "project"
     assert info.commits_behind_head == 1
+    assert info.commits_behind_local_tree == 1
+    assert info.stale is True
+    assert info.freshness_state == "behind_local_tree"
+    assert info.origin_checked is False
+    assert info.commits_behind_origin is None
+
+
+@pytest.mark.asyncio
+async def test_overview_dominant_vote_never_feeds_lag(tmp_path: Path) -> None:
+    """F2 regression (GIM-EVM-LAG): a project WITHOUT the authoritative
+    :Project.indexed_commit must report unknown freshness — the dominant
+    per-symbol vote may surface only as dominant_symbol_commit, never as a
+    lag number."""
+    repo_path = tmp_path / "gimle"
+    repo_path.mkdir()
+    _run(["git", "init", "-q", "-b", "main"], cwd=repo_path)
+    _run(["git", "config", "user.email", "t@t"], cwd=repo_path)
+    _run(["git", "config", "user.name", "T"], cwd=repo_path)
+    (repo_path / "Wallet.swift").write_text("struct Wallet {}\n")
+    _run(["git", "add", "."], cwd=repo_path)
+    _run(["git", "commit", "-m", "initial", "-q"], cwd=repo_path)
+    vote_commit = _run_text(["git", "rev-parse", "HEAD"], cwd=repo_path)
+
+    project_row = _make_project_row(
+        "gimle", "Gimle", ["infra"], repo_path=str(repo_path)
+    )
+    driver = _make_mock_driver_for_overview(project_row, [], indexed_commit=vote_commit)
+
+    info = await get_project_overview(driver, slug="gimle")
+
+    assert info.indexed_commit is None
+    assert info.dominant_symbol_commit == vote_commit
+    assert info.commits_behind_head is None
+    assert info.commits_behind_local_tree is None
+    assert info.stale is None
+    assert info.freshness_state == "unknown"
+    assert info.freshness_reason == "indexed_commit_unpopulated_reingest_required"
