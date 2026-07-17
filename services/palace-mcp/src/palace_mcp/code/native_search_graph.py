@@ -230,19 +230,35 @@ def _validated_int(
 ) -> int | None | dict[str, Any]:
     if value is None:
         return None
-    if isinstance(value, bool) or not isinstance(value, int):
+    # The open-schema passthrough forwards additionalProperties as-is, and MCP
+    # transports routinely deliver integer args as their string form ("3"), so
+    # a bare isinstance(int) check rejected every numeric param (limit=3 →
+    # "limit must be an integer"). Coerce int-valued strings the same way the
+    # other native handlers do; still reject bools, floats and non-numeric text.
+    coerced: int
+    if isinstance(value, bool):
         return _error(
             "validation_error",
             f"{field_name} must be an integer",
             project=project,
         )
-    if value < minimum:
+    if isinstance(value, int):
+        coerced = value
+    elif isinstance(value, str) and value.strip().lstrip("-").isdigit():
+        coerced = int(value.strip())
+    else:
+        return _error(
+            "validation_error",
+            f"{field_name} must be an integer",
+            project=project,
+        )
+    if coerced < minimum:
         return _error(
             "validation_error",
             f"{field_name} must be >= {minimum}",
             project=project,
         )
-    return cast(int, value)
+    return coerced
 
 
 async def _rows(session: Any, query: str, **params: Any) -> list[dict[str, Any]]:
