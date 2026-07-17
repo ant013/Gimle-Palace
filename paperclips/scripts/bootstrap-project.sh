@@ -517,13 +517,13 @@ deploy_one() {
 if [ "$CANARY" -eq 1 ]; then
   log info "CANARY mode: 2-stage deploy per spec §8.6"
   # Stage 1: read-only canary
-  canary_1=$(yq -r '.agents[] | select(.profile == "writer" or .profile == "research" or .profile == "qa") | .agent_name' "$manifest" | head -1)
+  canary_1=$(yq -r '[.agents[] | select(.profile == "writer" or .profile == "research" or .profile == "qa") | .agent_name][0] // ""' "$manifest")
   [ -n "$canary_1" ] || canary_1=$(yq -r '.agents[0].agent_name' "$manifest")
   log info "Stage 1 canary: $canary_1"
   deploy_one "$canary_1"
 
   # Stage 2: cto
-  canary_2=$(yq -r '.agents[] | select(.profile == "cto") | .agent_name' "$manifest" | head -1)
+  canary_2=$(yq -r '[.agents[] | select(.profile == "cto") | .agent_name][0] // ""' "$manifest")
   if [ -n "$canary_2" ]; then
     log info "Stage 2 canary: $canary_2"
     deploy_one "$canary_2"
