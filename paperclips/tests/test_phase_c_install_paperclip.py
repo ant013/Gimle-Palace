@@ -44,10 +44,12 @@ def test_disables_heartbeat():
     assert "heartbeat" in text and ("false" in text or "disabled" in text)
 
 
-def test_uses_ignore_scripts_for_pnpm():
+def test_telegram_plugin_uses_its_committed_package_lock_without_scripts():
     """Security: prevent telegram plugin npm install-scripts from executing."""
-    text = SCRIPT.read_text()
-    assert "--ignore-scripts" in text
+    step = _step_5_function()
+    assert "npm ci --ignore-scripts" in step
+    assert "npm run build" in step
+    assert "pnpm install" not in step
 
 
 def test_does_not_install_watchdog_service():
@@ -206,16 +208,16 @@ def test_telegram_plugin_reinstall_runtime_contract(tmp_path):
     (src / "dist").mkdir()
     (src / "dist/worker.js").write_text((src / "worker-src.js").read_text())
 
-    pnpm = fake_bin / "pnpm"
-    pnpm.write_text(
+    npm = fake_bin / "npm"
+    npm.write_text(
         "#!/bin/sh\n"
         "set -eu\n"
-        "if [ \"${1:-}\" = build ]; then\n"
+        "if [ \"${1:-}\" = run ] && [ \"${2:-}\" = build ]; then\n"
         "  mkdir -p dist\n"
         "  cp worker-src.js dist/worker.js\n"
         "fi\n"
     )
-    pnpm.chmod(0o755)
+    npm.chmod(0o755)
 
     curl_log = tmp_path / "curl.log"
     active_path = tmp_path / "active-path"
@@ -292,6 +294,7 @@ step_5_telegram_plugin
         "PAPERCLIP_API_URL": "  http://paperclip.test///  ",
         "TELEGRAM_PLUGIN_REPO": str(remote),
         "TELEGRAM_PLUGIN_REF": new_sha,
+        "TELEGRAM_PLUGIN_BUILD_CMD": "npm ci --ignore-scripts && npm run build",
     }
     non_admin = subprocess.run(
         ["bash", "-c", runner, "telegram-install-test", str(REPO)],

@@ -70,6 +70,11 @@ def test_pnpm_version_pinned_exact():
     assert re.match(r"^\d+\.\d+\.\d+$", v), f"PNPM_VERSION must be exact semver, got {v!r}"
 
 
+def test_telegram_plugin_build_matches_committed_lockfile():
+    text = VENV.read_text()
+    assert 'TELEGRAM_PLUGIN_BUILD_CMD="npm ci --ignore-scripts && npm run build"' in text
+
+
 def test_telegram_plugin_pinned_by_sha():
     text = VENV.read_text()
     import re
