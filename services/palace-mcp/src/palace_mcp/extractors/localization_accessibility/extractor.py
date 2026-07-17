@@ -18,6 +18,10 @@ from palace_mcp.extractors.base import (
     ExtractorRunContext,
     ExtractorStats,
 )
+from palace_mcp.extractors.foundation.walk import (
+    is_repo_relative_path_excluded,
+    project_exclude_globs,
+)
 from palace_mcp.extractors.localization_accessibility import neo4j_writer
 from palace_mcp.extractors.localization_accessibility.parsers.android_strings import (
     parse_android_strings_xml,
@@ -96,10 +100,21 @@ class LocalizationAccessibilityExtractor(BaseExtractor):
         graphiti: object,
         ctx: ExtractorRunContext,
     ) -> ExtractorStats:
+        from palace_mcp.mcp_server import get_settings
+
         driver = graphiti.driver  # type: ignore[attr-defined]
+        settings = get_settings()
+        exclude_globs = (
+            project_exclude_globs(settings, ctx.project_slug)
+            if settings is not None
+            else frozenset()
+        )
 
         # --- Locale resource parsing ---
-        raw_resources = _collect_locale_resources(ctx.repo_path)
+        raw_resources = _collect_locale_resources(
+            ctx.repo_path,
+            exclude_globs=exclude_globs,
+        )
         locale_coverages = compute_coverage(raw_resources, base_locale="en")
 
         logger.info(
@@ -119,6 +134,7 @@ class LocalizationAccessibilityExtractor(BaseExtractor):
                 rules_dir=_RULES_DIR,
                 target=ctx.repo_path,
                 timeout_s=180,
+                exclude_globs=exclude_globs,
             )
             all_findings = normalise_findings(raw, repo_root=ctx.repo_path)
             if allowlist:
@@ -186,11 +202,17 @@ class LocalizationAccessibilityExtractor(BaseExtractor):
 # ---------------------------------------------------------------------------
 
 
-def _collect_locale_resources(repo_root: Path) -> list[LocaleResource]:
+def _collect_locale_resources(
+    repo_root: Path,
+    *,
+    exclude_globs: frozenset[str] = frozenset(),
+) -> list[LocaleResource]:
     resources: list[LocaleResource] = []
 
     # iOS .xcstrings (Xcode 15+)
-    for path in sorted(repo_root.rglob("*.xcstrings")):
+    for path in sorted(
+        _iter_unexcluded_matches(repo_root, "*.xcstrings", exclude_globs)
+    ):
         try:
             catalog = json.loads(path.read_text(encoding="utf-8"))
             rel = path.relative_to(repo_root).as_posix()
@@ -199,7 +221,9 @@ def _collect_locale_resources(repo_root: Path) -> list[LocaleResource]:
             logger.debug("localization_accessibility: skipping xcstrings %s", path)
 
     # iOS legacy Localizable.strings (per-locale .lproj dirs)
-    for path in sorted(repo_root.rglob("Localizable.strings")):
+    for path in sorted(
+        _iter_unexcluded_matches(repo_root, "Localizable.strings", exclude_globs)
+    ):
         locale = _locale_from_lproj(path)
         if locale is None:
             continue
@@ -213,7 +237,9 @@ def _collect_locale_resources(repo_root: Path) -> list[LocaleResource]:
             logger.debug("localization_accessibility: skipping strings %s", path)
 
     # Android strings.xml per locale directory
-    for path in sorted(repo_root.rglob("strings.xml")):
+    for path in sorted(
+        _iter_unexcluded_matches(repo_root, "strings.xml", exclude_globs)
+    ):
         # must be under res/values or res/values-XX
         parts = path.parts
         if "res" not in parts:
@@ -236,6 +262,22 @@ def _collect_locale_resources(repo_root: Path) -> list[LocaleResource]:
             logger.debug("localization_accessibility: skipping strings.xml %s", path)
 
     return resources
+
+
+def _iter_unexcluded_matches(
+    repo_root: Path,
+    pattern: str,
+    exclude_globs: frozenset[str],
+) -> list[Path]:
+    paths: list[Path] = []
+    for path in repo_root.rglob(pattern):
+        if exclude_globs and is_repo_relative_path_excluded(
+            path.relative_to(repo_root),
+            exclude_globs=exclude_globs,
+        ):
+            continue
+        paths.append(path)
+    return paths
 
 
 def _locale_from_lproj(path: Path) -> str | None:

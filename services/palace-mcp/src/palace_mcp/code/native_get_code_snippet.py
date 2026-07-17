@@ -8,6 +8,12 @@ from typing import Any
 
 from palace_mcp.code.native_detect_changes import FALLBACK_TO_CM
 from palace_mcp.code.snippet_provider import inspect_freshness, resolve_snippet
+from palace_mcp.code.snippet_scope import (
+    TYPE_FILES_QUERY,
+    build_documents,
+    order_type_files,
+    plan_type_scope,
+)
 from palace_mcp.code.snippet_short_name import (
     snippet_short_name,
     snippet_short_name_candidates,
@@ -38,6 +44,7 @@ RETURN s.qualified_name AS qualified_name,
        coalesce(s.kind, '') AS kind,
        coalesce(s.label, '') AS label,
        coalesce(s.commit_sha, s.last_seen_in_commit) AS commit_sha,
+       coalesce(s.module_name, '') AS module_name,
        s.line_start AS line_start,
        s.line_end AS line_end
 ORDER BY CASE WHEN s.qualified_name = $qualified_name THEN 0 ELSE 1 END,
@@ -79,22 +86,26 @@ def _error(
     indexed_commit: str | None = None,
     commits_behind_head: int | None = None,
     stale: bool | None = None,
+    freshness_state: str = "unknown",
+    freshness_reason: str | None = "not_evaluated",
 ) -> dict[str, Any]:
+    # Freshness fields are emitted UNCONDITIONALLY (nullable): omitting them
+    # on unknown would let `payload.get("stale", False)` read unknown as
+    # fresh — the exact silent-assurance defect this contract kills.
     result: dict[str, Any] = {
         "ok": False,
         "error_code": code,
         "message": message,
         "project": project,
         "requested_qualified_name": requested_qualified_name,
+        "indexed_commit": indexed_commit,
+        "commits_behind_head": commits_behind_head,
+        "stale": stale,
+        "freshness_state": freshness_state,
+        "freshness_reason": freshness_reason,
     }
     if resolved_qualified_name is not None:
         result["qualified_name"] = resolved_qualified_name
-    if indexed_commit is not None:
-        result["indexed_commit"] = indexed_commit
-    if commits_behind_head is not None:
-        result["commits_behind_head"] = commits_behind_head
-    if stale is not None:
-        result["stale"] = stale
     return result
 
 
@@ -180,10 +191,123 @@ async def _resolve_repo_path(project: str) -> Path | None:
         return None
 
 
+async def _scope_response(
+    *,
+    project: str,
+    scope: str,
+    effective_scope: str,
+    plan: Any,
+    symbol_row: dict[str, Any],
+    file_path: str,
+    type_files_rows: list[dict[str, Any]],
+    requested_qualified_name: str,
+    include_deprecated: bool,
+) -> dict[str, Any] | object:
+    """Assemble a scope=file|type response: whole-file docs + honest rollup."""
+    repo_path = await _resolve_repo_path(project)
+    commit_sha = str(symbol_row.get("commit_sha") or "") or None
+    freshness = await asyncio.to_thread(inspect_freshness, repo_path, commit_sha)
+
+    deprecated_suppressed = 0
+    if effective_scope == "type":
+        files = [
+            str(r.get("file_path") or "") for r in type_files_rows if r.get("file_path")
+        ]
+        if not include_deprecated:
+            deprecated_suppressed = sum(
+                int(r.get("dep_count") or 0) for r in type_files_rows
+            )
+        if file_path and file_path not in files:
+            files.append(file_path)
+        file_roles = order_type_files(file_path, files)
+    else:
+        file_roles = [(file_path, "file")]
+
+    docs, rollup = await asyncio.to_thread(
+        build_documents,
+        file_roles,
+        project=project,
+        repo_path=repo_path,
+        commit_sha=commit_sha,
+        freshness=freshness,
+    )
+
+    # File scope with a single unreadable doc that maps to a CM-fallback code
+    # mirrors the symbol path's FALLBACK_TO_CM behaviour.
+    if (
+        effective_scope == "file"
+        and len(docs) == 1
+        and docs[0].error_code in _CM_FALLBACK_CODES
+    ):
+        return FALLBACK_TO_CM
+
+    complete = (
+        rollup["documents_failed"] == 0
+        and rollup["documents_truncated"] == 0
+        and not rollup["dropped_files"]
+    )
+    if effective_scope == "type":
+        quality = "whole_type" if complete else "whole_type_partial"
+        completeness_note = (
+            "moniker-prefix grouping; extensions with divergent monikers or "
+            "off-disk files may be absent"
+        )
+        type_completeness = "best_effort"
+    else:
+        quality = "whole_file"
+        completeness_note = None
+        type_completeness = "verified"
+
+    first = docs[0]
+    resolved_qn = str(symbol_row.get("qualified_name") or requested_qualified_name)
+    resp: dict[str, Any] = {
+        "qualified_name": resolved_qn,
+        "requested_qualified_name": requested_qualified_name,
+        "project": project,
+        "file_path": first.file_path,
+        "short_name": canonical_symbol_short_name(
+            resolved_qn, short_name=str(symbol_row.get("short_name") or "")
+        ),
+        "kind": canonical_symbol_kind(str(symbol_row.get("kind") or "")),
+        "label": canonical_symbol_label(
+            str(symbol_row.get("label") or symbol_row.get("kind") or "")
+        ),
+        "language": first.language,
+        "requested_scope": scope,
+        "effective_scope": effective_scope,
+        "scope_downgraded": bool(plan.scope_downgraded) if plan else False,
+        "downgrade_reason": plan.downgrade_reason if plan else None,
+        "snippet_quality": quality,
+        "complete": complete,
+        "type_completeness": type_completeness,
+        "completeness_note": completeness_note,
+        "documents_total": rollup["documents_total"],
+        "documents_failed": rollup["documents_failed"],
+        "documents_truncated": rollup["documents_truncated"],
+        "dropped_files": rollup["dropped_files"],
+        "deprecated_extensions_suppressed": deprecated_suppressed,
+        "stale": freshness.stale,
+        "freshness_state": freshness.freshness_state,
+        "freshness_reason": freshness.freshness_reason,
+        "indexed_commit": freshness.indexed_commit,
+        "commits_behind_head": freshness.commits_behind_head,
+        "documents": [d.as_dict() for d in docs],
+    }
+    # Legacy top-level source only for a single-file result (top-level == the one
+    # doc, so no "read declaration, miss extensions" footgun).
+    if len(docs) == 1 and first.source is not None:
+        resp["source"] = first.source
+        resp["start_line"] = first.start_line
+        resp["end_line"] = first.end_line
+        resp["truncated"] = first.truncated
+    return resp
+
+
 async def native_get_code_snippet(
     qualified_name: str,
     project: str | None = None,
     include_deprecated: bool = False,
+    scope: str = "symbol",
     **_: Any,
 ) -> dict[str, Any] | object:
     if project is None:
@@ -193,6 +317,13 @@ async def native_get_code_snippet(
         return _error(
             "validation_error",
             "qualified_name is required",
+            project=project,
+            requested_qualified_name=qualified_name,
+        )
+    if scope not in ("symbol", "file", "type"):
+        return _error(
+            "validation_error",
+            f"scope must be one of symbol|file|type (got {scope!r})",
             project=project,
             requested_qualified_name=qualified_name,
         )
@@ -239,16 +370,53 @@ async def native_get_code_snippet(
             symbol_row = symbol_rows[0]
 
         file_path = str(symbol_row.get("file_path") or "")
-        function_rows = await _collect_rows(
-            await session.run(
-                _LOOKUP_FUNCTION,
-                {
-                    "project_id": f"project/{project}",
-                    "file_path": file_path,
-                    "qualified_name": str(symbol_row["qualified_name"]),
-                    "short_names": short_names,
-                },
+
+        plan = None
+        effective_scope = "file"
+        type_files_rows: list[dict[str, Any]] = []
+        function_rows: list[dict[str, Any]] = []
+
+        if scope == "symbol":
+            function_rows = await _collect_rows(
+                await session.run(
+                    _LOOKUP_FUNCTION,
+                    {
+                        "project_id": f"project/{project}",
+                        "file_path": file_path,
+                        "qualified_name": str(symbol_row["qualified_name"]),
+                        "short_names": short_names,
+                    },
+                )
             )
+        elif scope == "type":
+            plan = plan_type_scope(
+                canonical_symbol_kind(str(symbol_row.get("kind") or "")),
+                file_path,
+            )
+            effective_scope = plan.effective_scope
+            if effective_scope == "type":
+                type_files_rows = await _collect_rows(
+                    await session.run(
+                        TYPE_FILES_QUERY,
+                        {
+                            "group_id": f"project/{project}",
+                            "module_name": str(symbol_row.get("module_name") or ""),
+                            "type_qn": str(symbol_row.get("qualified_name") or ""),
+                        },
+                    )
+                )
+
+    if scope != "symbol":
+        return await _scope_response(
+            project=project,
+            scope=scope,
+            effective_scope=effective_scope,
+            plan=plan,
+            symbol_row=symbol_row,
+            file_path=file_path,
+            type_files_rows=type_files_rows,
+            requested_qualified_name=qualified_name,
+            include_deprecated=include_deprecated,
         )
 
     snippet_quality = "file_head"
@@ -291,6 +459,8 @@ async def native_get_code_snippet(
             indexed_commit=freshness.indexed_commit,
             commits_behind_head=freshness.commits_behind_head,
             stale=freshness.stale,
+            freshness_state=freshness.freshness_state,
+            freshness_reason=freshness.freshness_reason,
         )
 
     return {
@@ -312,6 +482,8 @@ async def native_get_code_snippet(
         "language": snippet.language,
         "truncated": snippet.truncated,
         "stale": freshness.stale,
+        "freshness_state": freshness.freshness_state,
+        "freshness_reason": freshness.freshness_reason,
         "indexed_commit": freshness.indexed_commit,
         "commits_behind_head": freshness.commits_behind_head,
         "snippet_quality": snippet_quality,

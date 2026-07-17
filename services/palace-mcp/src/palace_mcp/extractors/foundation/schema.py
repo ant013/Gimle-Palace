@@ -130,6 +130,17 @@ EXPECTED_SCHEMA = SchemaDefinition(
             properties=("qualified_name", "group_id"),
             type="UNIQUE",
         ),
+        ConstraintSpec(
+            name="shadow_symbol_unique",
+            label="SymbolOccurrenceShadow",
+            properties=("group_id", "symbol_qualified_name", "symbol_id"),
+            type="UNIQUE",
+        ),
+        ConstraintSpec(
+            name="extractor_baseline_unique",
+            label="ExtractorBaseline",
+            properties=("project_id", "extractor", "baseline_kind"),
+        ),
     ],
     indexes=[
         IndexSpec(

@@ -30,6 +30,8 @@ from palace_mcp.extractors.runner import run_extractor
 from palace_mcp.git.command import GitError, GitTimeout, run_git
 from palace_mcp.memory.bundle import add_to_bundle, register_bundle
 from palace_mcp.memory.cypher import (
+    MARK_PROJECT_INDEXED_COMMIT_UNAVAILABLE,
+    SET_PROJECT_INDEXED_COMMIT,
     ACQUIRE_ANALYSIS_LOCK,
     CREATE_CONSTRAINTS,
     CREATE_INDEXES,
@@ -39,7 +41,6 @@ from palace_mcp.memory.cypher import (
     GET_ACTIVE_ANALYSIS_RUN,
     GET_ANALYSIS_RUN_WITH_CHECKPOINTS,
     MARK_ANALYSIS_RUN_RESUMABLE,
-    PROJECT_INDEXED_COMMIT,
     UPDATE_ANALYSIS_RUN_LEASE,
     UPDATE_ANALYSIS_RUN_PROGRESS,
     UPSERT_ANALYSIS_CHECKPOINT,
@@ -342,11 +343,16 @@ async def _read_project_head_sha(driver: AsyncDriver, slug: str) -> str | None:
             run_git,
             ["rev-parse", "HEAD"],
             repo_path=repo_path,
-            max_stdout_lines=4,
+            # Cap must exceed the expected 1 line: run_git flags truncated
+            # whenever output EXACTLY fills the cap (cap reached = producer
+            # killed), so cap=1 marked every valid single-line sha truncated
+            # and silently degraded incremental analyzes to full
+            # (effective_mode_reason=repo_head_unavailable).
+            max_stdout_lines=2,
         )
     except (GitError, GitTimeout):
         return None
-    if result.rc != 0:
+    if result.rc != 0 or result.truncated:
         return None
     return result.stdout.strip() or None
 
@@ -363,15 +369,75 @@ async def _count_project_files(driver: AsyncDriver, project_id: str) -> int:
 
 
 async def _read_project_indexed_commit(driver: AsyncDriver, slug: str) -> str | None:
+    """Authoritative project-level indexed commit (:Project.indexed_commit).
+
+    F2 (Sprint-1 reliability): the dominant per-symbol vote is NOT consulted —
+    after any incremental ingest the vote is a previous run's sha, which made
+    incremental-vs-full planning (and overview lag) wrong. Null (legacy,
+    pre-backfill) honestly plans as full.
+    """
     async with driver.session() as session:
         result = await session.run(
-            PROJECT_INDEXED_COMMIT,
-            group_id=f"project/{slug}",
+            "MATCH (p:Project {slug: $slug}) RETURN p.indexed_commit AS commit_sha",
+            slug=slug,
         )
         row = await result.single()
     if row is None or row["commit_sha"] is None:
         return None
     return str(row["commit_sha"]) or None
+
+
+_BASELINE_INDEXED_COMMIT = """
+MATCH (b:ExtractorBaseline {project_id: $project_id, extractor: $extractor})
+RETURN coalesce(b.indexed_commit, b.commit_sha) AS commit
+ORDER BY b.updated_at DESC
+LIMIT 1
+""".strip()
+
+
+async def _record_project_indexed_commit(
+    driver: AsyncDriver, slug: str, extractor: str, *, now_iso: str
+) -> None:
+    """F2 writer: persist the authoritative indexed commit after symbol_index OK.
+
+    Source = the extractor's own baseline (ingest-time tree HEAD — what the
+    symbols were actually stamped with; language-agnostic). Monotonic via
+    indexed_at guard. A decline is PERSISTED (indexed_commit_status =
+    'unavailable'), never just logged: absence must be diagnosable from the
+    payload (legacy-null vs broken-now).
+    """
+    try:
+        async with driver.session() as session:
+            result = await session.run(
+                _BASELINE_INDEXED_COMMIT,
+                project_id=f"project/{slug}",
+                extractor=extractor,
+            )
+            row = await result.single()
+            commit = str(row["commit"]) if row is not None and row["commit"] else None
+            if commit:
+                await session.run(
+                    SET_PROJECT_INDEXED_COMMIT,
+                    slug=slug,
+                    indexed_commit=commit,
+                    indexed_at=now_iso,
+                )
+            else:
+                await session.run(
+                    MARK_PROJECT_INDEXED_COMMIT_UNAVAILABLE,
+                    slug=slug,
+                    now=now_iso,
+                )
+                logger.warning(
+                    "project_analyze.indexed_commit_unavailable",
+                    extra={"project": slug, "extractor": extractor},
+                )
+    except Exception:  # noqa: BLE001 — best-effort metadata; never fail the run
+        logger.warning(
+            "project_analyze.indexed_commit_write_failed",
+            extra={"project": slug, "extractor": extractor},
+            exc_info=True,
+        )
 
 
 async def _resolve_run_mode_plan(
@@ -1423,6 +1489,18 @@ class ProjectAnalysisService:
                     ),
                 ),
             )
+            # F2: symbol_index success is the moment the project's authoritative
+            # indexed commit becomes known — persist it (monotonic, best-effort).
+            if (
+                updated_checkpoint.extractor.startswith("symbol_index_")
+                and attempt.status is AnalysisCheckpointStatus.OK
+            ):
+                await _record_project_indexed_commit(
+                    self._require_driver(),
+                    run.slug,
+                    updated_checkpoint.extractor,
+                    now_iso=_iso(checkpoint_updated_at),
+                )
             if (
                 attempt.status in FAILING_ANALYSIS_CHECKPOINT_STATUSES
                 and not run.continue_on_failure
@@ -1548,7 +1626,7 @@ class ProjectAnalysisService:
             run: AnalysisRun,
         ) -> ExtractorAttemptResult:
             companion_run_id: str | None = None
-            if extractor_name == "prune_swift_symbols":
+            if extractor_name in {"prune_swift_symbols", "dead_code"}:
                 symbol_index_checkpoint = next(
                     (
                         checkpoint
@@ -1557,16 +1635,17 @@ class ProjectAnalysisService:
                     ),
                     None,
                 )
-                if (
-                    symbol_index_checkpoint is None
-                    or symbol_index_checkpoint.status
-                    not in {
+                checkpoint_valid = (
+                    symbol_index_checkpoint is not None
+                    and symbol_index_checkpoint.status
+                    in {
                         AnalysisCheckpointStatus.OK,
                         AnalysisCheckpointStatus.SKIPPED,
                     }
-                    or symbol_index_checkpoint.error_code is not None
-                    or symbol_index_checkpoint.ingest_run_id is None
-                ):
+                    and symbol_index_checkpoint.error_code is None
+                    and symbol_index_checkpoint.ingest_run_id is not None
+                )
+                if extractor_name == "prune_swift_symbols" and not checkpoint_valid:
                     logger.warning(
                         "project_analyze.prune_skipped",
                         extra={
@@ -1597,7 +1676,9 @@ class ProjectAnalysisService:
                             "Rerun symbol_index_swift successfully before prune_swift_symbols."
                         ),
                     )
-                companion_run_id = symbol_index_checkpoint.ingest_run_id
+                if checkpoint_valid:
+                    assert symbol_index_checkpoint is not None
+                    companion_run_id = symbol_index_checkpoint.ingest_run_id
             response = await run_extractor(
                 driver=driver,
                 graphiti=graphiti,

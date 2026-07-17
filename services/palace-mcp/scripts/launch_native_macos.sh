@@ -9,7 +9,7 @@
 #   - .env file at /Users/ant013/Android/Gimle-Palace-native/.env with at
 #     minimum: NEO4J_URI, NEO4J_PASSWORD, OPENAI_API_KEY (dummy ok for qodo),
 #     PALACE_REPOS_ROOT, PALACE_HF_CACHE_DIR
-#   - Symlink /Users/$USER/Ios-hs -> /Users/$USER/Ios/HorizontalSystems
+#   - Clean iOS repo copies under /Users/Shared/Ios/Gimle-Repos/HorizontalSystems
 #   - Local Neo4j (brew services start neo4j) listening on bolt://localhost:7687
 #   - Apple Silicon Mac with PyTorch MPS support
 #

@@ -12,6 +12,8 @@ not just hand-crafted SymbolGraph fixtures.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from palace_mcp.extractors.dead_code.graph_loader import (
     _LOAD_EDGES,
     _LOAD_SYMBOLS,
@@ -24,13 +26,15 @@ from palace_mcp.extractors.dead_code.reachability import (
 )
 from palace_mcp.extractors.dead_code.seeds import compute_all_seeds
 from palace_mcp.extractors.foundation.symbol_node_writer import build_symbol_node_rows
-from palace_mcp.extractors.scip_parser import iter_scip_symbol_infos
+from palace_mcp.extractors.scip_parser import ScipSymbolInfo, iter_scip_symbol_infos
 from tests.extractors.fixtures.scip_factory import (
     build_swift_scip_index_with_symbol_infos,
 )
 
 
-def _build_graph_from_scip(group_id: str) -> SymbolGraph:
+def _build_graph_from_scip(
+    group_id: str, *, symbol_infos_override: list[ScipSymbolInfo] | None = None
+) -> SymbolGraph:
     """Round-trip: SCIP → ScipSymbolInfo → node rows → SymbolGraph."""
     scip_index = build_swift_scip_index_with_symbol_infos()
 
@@ -43,7 +47,11 @@ def _build_graph_from_scip(group_id: str) -> SymbolGraph:
         if occ.kind in (SymbolKind.DEF, SymbolKind.DECL):
             def_file_paths.setdefault(occ.symbol_qualified_name, occ.file_path)
 
-    symbol_infos = list(iter_scip_symbol_infos(scip_index))
+    symbol_infos = (
+        list(symbol_infos_override)
+        if symbol_infos_override is not None
+        else list(iter_scip_symbol_infos(scip_index))
+    )
 
     # This is the contract: build_symbol_node_rows must return rows that
     # _row_to_symbol (used by dead_code.graph_loader) can parse.
@@ -104,10 +112,32 @@ class TestDeadCodeSwiftContract:
             assert "kind" in row
             assert "file_path" in row
             assert "module_name" in row
+            assert "access_modifier" in row
             # _row_to_symbol must not raise
             sym = _row_to_symbol(row)
             assert sym.qualified_name == row["qualified_name"]
             assert sym.kind == row["kind"]
+
+    def test_public_access_modifier_becomes_seed(self) -> None:
+        scip_index = build_swift_scip_index_with_symbol_infos()
+        symbol_infos = list(iter_scip_symbol_infos(scip_index))
+        public_qname = symbol_infos[0].qualified_name
+        graph = _build_graph_from_scip(
+            "project/uw-mini",
+            symbol_infos_override=[
+                replace(
+                    si,
+                    access_modifier="public"
+                    if si.qualified_name == public_qname
+                    else "",
+                )
+                for si in symbol_infos
+            ],
+        )
+
+        seeds = compute_all_seeds(graph)
+
+        assert public_qname in seeds
 
     def test_dead_code_produces_findings_from_scip_symbol_infos(self) -> None:
         """dead_code must produce ≥1 DeadFinding when consuming SCIP-sourced :Symbol data.

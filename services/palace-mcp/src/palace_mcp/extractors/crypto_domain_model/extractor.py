@@ -23,6 +23,7 @@ from palace_mcp.extractors.foundation.incremental_scope import (
     derive_incremental_path_scope,
 )
 from palace_mcp.extractors.foundation.semgrep_runner import run_semgrep
+from palace_mcp.extractors.foundation.walk import project_exclude_globs
 
 if TYPE_CHECKING:
     from palace_mcp.audit.contracts import AuditContract, Severity
@@ -173,6 +174,7 @@ class CryptoDomainModelExtractor(BaseExtractor):
             suffixes=frozenset({".swift"}),
             batch_size=_SEMGREP_BATCH_SIZE,
             timeout_s=timeout_s,
+            exclude_globs=project_exclude_globs(settings, ctx.project_slug),
         )
 
         # Deduplicate: coalesce per (file, start_line, end_line, kind), keep

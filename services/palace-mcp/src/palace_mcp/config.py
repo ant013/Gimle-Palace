@@ -86,6 +86,15 @@ class Settings(BaseSettings):
             "only a subset of files changed."
         ),
     )
+    palace_incremental_deadcode_full_threshold: float = Field(
+        default=0.2,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Fallback dead_code incremental runs to full when the affected "
+            "frontier exceeds this fraction of total symbols."
+        ),
+    )
 
     # SCIP integration (101a decides pathing; 101b does the actual parse)
     palace_scip_index_paths: Annotated[dict[str, str], NoDecode] = Field(
@@ -352,6 +361,15 @@ class Settings(BaseSettings):
             "re-ingest stale-file checks."
         ),
     )
+    palace_project_exclude_globs: Annotated[dict[str, list[str]], NoDecode] = Field(
+        default_factory=lambda: {"stable-wallet-ios": ["unstoppable/**"]},
+        description=(
+            "JSON-encoded dict mapping project slug to repo-relative exclude globs. "
+            "Patterns are anchored at the project repo root; for example "
+            "'unstoppable/**' excludes stable-wallet-ios/unstoppable/... but not "
+            "the separate unstoppable-wallet-ios project."
+        ),
+    )
 
     @field_validator("palace_periodic_reingest_ignore_globs", mode="before")
     @classmethod
@@ -366,4 +384,17 @@ class Settings(BaseSettings):
             except json.JSONDecodeError:
                 return [part.strip() for part in value.split(",") if part.strip()]
             return cast(object, parsed)
+        return value
+
+    @field_validator("palace_project_exclude_globs", mode="before")
+    @classmethod
+    def parse_project_exclude_globs(
+        cls, value: object
+    ) -> dict[str, list[str]] | object:
+        if value is None:
+            return {}
+        if isinstance(value, str):
+            if value.strip() == "":
+                return {}
+            return cast(object, json.loads(value))
         return value
