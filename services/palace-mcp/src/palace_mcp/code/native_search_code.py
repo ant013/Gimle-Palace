@@ -84,12 +84,18 @@ async def native_search_code(
 
     try:
         repo_path = await _resolve_repo_path(project)
-    except (InvalidSlug, ProjectNotRegistered):
-        return _error(
-            "project_not_registered",
-            f"no resolvable on-disk repo for project {project!r}",
-            project=project,
+    except InvalidSlug:
+        return _error("invalid_slug", f"invalid slug: {project!r}", project=project)
+    except ProjectNotRegistered:
+        # Unlike detect_changes (which needs git), CM can still answer from its own
+        # index without an on-disk repo — degrade to the passthrough instead of
+        # erroring, so repo-less projects keep working. Logged: a project that
+        # should have a repo_path but resolves to none is a misconfiguration.
+        logger.warning(
+            "native_search_code: no resolvable repo for %r, falling back to CM",
+            project,
         )
+        return FALLBACK_TO_CM
     except Exception as exc:  # pragma: no cover - defensive
         logger.warning("native_search_code resolve failed: %s", exc)
         return _error("resolve_failed", str(exc), project=project)

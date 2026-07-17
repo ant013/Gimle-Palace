@@ -20,6 +20,7 @@ from palace_mcp.memory.cypher import (
     ENTITY_COUNTS_BY_PROJECT,
     LATEST_INGEST_RUN,
     LIST_PROJECT_SLUGS,
+    LIST_PROJECTS,
 )
 from palace_mcp.memory.schema import BridgeHealthInfo, HealthResponse
 
@@ -73,7 +74,11 @@ async def get_health(driver: AsyncDriver, *, default_group_id: str) -> HealthRes
     async def _read(
         tx: AsyncManagedTransaction,
     ) -> tuple[
-        dict[str, int], dict[str, Any] | None, list[str], dict[str, dict[str, int]]
+        dict[str, int],
+        dict[str, Any] | None,
+        list[str],
+        dict[str, dict[str, int]],
+        list[Any],
     ]:
         counts_result = await tx.run(ENTITY_COUNTS)
         counts: dict[str, int] = {}
@@ -100,20 +105,26 @@ async def get_health(driver: AsyncDriver, *, default_group_id: str) -> HealthRes
                 per_project[slug] = {}
             per_project[slug][etype] = cnt
 
-        return counts, ingest_data, slugs, per_project
+        # Full :Project nodes (not just slugs) — repo_path is needed to resolve
+        # each project to its on-disk repo for git_repos_available below.
+        projects_result = await tx.run(LIST_PROJECTS)
+        project_nodes: list[Any] = [row["p"] async for row in projects_result]
+
+        return counts, ingest_data, slugs, per_project, project_nodes
 
     async with driver.session() as session:
-        entity_counts, ingest, slugs, per_project = await session.execute_read(_read)
+        (
+            entity_counts,
+            ingest,
+            slugs,
+            per_project,
+            project_rows,
+        ) = await session.execute_read(_read)
 
     # git_repos_available = registered projects whose repo resolves to a real git
     # repo (native: via repo_path on the :Project node) — i.e. usable by palace.git.*.
     # NOT a flat REPOS_ROOT scan (which missed hs-mount projects on native).
     from palace_mcp.git.path_resolver import resolve_registered_project
-    from palace_mcp.memory.cypher import LIST_PROJECTS
-
-    async with driver.session() as proj_session:
-        proj_result = await proj_session.run(LIST_PROJECTS)
-        project_rows: list[Any] = [row["p"] async for row in proj_result]
 
     git_available_set: set[str] = set()
     for node in project_rows:

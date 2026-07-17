@@ -32,8 +32,9 @@ EXPECTED_NATIVE_TOOLS = [
     "palace.code.detect_changes",
     "palace.code.get_architecture",
     "palace.code.get_code_snippet",
+    "palace.code.search_code",
 ]
-EXPECTED_CM_ONLY_TOOLS = ["palace.code.search_code"]
+EXPECTED_CM_ONLY_TOOLS: list[str] = []
 EXPECTED_INCLUDE_DEPRECATED_TOOLS = [
     "palace.code.search_graph",
     "palace.code.get_code_snippet",
