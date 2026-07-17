@@ -73,10 +73,13 @@ smoke_exit() {
 trap smoke_exit EXIT
 
 stage_1_api_reachable() {
-  log info "[1/7] paperclip API reachable + JWT valid"
-  email=$(paperclip_get "/api/agents/me" | jq -r '.email // .user.email')
-  [ -n "$email" ] && [ "$email" != "null" ] || die "API returned no email"
-  log ok "  logged in as $email"
+  log info "[1/7] paperclip API reachable + board credential valid"
+  identity=$(paperclip_get "/api/cli-auth/me")
+  email=$(echo "$identity" | jq -r '.user.email // ""')
+  auth_source=$(echo "$identity" | jq -r '.source // ""')
+  [ -n "$email" ] && [ "$email" != "null" ] || die "API returned no board user email"
+  [ "$auth_source" = "board_key" ] || die "PAPERCLIP_API_KEY was not authenticated as a board API key (source=$auth_source)"
+  log ok "  board operator authenticated as $email (source=$auth_source)"
 }
 
 stage_2_company_and_agents() {
