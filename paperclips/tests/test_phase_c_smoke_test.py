@@ -25,6 +25,16 @@ def test_has_7_stages():
         assert stage in text, f"missing stage marker: {stage}"
 
 
+def test_stage_1_validates_board_operator_credential():
+    text = SCRIPT.read_text()
+    stage = text[text.index("stage_1_api_reachable()") : text.index("stage_2_company_and_agents()")]
+
+    assert 'paperclip_get "/api/cli-auth/me"' in stage
+    assert 'paperclip_get "/api/agents/me"' not in stage
+    assert ".user.email" in stage
+    assert ".source" in stage
+
+
 def test_uses_smoke_probes_library():
     text = SCRIPT.read_text()
     assert "_smoke_probes.sh" in text
