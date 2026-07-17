@@ -77,7 +77,8 @@ def test_valid_snippet_returns_content(repo: Path, repos_root: Path) -> None:
     assert result.line_count == 4
     assert result.language == "swift"
     assert result.truncated is False
-    assert result.stale is False
+    assert result.stale is None
+    assert result.freshness_state == "unknown"
 
 
 def test_no_line_range_returns_full_file(repo: Path, repos_root: Path) -> None:
@@ -306,6 +307,8 @@ def test_not_stale_when_no_commit_sha(repo: Path, repos_root: Path) -> None:
     )
     assert code is None
     assert result is not None
-    assert result.stale is False
+    assert result.stale is None
+    assert result.freshness_state == "unknown"
+    assert result.freshness_reason == "no_indexed_commit"
     assert result.indexed_commit is None
     assert result.commits_behind_head is None

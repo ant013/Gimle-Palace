@@ -792,9 +792,15 @@ async def _load_snippet_context(
             "start_line": snippet.start_line,
             "end_line": snippet.end_line,
             "source": snippet.source,
+            "freshness_state": snippet.freshness_state,
+            "freshness_reason": snippet.freshness_reason,
         }
-        if snippet.stale:
+        # Tri-state: only POSITIVE staleness marks stale_source; unknown
+        # freshness is surfaced explicitly, never silently treated as fresh.
+        if snippet.stale is True:
             result["status"] = "stale_source"
+        elif snippet.stale is None:
+            result["status"] = "freshness_unknown"
         return result, None, None
 
     # Fallback: codebase-memory MCP session (e.g. when project not mounted).

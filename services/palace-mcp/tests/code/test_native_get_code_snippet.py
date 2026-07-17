@@ -398,7 +398,8 @@ async def test_get_code_snippet_returns_canonical_struct_identity(
     assert result["label"] == "Struct"
     assert result["indexed_commit"] == "abc"
     assert result["commits_behind_head"] is None
-    assert result["stale"] is False
+    assert result["stale"] is None
+    assert result["freshness_state"] == "unknown"
 
 
 @pytest.mark.asyncio
