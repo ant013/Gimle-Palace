@@ -1337,3 +1337,135 @@ async def test_multi_project_issues_per_project_hnsw_queries() -> None:
     # All three projects represented — per-project budget ensures fairness
     result_projects = {r["project"] for r in result["result"]}
     assert result_projects == {"alpha", "beta", "gamma"}
+
+
+# --------------------------------------------------------------------------
+# GIM-SEMANTIC-UNDERFILL (Sprint-1 reliability): pagination must be honest.
+# Old behavior: has_more computed against the WHOLE embedded-scope population
+# (total_candidates), so a scope-filtered page reported has_more=true with
+# 0-2 rows and consumers could never make an absence claim.
+# --------------------------------------------------------------------------
+
+
+def _underfill_run_fn(
+    *,
+    embedded_total: int,
+    vector_rows: list[dict[str, Any]],
+    expected_query_k: int | None = None,
+) -> Any:
+    def run_fn(query: str, params: dict[str, Any]) -> _FakeResult:
+        if "collect(p.slug)" in query:
+            return _FakeResult(single_value={"found_projects": ["wallet-a"]})
+        if "embedded_cnt" in query:
+            return _FakeResult(
+                data_value=[
+                    {
+                        "source_scope": "project",
+                        "total": embedded_total,
+                        "embedded_cnt": embedded_total,
+                    }
+                ]
+            )
+        if _is_vector_query(query):
+            if expected_query_k is not None:
+                assert params["query_k"] == expected_query_k
+            return _FakeResult(data_value=list(vector_rows))
+        raise AssertionError(f"unexpected query: {query}")
+
+    return run_fn
+
+
+def _mk_row(
+    i: int, *, source_scope: str = "project", score: float = 0.9
+) -> dict[str, Any]:
+    return {
+        "group_id": "project/wallet-a",
+        "qualified_name": f"Crypto.fn{i}",
+        "kind": "function",
+        "file_path": f"Sources/F{i}.swift",
+        "module_name": "WalletA",
+        "source_scope": source_scope,
+        "embedding_input_hash": f"hash-{i}",
+        "commit_sha": "sha-a",
+        "score": score,
+    }
+
+
+async def _run_underfill_search(run_fn: Any, *, limit: int = 3) -> dict[str, Any]:
+    from palace_mcp.code.find_semantic import semantic_search
+
+    backend = _FakeBackend()
+    dispatcher = EmbeddingBackendDispatcher({"qodo": backend}, default_backend="qodo")
+    driver = _FakeDriver(run_fn)
+    with (
+        patch(
+            "palace_mcp.code.find_semantic.get_embedding_dispatcher",
+            return_value=dispatcher,
+        ),
+        patch(
+            "palace_mcp.code.find_semantic.code_router.get_cm_session",
+            MagicMock(),
+        ),
+    ):
+        return await semantic_search(
+            driver=driver,
+            query="signature verification",
+            projects=["wallet-a"],
+            limit=limit,
+            include_context=False,
+        )
+
+
+@pytest.mark.asyncio
+async def test_scope_filtered_page_does_not_claim_has_more() -> None:
+    """Repro of GIM-SEMANTIC-UNDERFILL: pool of 5, scope filter keeps 1.
+
+    The whole scope has 1000 embedded symbols; the old envelope said
+    has_more=true against that population. Honest: total = surviving rows,
+    has_more = false, and the pool being exhausted proves the absence claim.
+    """
+    rows = [_mk_row(0)] + [_mk_row(i, source_scope="dependency") for i in range(1, 5)]
+    result = await _run_underfill_search(
+        _underfill_run_fn(embedded_total=1000, vector_rows=rows)
+    )
+    assert result["ok"] is True
+    assert result["returned_count"] == 1
+    assert result["scope_excluded_count"] == 4
+    assert result["total"] == 1  # survivors, not the 1000-symbol population
+    assert result["has_more"] is False  # absence claim is now safe
+    assert result["candidate_pool_exhausted"] is True
+    assert result["scope_embedded_total"] == 1000
+    assert result["truncated"] is False
+
+
+@pytest.mark.asyncio
+async def test_surviving_rows_beyond_page_report_has_more() -> None:
+    rows = [_mk_row(i, score=0.9 - i * 0.01) for i in range(6)]
+    result = await _run_underfill_search(
+        _underfill_run_fn(embedded_total=1000, vector_rows=rows), limit=2
+    )
+    assert result["returned_count"] == 2
+    assert result["total"] == 6
+    assert result["has_more"] is True  # positive fact: 4 more survivors in hand
+    assert result["next_offset"] == 2
+
+
+@pytest.mark.asyncio
+async def test_capped_pool_flags_unproven_absence() -> None:
+    """Pool returned exactly query_k rows (cap hit) and the scope filter ate
+    almost everything: has_more stays false (no survivors in hand) but the
+    response must say the absence is NOT proven."""
+    query_k = 50  # _candidate_limit(3, 1) -> max(30, 50) = 50
+    rows = [_mk_row(0)] + [
+        _mk_row(i, source_scope="dependency") for i in range(1, query_k)
+    ]
+    result = await _run_underfill_search(
+        _underfill_run_fn(embedded_total=1000, vector_rows=rows)
+    )
+    assert result["returned_count"] == 1
+    assert result["has_more"] is False
+    assert result["candidate_pool_exhausted"] is False
+    assert result["truncated"] is True
+    assert result["truncated_reason"] == "candidate_pool_capped"
+    codes = [w["code"] for w in result["warnings"]]
+    assert "candidate_pool_capped" in codes

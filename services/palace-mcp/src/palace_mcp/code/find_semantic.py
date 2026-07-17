@@ -1038,6 +1038,8 @@ async def semantic_search(
             "candidate_limit": _candidate_limit(limit, len(scope_projects)),
             "embedded_symbol_count": 0,
             "returned_count": 0,
+            "scope_embedded_total": total_candidates,
+            "candidate_pool_exhausted": True,
             "warnings": warnings,
             "embedding_coverage": coverage,
             "result": [],
@@ -1046,6 +1048,9 @@ async def semantic_search(
 
     page_limit = offset + limit
     candidate_limit = _candidate_limit(page_limit, len(scope_projects))
+    # GIM-SEMANTIC-UNDERFILL: track whether the ANN retrieval EXHAUSTED the
+    # scope (returned fewer candidates than it was allowed to) — only then is
+    # an absence claim beyond the retrieved pool proven.
     if len(group_ids) == 1:
         per_project_k: int | None = None
         rows, candidate_limit = await _vector_search_single_project(
@@ -1056,6 +1061,9 @@ async def semantic_search(
             initial_query_k=candidate_limit,
             embedded_symbol_count=embedded_symbol_count,
             include_deprecated=include_deprecated,
+        )
+        candidate_pool_exhausted = (
+            len(rows) < candidate_limit or candidate_limit >= embedded_symbol_count
         )
     else:
         per_project_k = _candidate_limit(page_limit, 1)
@@ -1071,8 +1079,13 @@ async def semantic_search(
                 for gid in group_ids
             ]
         )
+        merged_input_total = sum(len(r) for r in per_project_results)
         rows = _merge_per_project_results(
             list(per_project_results), final_limit=candidate_limit
+        )
+        candidate_pool_exhausted = (
+            all(len(r) < per_project_k for r in per_project_results)
+            and merged_input_total <= candidate_limit
         )
     if settings is not None:
         missing_hits = await _find_missing_hits(driver, rows)
@@ -1125,6 +1138,7 @@ async def semantic_search(
     )
 
     _apply_ranking(normalized_query, candidate_rows)
+    surviving_count = len(candidate_rows)
     result_rows = candidate_rows[offset : offset + limit]
 
     context_available_count = 0
@@ -1182,16 +1196,18 @@ async def semantic_search(
                     total_byte_count += bc
                     snippets_with_size += 1
 
-    expected_rows = min(limit, max(total_candidates - offset, 0))
-    if len(result_rows) < expected_rows:
+    if not candidate_pool_exhausted and len(result_rows) < limit:
         warnings.append(
             _warning(
-                "scope_filter_underfilled",
-                "vector search returned fewer scoped hits than requested",
+                "candidate_pool_capped",
+                "candidate pool hit its retrieval cap before scope filtering; "
+                "absence beyond the retrieved pool is NOT proven — raise limit "
+                "or narrow the query",
                 requested_limit=limit,
                 requested_offset=offset,
                 returned_count=len(result_rows),
                 candidate_limit=candidate_limit,
+                scope_excluded_count=scope_excluded_count,
             )
         )
 
@@ -1222,14 +1238,23 @@ async def semantic_search(
         "embedded_symbol_count": embedded_symbol_count,
         "returned_count": len(result_rows),
         "scope_excluded_count": scope_excluded_count,
+        # Honest pagination (GIM-SEMANTIC-UNDERFILL): `total`/`has_more` are
+        # computed from SURVIVING ranked rows — has_more=true is a positive
+        # fact (more survivors in hand). The scope population lives under
+        # scope_embedded_total and never feeds pagination.
+        "scope_embedded_total": total_candidates,
+        "candidate_pool_exhausted": candidate_pool_exhausted,
         "warnings": warnings,
         "embedding_coverage": coverage,
         "ranking_spec_version": "1",
         "context_metrics": context_metrics,
         "result": result_rows,
         **pagination_envelope(
-            total=total_candidates,
+            total=surviving_count,
             returned=len(result_rows),
             offset=offset,
+            truncated_reason=(
+                None if candidate_pool_exhausted else "candidate_pool_capped"
+            ),
         ),
     }
