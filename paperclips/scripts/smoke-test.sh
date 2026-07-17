@@ -78,7 +78,7 @@ stage_1_api_reachable() {
   email=$(echo "$identity" | jq -r '.user.email // ""')
   auth_source=$(echo "$identity" | jq -r '.source // ""')
   [ -n "$email" ] && [ "$email" != "null" ] || die "API returned no board user email"
-  [ -n "$auth_source" ] && [ "$auth_source" != "null" ] || die "API returned no board auth source"
+  [ "$auth_source" = "board_key" ] || die "PAPERCLIP_API_KEY was not authenticated as a board API key (source=$auth_source)"
   log ok "  board operator authenticated as $email (source=$auth_source)"
 }
 

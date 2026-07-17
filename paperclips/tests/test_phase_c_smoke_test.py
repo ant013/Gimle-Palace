@@ -33,6 +33,7 @@ def test_stage_1_validates_board_operator_credential():
     assert 'paperclip_get "/api/agents/me"' not in stage
     assert ".user.email" in stage
     assert ".source" in stage
+    assert '[ "$auth_source" = "board_key" ]' in stage
 
 
 def test_uses_smoke_probes_library():
