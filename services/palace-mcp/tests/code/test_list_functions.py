@@ -343,3 +343,157 @@ async def test_list_functions_bundle_fixture_matches_golden_snapshot() -> None:
     ):
         result["bundle_health"].pop(k, None)
     assert result == golden
+
+
+class _QueryAwareSession:
+    """Fake session that returns rows based on which query runs and its params.
+
+    responder(query, params) -> list[rows]. Lets a test drive the main
+    :Function query, the :Symbol fallback, and the path probe independently.
+    """
+
+    def __init__(self, responder: Any) -> None:
+        self._responder = responder
+        self.calls: list[tuple[str, dict[str, Any]]] = []
+
+    async def run(self, query: str, params: dict[str, Any]) -> _FakeResult:
+        self.calls.append((query, params))
+        return _FakeResult(self._responder(query, params))
+
+    async def __aenter__(self) -> "_QueryAwareSession":
+        return self
+
+    async def __aexit__(self, *args: Any) -> None:
+        return None
+
+
+def _driver_for_responder(responder: Any) -> MagicMock:
+    session = _QueryAwareSession(responder)
+    driver = MagicMock()
+    driver.session = MagicMock(return_value=session)
+    return driver
+
+
+def _is_probe(query: str) -> bool:
+    return "ENDS WITH $suffix" in query
+
+
+def _is_function_query(query: str) -> bool:
+    return "(fn:Function)" in query
+
+
+@pytest.mark.asyncio
+async def test_list_functions_partial_path_auto_resolves() -> None:
+    """A unique partial path (Core/Kit.swift) resolves to its full indexed path
+    instead of silently returning []."""
+    from palace_mcp.code.list_functions import list_functions
+    from palace_mcp.code_composite import SlugResolution
+
+    full = "Sources/EvmKit/Core/Kit.swift"
+
+    def responder(query: str, params: dict[str, Any]) -> list[dict[str, Any]]:
+        if _is_probe(query):
+            return [{"file_path": full}]
+        if _is_function_query(query) and params["path"] == full:
+            return [
+                {
+                    "project_id": "project/evm-kit",
+                    "name": "instance",
+                    "start_line": 10,
+                    "end_line": 20,
+                    "ccn": 3,
+                    "parameter_count": 1,
+                    "nloc": 11,
+                    "language": "swift",
+                }
+            ]
+        return []
+
+    driver = _driver_for_responder(responder)
+    with patch(
+        "palace_mcp.code.list_functions._resolve_slug",
+        new=AsyncMock(return_value=SlugResolution(kind="project")),
+    ):
+        result = await list_functions(
+            driver=driver, project="evm-kit", path="Core/Kit.swift"
+        )
+
+    assert result["ok"] is True
+    assert result["resolved_path"] == full
+    assert [r["name"] for r in result["result"]] == ["instance"]
+
+
+@pytest.mark.asyncio
+async def test_list_functions_path_not_found_is_explicit() -> None:
+    """A path matching no indexed file reports path_not_found, not a silent []."""
+    from palace_mcp.code.list_functions import list_functions
+    from palace_mcp.code_composite import SlugResolution
+
+    driver = _driver_for_responder(lambda query, params: [])
+    with patch(
+        "palace_mcp.code.list_functions._resolve_slug",
+        new=AsyncMock(return_value=SlugResolution(kind="project")),
+    ):
+        result = await list_functions(
+            driver=driver, project="evm-kit", path="Nope/Missing.swift"
+        )
+
+    assert result["ok"] is True
+    assert result["result"] == []
+    assert result["path_status"] == "path_not_found"
+
+
+@pytest.mark.asyncio
+async def test_list_functions_file_exists_but_has_no_functions() -> None:
+    """An indexed file with no functions is distinguished from a missing path."""
+    from palace_mcp.code.list_functions import list_functions
+    from palace_mcp.code_composite import SlugResolution
+
+    path = "Sources/EvmKit/Empty.swift"
+
+    def responder(query: str, params: dict[str, Any]) -> list[dict[str, Any]]:
+        if _is_probe(query):
+            return [{"file_path": path}]
+        return []
+
+    driver = _driver_for_responder(responder)
+    with patch(
+        "palace_mcp.code.list_functions._resolve_slug",
+        new=AsyncMock(return_value=SlugResolution(kind="project")),
+    ):
+        result = await list_functions(driver=driver, project="evm-kit", path=path)
+
+    assert result["result"] == []
+    assert result["path_status"] == "file_has_no_functions"
+    assert "resolved_path" not in result
+
+
+@pytest.mark.asyncio
+async def test_list_functions_ambiguous_partial_path_lists_candidates() -> None:
+    """A partial path matching several files returns did_you_mean candidates
+    rather than guessing."""
+    from palace_mcp.code.list_functions import list_functions
+    from palace_mcp.code_composite import SlugResolution
+
+    candidates = [
+        "Sources/A/Core/Kit.swift",
+        "Sources/B/Core/Kit.swift",
+    ]
+
+    def responder(query: str, params: dict[str, Any]) -> list[dict[str, Any]]:
+        if _is_probe(query):
+            return [{"file_path": c} for c in candidates]
+        return []
+
+    driver = _driver_for_responder(responder)
+    with patch(
+        "palace_mcp.code.list_functions._resolve_slug",
+        new=AsyncMock(return_value=SlugResolution(kind="project")),
+    ):
+        result = await list_functions(
+            driver=driver, project="evm-kit", path="Core/Kit.swift"
+        )
+
+    assert result["result"] == []
+    assert result["path_status"] == "ambiguous_path"
+    assert result["did_you_mean"] == candidates
