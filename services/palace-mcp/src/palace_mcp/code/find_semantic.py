@@ -1148,6 +1148,13 @@ async def semantic_search(
     )
 
     _apply_ranking(normalized_query, candidate_rows)
+    # available_count is the ranked, scope-passing set actually retrieved — the
+    # only thing pagination can honestly page through. total_candidates (the
+    # in-scope embedded-symbol population) is NOT paginable: vector retrieval is
+    # capped at candidate_limit, so using it as the pagination total produced
+    # has_more=true / next_offset=null with returned=0 (SEMANTIC-UNDERFILL).
+    available_count = len(candidate_rows)
+    retrieval_saturated = len(rows) >= candidate_limit
     result_rows = candidate_rows[offset : offset + limit]
 
     context_available_count = 0
@@ -1205,16 +1212,24 @@ async def semantic_search(
                     total_byte_count += bc
                     snippets_with_size += 1
 
-    expected_rows = min(limit, max(total_candidates - offset, 0))
-    if len(result_rows) < expected_rows:
+    # Underfill is real only when the retrieval hit its cap (candidate_limit)
+    # AND scope filtering left fewer than requested — then in-scope matches may
+    # exist beyond the ranked window. When retrieval was NOT saturated we have
+    # seen every vector match, so fewer-than-limit is the complete honest answer,
+    # not an underfill. (The old check compared against the total_candidates
+    # population, so it fired on every legitimately small/empty result.)
+    if retrieval_saturated and len(result_rows) < limit:
         warnings.append(
             _warning(
                 "scope_filter_underfilled",
-                "vector search returned fewer scoped hits than requested",
+                "retrieval hit the candidate cap and scope filtering left "
+                "fewer scoped hits than requested; in-scope matches may exist "
+                "beyond the ranked window",
                 requested_limit=limit,
                 requested_offset=offset,
                 returned_count=len(result_rows),
                 candidate_limit=candidate_limit,
+                scope_excluded_count=scope_excluded_count,
             )
         )
 
@@ -1245,13 +1260,19 @@ async def semantic_search(
         "embedded_symbol_count": embedded_symbol_count,
         "returned_count": len(result_rows),
         "scope_excluded_count": scope_excluded_count,
+        # In-scope embedded-symbol population — informational, NOT the pagination
+        # total (retrieval is capped, so most of it is never ranked/returned).
+        "scope_candidate_population": total_candidates,
+        # True when the ranked window was capped at candidate_limit: more in-scope
+        # matches may exist beyond it (honest bound, not a silent truncation).
+        "retrieval_saturated": retrieval_saturated,
         "warnings": warnings,
         "embedding_coverage": coverage,
         "ranking_spec_version": "1",
         "context_metrics": context_metrics,
         "result": result_rows,
         **pagination_envelope(
-            total=total_candidates,
+            total=available_count,
             returned=len(result_rows),
             offset=offset,
         ),
