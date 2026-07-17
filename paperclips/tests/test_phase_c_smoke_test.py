@@ -36,3 +36,21 @@ def test_help_works():
     out = subprocess.run(["bash", str(SCRIPT), "--help"], capture_output=True, text=True)
     assert out.returncode == 0
     assert "smoke" in out.stdout.lower() or "stage" in out.stdout.lower()
+
+
+def test_supports_exact_disposable_issue_cleanup():
+    text = SCRIPT.read_text()
+    assert "--cleanup-issues" in text
+    assert "SMOKE_ISSUE_LOG" in text
+    assert "cleanup_smoke_issues" in text
+
+
+def test_handoff_source_uses_inner_orchestrator_workflow_role():
+    text = SCRIPT.read_text()
+    assert 'workflow_role == "inner_orchestrator"' in text
+
+
+def test_runtime_probes_pass_workflow_role_separately_from_profile():
+    text = SCRIPT.read_text()
+    assert "workflow_role" in text
+    assert 'probe_agent_for_profile "$company_id" "$uuid" "$name" "$profile" "$workflow_role"' in text

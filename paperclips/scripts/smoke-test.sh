@@ -12,19 +12,22 @@ source "${SCRIPT_DIR}/lib/_paperclip_api.sh"
 
 QUICK=0
 CANARY_STAGE=0
+SMOKE_CLEANUP=0
 project_key=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --quick) QUICK=1; shift ;;
+    --cleanup-issues) SMOKE_CLEANUP=1; shift ;;
     --canary-stage=*) CANARY_STAGE="${1#--canary-stage=}"; shift ;;
     -h|--help)
       cat <<EOF
-Usage: $(basename "$0") <project-key> [--quick | --canary-stage=N]
+Usage: $(basename "$0") <project-key> [--quick | --canary-stage=N] [--cleanup-issues]
 
 7-stage smoke test per spec §9.3.
   --quick           skip heavy stages 5+7 (runtime probes + e2e handoff)
   --canary-stage=N  run only stages relevant for canary stage N (1=read-only, 2=cto)
+  --cleanup-issues  delete only the exact disposable issue IDs recorded by this run
 EOF
       exit 0 ;;
     *) project_key="$1"; shift ;;
@@ -43,6 +46,31 @@ manifest="${REPO_ROOT}/paperclips/projects/${project_key}/paperclip-agent-assemb
 [ -f "$manifest" ] || die "manifest missing: $manifest"
 
 company_id=$(yq -r '.company_id' "$bindings")
+
+# shellcheck source=lib/_smoke_probes.sh
+source "${SCRIPT_DIR}/lib/_smoke_probes.sh"
+
+smoke_log_dir="${HOME}/.paperclip/projects/${project_key}/smoke"
+mkdir -p "$smoke_log_dir"
+chmod 700 "$smoke_log_dir"
+SMOKE_ISSUE_LOG=$(mktemp "${smoke_log_dir}/issues-$(date -u +%Y%m%dT%H%M%SZ).XXXXXX")
+chmod 600 "$SMOKE_ISSUE_LOG"
+export SMOKE_ISSUE_LOG
+
+smoke_exit() {
+  local status=$?
+  trap - EXIT
+  if [ "$SMOKE_CLEANUP" -eq 1 ]; then
+    if ! cleanup_smoke_issues "$SMOKE_ISSUE_LOG"; then
+      log err "one or more disposable smoke issues could not be deleted"
+      status=1
+    fi
+  else
+    log info "disposable smoke issue IDs retained at $SMOKE_ISSUE_LOG"
+  fi
+  exit "$status"
+}
+trap smoke_exit EXIT
 
 stage_1_api_reachable() {
   log info "[1/7] paperclip API reachable + JWT valid"
@@ -86,28 +114,30 @@ stage_4_watchdog() {
 
 stage_5_per_agent_mcp() {
   log info "[5/7] runtime probes — mcp/git/handoff/phase per profile (rev2 SM-1/SM-2)"
-  # shellcheck source=lib/_smoke_probes.sh
-  source "${SCRIPT_DIR}/lib/_smoke_probes.sh"
 
   declare -A picked
   for name in $(yq -r '.agents | keys | .[]' "$bindings"); do
     profile=$(yq -r ".agents[] | select(.agent_name == \"${name}\") | .profile" "$manifest")
     [ -z "$profile" ] || [ "$profile" = "null" ] && continue
-    if [ -z "${picked[$profile]:-}" ]; then
-      picked[$profile]="$name"
+    workflow_role=$(yq -r ".agents[] | select(.agent_name == \"${name}\") | .workflow_role // \"\"" "$manifest")
+    probe_key="${workflow_role:-profile:${profile}}"
+    if [ -z "${picked[$probe_key]:-}" ]; then
+      picked[$probe_key]="$name"
     fi
   done
 
   failed=0
-  for profile in "${!picked[@]}"; do
-    name="${picked[$profile]}"
+  for probe_key in "${!picked[@]}"; do
+    name="${picked[$probe_key]}"
     uuid=$(yq -r ".agents[\"${name}\"]" "$bindings")
-    log info "  probing $name (profile=$profile, uuid=$uuid)"
-    probe_agent_for_profile "$company_id" "$uuid" "$name" "$profile" || failed=$((failed + 1))
+    profile=$(yq -r ".agents[] | select(.agent_name == \"${name}\") | .profile" "$manifest")
+    workflow_role=$(yq -r ".agents[] | select(.agent_name == \"${name}\") | .workflow_role // \"\"" "$manifest")
+    log info "  probing $name (profile=$profile, workflow_role=${workflow_role:-legacy}, uuid=$uuid)"
+    probe_agent_for_profile "$company_id" "$uuid" "$name" "$profile" "$workflow_role" || failed=$((failed + 1))
   done
 
   [ "$failed" -eq 0 ] || die "stage 5: $failed agents failed runtime probes"
-  log ok "[5/7] runtime probes green for $(echo "${!picked[@]}" | wc -w) profiles"
+  log ok "[5/7] runtime probes green for $(echo "${!picked[@]}" | wc -w) responsibilities"
 }
 
 stage_6_telegram() {
@@ -128,14 +158,16 @@ stage_6_telegram() {
 
 stage_7_e2e_handoff() {
   log info "[7/7] end-to-end handoff probe (incl. cross-target if mixed) — rev2 SM-3"
-  # shellcheck source=lib/_smoke_probes.sh
-  source "${SCRIPT_DIR}/lib/_smoke_probes.sh"
 
-  cto_name=$(yq -r '.agents[] | select(.profile == "cto") | .agent_name' "$manifest" | head -1)
+  cto_name=$(yq -r '.agents[] | select(.workflow_role == "inner_orchestrator") | .agent_name' "$manifest" | head -1)
+  [ -n "$cto_name" ] || \
+    cto_name=$(yq -r '.agents[] | select(.profile == "cto") | .agent_name' "$manifest" | head -1)
   cto_uuid=$(yq -r ".agents[\"${cto_name}\"]" "$bindings")
   [ -n "$cto_uuid" ] && [ "$cto_uuid" != "null" ] || die "no cto agent in $project_key"
 
-  next_name=$(yq -r '.agents[] | select(.profile == "implementer" or .profile == "reviewer" or .profile == "qa") | .agent_name' "$manifest" | head -1)
+  next_name=$(yq -r '.agents[] | select(.workflow_role == "reviewer") | .agent_name' "$manifest" | head -1)
+  [ -n "$next_name" ] || \
+    next_name=$(yq -r '.agents[] | select(.profile == "implementer" or .profile == "reviewer" or .profile == "qa") | .agent_name' "$manifest" | head -1)
   next_uuid=$(yq -r ".agents[\"${next_name}\"]" "$bindings")
   [ -n "$next_uuid" ] && [ "$next_uuid" != "null" ] || die "no implementer/reviewer/qa agent in $project_key"
 

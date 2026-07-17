@@ -1,0 +1,15 @@
+# CI-only fallback. Operators must provide existing absolute roots in the
+# host-local ~/.paperclip/projects/thorchain/paths.yaml before live bootstrap.
+schemaVersion: 2
+project_root: /opt/example/thorchain
+primary_repo_root: /opt/example/thorchain
+production_checkout: /opt/example/thorchain
+team_workspace_root: /opt/example/thorchain-paperclip-runs
+operator_memory_dir: /opt/example/thorchain-memory
+overlay_root: paperclips/projects/thorchain/overlays
+project_rules_file: AGENTS.md
+gimle_skills_root: /opt/example/gimle-skills
+vultisig_repo_root: /opt/example/vultisig-ios
+unstoppable_ios_repo_root: /opt/example/unstoppable-wallet-ios
+tronkit_repo_root: /opt/example/TronKit.Swift
+evmkit_repo_root: /opt/example/EvmKit.Swift

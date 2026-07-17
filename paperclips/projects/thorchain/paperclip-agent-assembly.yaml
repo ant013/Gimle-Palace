@@ -1,0 +1,138 @@
+schemaVersion: 2
+
+project:
+  key: thorchain
+  display_name: ThorChainKit
+  system_name: ThorChainKit.Swift
+  issue_prefix: THR
+  integration_branch: main
+  specs_dir: docs/specs
+  plans_dir: docs/plans
+
+domain:
+  wallet_target_short: ThorChainKit
+  wallet_target_name: ThorChainKit.Swift
+  wallet_target_slug: thorchain-kit-swift
+
+evidence:
+  merge_without_smoke_issue: THR-bootstrap
+  graphiti_mock_issue: THR-bootstrap
+  release_reset_issue: THR-bootstrap
+  asyncmock_driver_issue: THR-bootstrap
+  worktree_discipline_issue_pair: THR-bootstrap
+  qa_worktree_discipline_issue: THR-bootstrap
+  mcp_wire_contract_issue: THR-bootstrap
+  qa_deploy_checklist_issue: THR-bootstrap
+  review_scope_drift_issue: THR-bootstrap
+  qa_to_cto_stall_issue: THR-bootstrap
+  handoff_flake_issue: THR-bootstrap
+  pre_slim_baseline_issue: THR-bootstrap
+  cr_to_pe_stall_issue: THR-bootstrap
+  handoff_misclassified_issue: THR-bootstrap
+  post_merge_stall_issue: THR-bootstrap
+
+paths:
+  overlay_root: paperclips/projects/thorchain/overlays
+  project_rules_file: AGENTS.md
+
+host_paths:
+  required_existing:
+    - gimle_skills_root
+    - vultisig_repo_root
+    - unstoppable_ios_repo_root
+    - tronkit_repo_root
+    - evmkit_repo_root
+
+mcp:
+  service_name: thorchain-kit
+  package_name: thorchain_kit
+  tool_namespace: thorchain
+  base_required:
+    - codebase-memory
+    - context7
+    - serena
+    - github
+    - sequential-thinking
+  codebase_memory_projects:
+    primary: Users-ant013-Data-AI-thorchain
+  additions:
+    project: []
+    by_role: {}
+
+skills:
+  additions:
+    project:
+      - analog-driven-change
+      - gimle-evidence
+    by_role: {}
+
+subagents:
+  additions:
+    project: []
+    by_role: {}
+
+targets:
+  codex:
+    instruction_entry_file: AGENTS.md
+    adapter_type: codex_local
+    deploy_mode: api
+    instructions_bundle_mode: managed
+
+compatibility:
+  legacy_output_paths: false
+
+agents:
+  - agent_name: ThorChainCEO
+    role_source: paperclips/projects/thorchain/roles-codex/thorchain-ceo.md
+    profile: cto
+    target: codex
+    model: gpt-5.6-sol
+    modelReasoningEffort: xhigh
+    paperclip_role: ceo
+    paperclip_icon: crown
+    workflow_role: outer_walker
+    primary_codebase_memory_project: Users-ant013-Data-AI-thorchain
+  - agent_name: ThorChainCTO
+    role_source: paperclips/projects/thorchain/roles-codex/thorchain-cto.md
+    profile: cto
+    target: codex
+    reportsTo: ThorChainCEO
+    model: gpt-5.6-sol
+    modelReasoningEffort: xhigh
+    paperclip_role: cto
+    paperclip_icon: shield
+    workflow_role: inner_orchestrator
+    primary_codebase_memory_project: Users-ant013-Data-AI-thorchain
+  - agent_name: ThorChainCodeReviewer
+    role_source: paperclips/projects/thorchain/roles-codex/thorchain-code-reviewer.md
+    profile: reviewer
+    target: codex
+    reportsTo: ThorChainCTO
+    model: gpt-5.6-sol
+    modelReasoningEffort: xhigh
+    paperclip_role: engineer
+    paperclip_icon: eye
+    workflow_role: reviewer
+    primary_codebase_memory_project: Users-ant013-Data-AI-thorchain
+  - agent_name: ThorChainSwiftEngineer
+    role_source: paperclips/projects/thorchain/roles-codex/thorchain-swift-engineer.md
+    profile: implementer
+    target: codex
+    reportsTo: ThorChainCTO
+    model: gpt-5.6-sol
+    modelReasoningEffort: xhigh
+    paperclip_role: engineer
+    paperclip_icon: code
+    workflow_role: implementer
+    primary_codebase_memory_project: Users-ant013-Data-AI-thorchain
+  - agent_name: ThorChainQAEngineer
+    role_source: paperclips/projects/thorchain/roles-codex/thorchain-qa-engineer.md
+    profile: qa
+    target: codex
+    reportsTo: ThorChainCTO
+    model: gpt-5.6-sol
+    modelReasoningEffort: xhigh
+    paperclip_role: qa
+    paperclip_icon: bug
+    workflow_role: qa
+    primary_codebase_memory_project: Users-ant013-Data-AI-thorchain
