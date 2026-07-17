@@ -720,6 +720,32 @@ async def _find_missing_hits(
     ]
 
 
+async def _fetch_project_node(project: str) -> Any | None:
+    """Fetch the raw :Project node for a slug, or None if unavailable."""
+    from palace_mcp.mcp_server import get_driver
+    from palace_mcp.memory.cypher import GET_PROJECT
+
+    driver = get_driver()
+    if driver is None:
+        return None
+    async with driver.session() as session:
+        result = await session.run(GET_PROJECT, slug=project)
+        row = await result.single()
+    return row["p"] if row is not None else None
+
+
+def _repo_path_from_node(project: str, node: Any | None) -> Path | None:
+    from palace_mcp.git.path_resolver import (
+        ProjectNotRegistered,
+        resolve_registered_project,
+    )
+
+    try:
+        return resolve_registered_project(project, project_node=node)
+    except (ProjectNotRegistered, ValueError):
+        return None
+
+
 async def _resolve_registered_repo_path(project: str) -> Path | None:
     """Look up :Project.repo_path so snippet provider can use it.
 
@@ -729,37 +755,34 @@ async def _resolve_registered_repo_path(project: str) -> Path | None:
     no resolvable on-disk path; callers fall back to the legacy
     REPOS_ROOT/<slug> layout via resolve_project.
     """
-    from palace_mcp.git.path_resolver import (
-        ProjectNotRegistered,
-        resolve_registered_project,
-    )
-    from palace_mcp.mcp_server import get_driver
-    from palace_mcp.memory.cypher import GET_PROJECT
-
-    driver = get_driver()
-    if driver is None:
-        return None
-
-    async with driver.session() as session:
-        result = await session.run(GET_PROJECT, slug=project)
-        row = await result.single()
-
-    try:
-        return resolve_registered_project(
-            project,
-            project_node=row["p"] if row is not None else None,
-        )
-    except (ProjectNotRegistered, ValueError):
-        return None
+    node = await _fetch_project_node(project)
+    return _repo_path_from_node(project, node)
 
 
 async def _load_freshness(project: str, commit_sha: str | None) -> dict[str, Any]:
-    repo_path = await _resolve_registered_repo_path(project)
-    freshness = await asyncio.to_thread(inspect_freshness, repo_path, commit_sha)
+    """Freshness of a semantic hit's project against its repo HEAD.
+
+    Compares the authoritative ``:Project.indexed_commit`` — the same commit
+    get_project_overview reports — against the repo HEAD, NOT the per-hit
+    ``commit_sha`` argument. Embedded :Symbol rows frequently carry a null or
+    stale per-occurrence commit, which made every row report
+    ``indexed_commit=null`` / ``stale=null`` (GIM SEMANTIC-ROW-FRESHNESS). The
+    argument is retained for signature stability but no longer consulted.
+    """
+    node = await _fetch_project_node(project)
+    repo_path = _repo_path_from_node(project, node)
+    indexed_commit = (
+        str(node.get("indexed_commit"))
+        if node is not None and node.get("indexed_commit")
+        else None
+    )
+    freshness = await asyncio.to_thread(inspect_freshness, repo_path, indexed_commit)
     return {
         "indexed_commit": freshness.indexed_commit,
         "commits_behind_head": freshness.commits_behind_head,
         "stale": freshness.stale,
+        "freshness_state": freshness.freshness_state,
+        "freshness_reason": freshness.freshness_reason,
     }
 
 
