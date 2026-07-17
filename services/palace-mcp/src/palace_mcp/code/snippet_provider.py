@@ -12,9 +12,12 @@ Security contract:
 
 from __future__ import annotations
 
+import logging
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from palace_mcp.git.path_resolver import (
     InvalidPath,
@@ -45,6 +48,15 @@ _LANGUAGE_MAP: dict[str, str] = {
 }
 
 
+# Freshness contract: `stale` is tri-state — True/False only on POSITIVE git
+# evidence, None when freshness could not be established. `freshness_state`
+# carries the comparison basis in the value itself; `freshness_reason`
+# explains every "unknown" so consumers can act without server-log access.
+FRESHNESS_CURRENT = "current_local_tree"
+FRESHNESS_BEHIND = "behind_local_tree"
+FRESHNESS_UNKNOWN = "unknown"
+
+
 @dataclass(frozen=True)
 class SnippetResult:
     source: str
@@ -59,14 +71,18 @@ class SnippetResult:
     indexed_commit: str | None = None
     commits_behind_head: int | None = None
     truncated: bool = False
-    stale: bool = False
+    stale: bool | None = None
+    freshness_state: str = FRESHNESS_UNKNOWN
+    freshness_reason: str | None = None
 
 
 @dataclass(frozen=True)
 class FreshnessResult:
     indexed_commit: str | None
     commits_behind_head: int | None
-    stale: bool = False
+    stale: bool | None = None
+    freshness_state: str = FRESHNESS_UNKNOWN
+    freshness_reason: str | None = None
 
 
 def resolve_snippet(
@@ -144,6 +160,8 @@ def resolve_snippet(
                 indexed_commit=freshness_result.indexed_commit,
                 commits_behind_head=freshness_result.commits_behind_head,
                 stale=freshness_result.stale,
+                freshness_state=freshness_result.freshness_state,
+                freshness_reason=freshness_result.freshness_reason,
             ),
             None,
             None,
@@ -194,26 +212,45 @@ def resolve_snippet(
             commits_behind_head=freshness_result.commits_behind_head,
             truncated=truncated,
             stale=freshness_result.stale,
+            freshness_state=freshness_result.freshness_state,
+            freshness_reason=freshness_result.freshness_reason,
         ),
         None,
         None,
     )
 
 
+def _unknown_freshness(
+    commit_sha: str | None, reason: str, detail: str = ""
+) -> FreshnessResult:
+    logger.debug(
+        "freshness unknown (%s%s) for commit %s",
+        reason,
+        f": {detail}" if detail else "",
+        commit_sha,
+    )
+    return FreshnessResult(
+        indexed_commit=commit_sha,
+        commits_behind_head=None,
+        stale=None,
+        freshness_state=FRESHNESS_UNKNOWN,
+        freshness_reason=reason,
+    )
+
+
 def inspect_freshness(
     repo_root: Path | None, commit_sha: str | None
 ) -> FreshnessResult:
-    """Compare an indexed commit against the repo's current HEAD."""
+    """Compare an indexed commit against the repo's current HEAD.
+
+    Never claims fresh/stale without positive git evidence: every
+    non-positive branch returns stale=None with a machine-readable
+    freshness_reason.
+    """
     if not commit_sha:
-        return FreshnessResult(
-            indexed_commit=None, commits_behind_head=None, stale=False
-        )
+        return _unknown_freshness(None, "no_indexed_commit")
     if repo_root is None:
-        return FreshnessResult(
-            indexed_commit=commit_sha,
-            commits_behind_head=None,
-            stale=False,
-        )
+        return _unknown_freshness(commit_sha, "repo_unresolved")
     try:
         head_result = subprocess.run(
             ["git", "rev-parse", "HEAD"],
@@ -223,10 +260,8 @@ def inspect_freshness(
             timeout=5,
         )
         if head_result.returncode != 0:
-            return FreshnessResult(
-                indexed_commit=commit_sha,
-                commits_behind_head=None,
-                stale=False,
+            return _unknown_freshness(
+                commit_sha, "git_error", head_result.stderr.strip()[:120]
             )
         head = head_result.stdout.strip()
         if head == commit_sha:
@@ -234,6 +269,7 @@ def inspect_freshness(
                 indexed_commit=commit_sha,
                 commits_behind_head=0,
                 stale=False,
+                freshness_state=FRESHNESS_CURRENT,
             )
 
         behind_result = subprocess.run(
@@ -244,20 +280,22 @@ def inspect_freshness(
             timeout=5,
         )
         if behind_result.returncode != 0:
-            return FreshnessResult(
-                indexed_commit=commit_sha,
-                commits_behind_head=None,
-                stale=True,
+            # rev-list failing for a known commit usually means the indexed
+            # commit is unreachable from this tree — the read-time signature
+            # of a registry identity mismatch, not ordinary noise.
+            return _unknown_freshness(
+                commit_sha,
+                "indexed_commit_not_in_tree",
+                behind_result.stderr.strip()[:120],
             )
         behind = int(behind_result.stdout.strip() or "0")
         return FreshnessResult(
             indexed_commit=commit_sha,
             commits_behind_head=behind,
             stale=behind > 0,
+            freshness_state=FRESHNESS_BEHIND if behind > 0 else FRESHNESS_CURRENT,
         )
-    except Exception:  # noqa: BLE001
-        return FreshnessResult(
-            indexed_commit=commit_sha,
-            commits_behind_head=None,
-            stale=False,
-        )
+    except subprocess.TimeoutExpired:
+        return _unknown_freshness(commit_sha, "timeout")
+    except Exception as exc:  # noqa: BLE001
+        return _unknown_freshness(commit_sha, "git_error", str(exc)[:120])

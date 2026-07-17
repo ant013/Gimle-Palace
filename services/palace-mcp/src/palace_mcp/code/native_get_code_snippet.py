@@ -86,22 +86,26 @@ def _error(
     indexed_commit: str | None = None,
     commits_behind_head: int | None = None,
     stale: bool | None = None,
+    freshness_state: str = "unknown",
+    freshness_reason: str | None = "not_evaluated",
 ) -> dict[str, Any]:
+    # Freshness fields are emitted UNCONDITIONALLY (nullable): omitting them
+    # on unknown would let `payload.get("stale", False)` read unknown as
+    # fresh — the exact silent-assurance defect this contract kills.
     result: dict[str, Any] = {
         "ok": False,
         "error_code": code,
         "message": message,
         "project": project,
         "requested_qualified_name": requested_qualified_name,
+        "indexed_commit": indexed_commit,
+        "commits_behind_head": commits_behind_head,
+        "stale": stale,
+        "freshness_state": freshness_state,
+        "freshness_reason": freshness_reason,
     }
     if resolved_qualified_name is not None:
         result["qualified_name"] = resolved_qualified_name
-    if indexed_commit is not None:
-        result["indexed_commit"] = indexed_commit
-    if commits_behind_head is not None:
-        result["commits_behind_head"] = commits_behind_head
-    if stale is not None:
-        result["stale"] = stale
     return result
 
 
@@ -283,6 +287,8 @@ async def _scope_response(
         "dropped_files": rollup["dropped_files"],
         "deprecated_extensions_suppressed": deprecated_suppressed,
         "stale": freshness.stale,
+        "freshness_state": freshness.freshness_state,
+        "freshness_reason": freshness.freshness_reason,
         "indexed_commit": freshness.indexed_commit,
         "commits_behind_head": freshness.commits_behind_head,
         "documents": [d.as_dict() for d in docs],
@@ -453,6 +459,8 @@ async def native_get_code_snippet(
             indexed_commit=freshness.indexed_commit,
             commits_behind_head=freshness.commits_behind_head,
             stale=freshness.stale,
+            freshness_state=freshness.freshness_state,
+            freshness_reason=freshness.freshness_reason,
         )
 
     return {
@@ -474,6 +482,8 @@ async def native_get_code_snippet(
         "language": snippet.language,
         "truncated": snippet.truncated,
         "stale": freshness.stale,
+        "freshness_state": freshness.freshness_state,
+        "freshness_reason": freshness.freshness_reason,
         "indexed_commit": freshness.indexed_commit,
         "commits_behind_head": freshness.commits_behind_head,
         "snippet_quality": snippet_quality,
