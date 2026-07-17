@@ -147,7 +147,7 @@ step_5_telegram_plugin() {
   # shellcheck source=lib/_paperclip_api.sh
   source "${SCRIPT_DIR}/lib/_paperclip_api.sh"
   require_command git
-  require_command pnpm
+  require_command npm
   require_command python3
   require_command tar
   log info "[5/9] Install and reload telegram plugin (fork: ${TELEGRAM_PLUGIN_REPO} @ ${TELEGRAM_PLUGIN_REF})"
@@ -292,11 +292,13 @@ PY
   loaded_head=$(git -C "$staging_source" rev-parse HEAD)
   [ "$loaded_head" = "$TELEGRAM_PLUGIN_REF" ] || die "telegram plugin checkout does not match pin"
 
-  log info "building pinned plugin (--ignore-scripts for supply-chain safety)"
+  [ "$TELEGRAM_PLUGIN_BUILD_CMD" = "npm ci --ignore-scripts && npm run build" ] || \
+    die "unexpected telegram plugin build command"
+  log info "building pinned plugin with package-lock (--ignore-scripts for supply-chain safety)"
   (
     cd "$staging_source"
-    pnpm install --frozen-lockfile --ignore-scripts
-    pnpm build
+    npm ci --ignore-scripts
+    npm run build
   )
   worker_path="${staging_source}/dist/worker.js"
   [ -f "$worker_path" ] || die "telegram plugin worker build missing: $worker_path"
