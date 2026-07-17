@@ -75,3 +75,10 @@ def test_git_capability_policy_separates_outer_walker_from_cto_profile():
     assert "EXPECTED_GIT_outer_walker_must_not_have" in text
     assert "EXPECTED_GIT_inner_orchestrator_must_have" in text
     assert 'git_policy="$workflow_role"' in text
+
+
+def test_probe_questions_use_create_issue_description_field():
+    """Paperclip create-issue accepts task text as description, not body."""
+    text = LIB.read_text()
+    assert text.count("description: $q") == 2
+    assert "body: $q" not in text

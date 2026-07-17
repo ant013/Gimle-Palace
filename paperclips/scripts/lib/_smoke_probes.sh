@@ -78,7 +78,7 @@ post_question_wait_reply() {
   title="smoke-probe-$(date -u +%Y%m%dT%H%M%SZ)-$RANDOM"
   local body
   body=$(jq -n --arg c "$company" --arg a "$uuid" --arg t "$title" --arg q "$question" \
-    '{companyId: $c, title: $t, body: $q, status: "todo", assigneeAgentId: $a}')
+    '{companyId: $c, title: $t, description: $q, status: "todo", assigneeAgentId: $a}')
   local issue_id
   issue_id=$(paperclip_post "/api/companies/${company}/issues" "$body" | jq -r .id)
   [ -n "$issue_id" ] && [ "$issue_id" != "null" ] || { log warn "issue create failed"; echo ""; return 1; }
@@ -218,7 +218,7 @@ probe_e2e_handoff() {
   title="smoke-e2e-$(date -u +%Y%m%dT%H%M%SZ)"
   local body
   body=$(jq -n --arg c "$company" --arg a "$cto_uuid" --arg t "$title" --arg q "$question" \
-    '{companyId: $c, title: $t, body: $q, status: "todo", assigneeAgentId: $a}')
+    '{companyId: $c, title: $t, description: $q, status: "todo", assigneeAgentId: $a}')
   local issue_id
   issue_id=$(paperclip_post "/api/companies/${company}/issues" "$body" | jq -r .id)
   [ -n "$issue_id" ] && [ "$issue_id" != "null" ] || { log err "e2e issue create failed"; return 1; }
