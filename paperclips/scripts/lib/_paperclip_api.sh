@@ -47,6 +47,15 @@ paperclip_patch() {
     --data-binary "$body"
 }
 
+paperclip_delete() {
+  local path="$1"
+  require_env PAPERCLIP_API_URL
+  require_env PAPERCLIP_API_KEY
+  curl -fsS --max-time 30 --connect-timeout 10 -X DELETE "${PAPERCLIP_API_URL%/}${path}" \
+    -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
+    -H "User-Agent: uaa-bootstrap/1.0"
+}
+
 # Hire an agent — exact payload per UAA spec §8.1
 paperclip_hire_agent() {
   local company_id="$1"
@@ -93,11 +102,39 @@ paperclip_get_agent_config() {
 # Phase C followup CRIT-1 part 2: inverse of paperclip_hire_agent for rollback.
 paperclip_delete_agent() {
   local agent_id="$1"
+  paperclip_delete "/api/agents/${agent_id}"
+}
+
+paperclip_delete_company() {
+  local company_id="$1"
+  paperclip_delete "/api/companies/${company_id}"
+}
+
+# Read a company while preserving the distinction between an idempotent 404
+# and authentication/server failures. Rollback uses this after bootstrap may
+# already have compensated a partially-created company.
+paperclip_get_company_if_exists() {
+  local company_id="$1"
   require_env PAPERCLIP_API_URL
   require_env PAPERCLIP_API_KEY
-  curl -fsS --max-time 30 --connect-timeout 10 -X DELETE "${PAPERCLIP_API_URL%/}/api/agents/${agent_id}" \
+  local response http body
+  response=$(curl -sS --max-time 30 --connect-timeout 10 \
+    -o - -w '\n%{http_code}' \
     -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
-    -H "User-Agent: uaa-bootstrap/1.0"
+    -H "User-Agent: uaa-bootstrap/1.0" \
+    "${PAPERCLIP_API_URL%/}/api/companies/${company_id}" 2>/dev/null) || return 1
+  http=$(printf '%s' "$response" | tail -1)
+  body=$(printf '%s' "$response" | sed '$d')
+  case "$http" in
+    200) printf '%s' "$body" ;;
+    404) printf '' ;;
+    *) log err "company GET returned HTTP $http (expected 200 or 404)"; return 1 ;;
+  esac
+}
+
+paperclip_delete_issue() {
+  local issue_id="$1"
+  paperclip_delete "/api/issues/${issue_id}"
 }
 
 # Plugin endpoints — per UAA spec §8.4 (replace-mode, MUST GET first)

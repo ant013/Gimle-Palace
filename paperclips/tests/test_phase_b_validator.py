@@ -64,3 +64,55 @@ agents: []
         validate_manifest(tmp)
     finally:
         tmp.unlink()
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("paperclip_role", "not-a-paperclip-role"),
+        ("paperclip_icon", "not-an-icon"),
+        ("workflow_role", "Not Kebab Or Snake"),
+    ],
+)
+def test_optional_agent_identity_fields_are_validated(tmp_path, field, value):
+    from paperclips.scripts.validate_manifest import (
+        ManifestValidationError,
+        validate_manifest,
+    )
+
+    manifest = tmp_path / "manifest.yaml"
+    manifest.write_text(
+        "schemaVersion: 2\n"
+        "project:\n"
+        "  key: identity-test\n"
+        "agents:\n"
+        "  - agent_name: TestAgent\n"
+        "    role_source: paperclips/roles-codex/cx-cto.md\n"
+        "    profile: cto\n"
+        "    target: codex\n"
+        f"    {field}: {value}\n"
+    )
+
+    with pytest.raises(ManifestValidationError, match=field):
+        validate_manifest(manifest)
+
+
+def test_valid_optional_agent_identity_fields_pass(tmp_path):
+    from paperclips.scripts.validate_manifest import validate_manifest
+
+    manifest = tmp_path / "manifest.yaml"
+    manifest.write_text(
+        "schemaVersion: 2\n"
+        "project:\n"
+        "  key: identity-test\n"
+        "agents:\n"
+        "  - agent_name: TestAgent\n"
+        "    role_source: paperclips/roles-codex/cx-cto.md\n"
+        "    profile: cto\n"
+        "    target: codex\n"
+        "    paperclip_role: ceo\n"
+        "    paperclip_icon: crown\n"
+        "    workflow_role: outer_walker\n"
+    )
+
+    validate_manifest(manifest)

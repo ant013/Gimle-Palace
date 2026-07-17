@@ -62,3 +62,71 @@ def test_fails_without_project_key():
     out = subprocess.run(["bash", str(SCRIPT)], capture_output=True, text=True)
     assert out.returncode != 0
     assert "project-key required" in out.stderr or "project-key" in out.stderr.lower()
+
+
+def test_company_creation_uses_supported_prefix_seed_and_verifies_final_identity():
+    text = SCRIPT.read_text()
+    section = text[text.index("# Step 5:"):text.index("# Step 6:")]
+
+    assert '[[ "$issue_prefix" =~ ^[A-Z]{3}$ ]]' in section
+    assert '--arg n "$issue_prefix"' in section
+    assert "'{name:$n}'" in section
+    assert "issuePrefix:$p" not in section
+    assert "prefix" in section.lower() and "already allocated" in section.lower()
+
+    post_pos = section.index('paperclip_post "/api/companies"')
+    journal_pos = section.index('kind:"company_create"')
+    created_get_pos = section.index('paperclip_get "/api/companies/${company_id}"')
+    patch_pos = section.index('paperclip_patch "/api/companies/${company_id}"')
+    final_get_pos = section.index(
+        'paperclip_get "/api/companies/${company_id}"', created_get_pos + 1
+    )
+    bindings_pos = section.index('cat > "$bindings"')
+
+    assert post_pos < journal_pos < created_get_pos < patch_pos < final_get_pos
+    assert final_get_pos < bindings_pos
+    assert "rollback_created_company_or_die" in section
+    assert "paperclip_delete_company" in section
+
+
+def test_reused_company_is_verified_but_never_renamed():
+    text = SCRIPT.read_text()
+    section = text[text.index("# Step 5:"):text.index("# Step 6:")]
+    reused = section[section.index("else\n  company_resp="):]
+
+    assert "live_name" in reused
+    assert "live_prefix" in reused
+    assert "display name mismatch" in reused
+    assert "prefix mismatch" in reused
+    assert "paperclip_patch" not in reused
+
+
+def test_explicit_paperclip_identity_overrides_profile_fallback():
+    text = SCRIPT.read_text()
+    assert "paperclip_role" in text
+    assert "paperclip_icon" in text
+    assert "profile fallback" in text.lower()
+
+
+def test_canary_cto_uses_workflow_role():
+    text = SCRIPT.read_text()
+    assert 'workflow_role == "inner_orchestrator"' in text
+
+
+def test_bootstrap_journals_all_created_resource_classes():
+    text = SCRIPT.read_text()
+    for kind in [
+        'kind:"company_create"',
+        'kind:"host_file_create"',
+        'kind:"managed_workspace_create"',
+        'kind:"watchdog_snapshot"',
+    ]:
+        assert kind in text, f"missing journal kind: {kind}"
+
+
+def test_load_bearing_host_roots_are_checked_before_company_mutation():
+    text = SCRIPT.read_text()
+    check_pos = text.index("required_existing")
+    company_pos = text.index("company create-or-reuse")
+    assert check_pos < company_pos
+    assert "host-local path" in text.lower()

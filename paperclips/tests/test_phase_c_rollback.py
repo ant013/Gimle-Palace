@@ -133,3 +133,70 @@ def test_handles_unknown_snapshot_kind(tmp_path, monkeypatch):
     )
     assert out.returncode == 0
     assert "unknown snapshot kind" in (out.stdout + out.stderr).lower()
+
+
+def test_dry_run_covers_created_company_host_files_workspaces_and_watchdog(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    journal_dir = tmp_path / ".paperclip" / "journal"
+    journal_dir.mkdir(parents=True)
+    name = "20260516T120400Z-greenfield"
+    entries = [
+        {
+            "kind": "company_create",
+            "id": "00000000-0000-0000-0000-000000000001",
+            "name": "ThorChainKit",
+        },
+        {
+            "kind": "host_file_create",
+            "path": str(tmp_path / ".paperclip/projects/thorchain/paths.yaml"),
+        },
+        {
+            "kind": "managed_workspace_create",
+            "path": str(tmp_path / "runs/ThorChainCEO/workspace"),
+            "managed_file": "AGENTS.md",
+        },
+        {
+            "kind": "watchdog_snapshot",
+            "project_key": "thorchain",
+            "config_path": str(tmp_path / ".paperclip/watchdog-config.yaml"),
+            "config_existed": False,
+            "config_content": "",
+            "plist_path": str(
+                tmp_path / "Library/LaunchAgents/work.ant013.gimle-watchdog.plist"
+            ),
+            "plist_existed": False,
+            "plist_content": "",
+        },
+    ]
+    (journal_dir / f"{name}.json").write_text(json.dumps({
+        "op": "bootstrap-thorchain",
+        "timestamp": "20260516T120400Z",
+        "entries": entries,
+        "outcome": "success",
+    }))
+
+    out = subprocess.run(
+        ["bash", str(SCRIPT), name, "--dry-run"],
+        capture_output=True,
+        text=True,
+    )
+
+    assert out.returncode == 0, out.stderr
+    combined = out.stdout + out.stderr
+    for marker in ["company", "host file", "workspace", "watchdog"]:
+        assert marker in combined.lower()
+
+
+def test_workspace_rollback_quarantines_unknown_nonempty_content():
+    text = SCRIPT.read_text()
+    assert "quarantine" in text.lower()
+    assert "rm -rf" not in text
+    assert "managed_workspace_create" in text
+
+
+def test_company_rollback_is_idempotent_after_bootstrap_compensation():
+    text = SCRIPT.read_text()
+    assert "paperclip_get_company_if_exists" in text
+    assert "already absent" in text.lower()

@@ -1,0 +1,158 @@
+{
+  "capabilities": {
+    "mcp": {
+      "additions": {
+        "byRole": {},
+        "project": []
+      },
+      "baseRequired": [
+        "codebase-memory",
+        "context7",
+        "serena",
+        "github",
+        "sequential-thinking"
+      ],
+      "codebaseMemoryProjects": {
+        "primary": "Users-ant013-Data-AI-thorchain"
+      },
+      "packageName": "thorchain_kit",
+      "serviceName": "thorchain-kit",
+      "toolNamespace": "thorchain"
+    },
+    "skills": {
+      "additions": {
+        "byRole": {},
+        "project": [
+          "analog-driven-change",
+          "gimle-evidence"
+        ]
+      }
+    },
+    "subagents": {
+      "additions": {
+        "byRole": {},
+        "project": []
+      }
+    }
+  },
+  "compatibility": {
+    "claudeDeployMapping": "",
+    "codexAgentIdsEnv": "",
+    "legacyOutputPaths": "false",
+    "workspaceUpdateScript": ""
+  },
+  "parameters": {
+    "paths": {
+      "codexTeamRoot": "/opt/example/thorchain-paperclip-runs",
+      "operatorMemoryDir": "/opt/example/thorchain-memory",
+      "overlayRoot": "paperclips/projects/thorchain/overlays",
+      "primaryMcpServiceDir": "",
+      "primaryRepoRoot": "/opt/example/thorchain",
+      "productionCheckout": "/opt/example/thorchain",
+      "projectRoot": "/opt/example/thorchain",
+      "projectRulesFile": "AGENTS.md"
+    },
+    "project": {
+      "companyId": "00000000-0000-0000-0000-000000000003",
+      "displayName": "ThorChainKit",
+      "integrationBranch": "main",
+      "issuePrefix": "THR",
+      "key": "thorchain",
+      "systemName": "ThorChainKit.Swift"
+    }
+  },
+  "project": "thorchain",
+  "schemaVersion": 1,
+  "sourceManifest": "paperclips/projects/thorchain/paperclip-agent-assembly.yaml",
+  "sourceManifestSha256": "3e329b744025b5bf6d4f3a1fe5aeee7fcff58155575f1bb1435c60bb2f131d77",
+  "targets": {
+    "codex": {
+      "adapterType": "codex_local",
+      "deployMode": "api",
+      "instructionEntryFile": "AGENTS.md",
+      "instructionsBundleMode": "managed",
+      "roles": [
+        {
+          "agentId": "",
+          "agentName": "ThorChainCEO",
+          "bytes": 22353,
+          "family": "cto",
+          "lines": 516,
+          "output": "paperclips/dist/thorchain/codex/ThorChainCEO.md",
+          "platform": "",
+          "profiles": [
+            "cto"
+          ],
+          "roleId": "codex:thorchain-ceo",
+          "sha256": "61444a9292c46dc891a68a11e9e8555207d4a62992e5cca75c7f69e20648b0cb",
+          "source": "paperclips/projects/thorchain/roles-codex/thorchain-ceo.md",
+          "workspaceCwd": ""
+        },
+        {
+          "agentId": "",
+          "agentName": "ThorChainCTO",
+          "bytes": 22349,
+          "family": "cto",
+          "lines": 516,
+          "output": "paperclips/dist/thorchain/codex/ThorChainCTO.md",
+          "platform": "",
+          "profiles": [
+            "cto"
+          ],
+          "roleId": "codex:thorchain-cto",
+          "sha256": "ee8fa88e64b051f8a14b1000b30c87bb8c1fa560601e186e9692384e67eb633d",
+          "source": "paperclips/projects/thorchain/roles-codex/thorchain-cto.md",
+          "workspaceCwd": ""
+        },
+        {
+          "agentId": "",
+          "agentName": "ThorChainCodeReviewer",
+          "bytes": 17513,
+          "family": "reviewer",
+          "lines": 409,
+          "output": "paperclips/dist/thorchain/codex/ThorChainCodeReviewer.md",
+          "platform": "",
+          "profiles": [
+            "reviewer"
+          ],
+          "roleId": "codex:thorchain-code-reviewer",
+          "sha256": "f86e9dcca2f1ec0df099323a825025ad3e315bad1c76a41b7661b711ef52044a",
+          "source": "paperclips/projects/thorchain/roles-codex/thorchain-code-reviewer.md",
+          "workspaceCwd": ""
+        },
+        {
+          "agentId": "",
+          "agentName": "ThorChainSwiftEngineer",
+          "bytes": 17713,
+          "family": "implementer",
+          "lines": 412,
+          "output": "paperclips/dist/thorchain/codex/ThorChainSwiftEngineer.md",
+          "platform": "",
+          "profiles": [
+            "implementer"
+          ],
+          "roleId": "codex:thorchain-swift-engineer",
+          "sha256": "a791e923c02dd4583ec539e381c4e5163ed52fe8976c6a4c64e7636c74ea6d42",
+          "source": "paperclips/projects/thorchain/roles-codex/thorchain-swift-engineer.md",
+          "workspaceCwd": ""
+        },
+        {
+          "agentId": "",
+          "agentName": "ThorChainQAEngineer",
+          "bytes": 20111,
+          "family": "qa",
+          "lines": 467,
+          "output": "paperclips/dist/thorchain/codex/ThorChainQAEngineer.md",
+          "platform": "",
+          "profiles": [
+            "qa"
+          ],
+          "roleId": "codex:thorchain-qa-engineer",
+          "sha256": "0bcfcd0c2c66f244b5dbfe5f855dd69dd42187452a6654d0a9576c0b08c6eb5d",
+          "source": "paperclips/projects/thorchain/roles-codex/thorchain-qa-engineer.md",
+          "workspaceCwd": ""
+        }
+      ]
+    }
+  }
+}
