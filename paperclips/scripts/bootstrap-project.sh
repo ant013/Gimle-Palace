@@ -334,7 +334,7 @@ for agent_name in $hire_order; do
     --arg effort "$agent_effort" \
     '{
       name: $name, role: $role, title: $title, icon: $icon,
-      reportsTo: $reportsTo, capabilities: "default",
+      capabilities: "default",
       adapterType: $adapter,
       adapterConfig: {
         cwd: $cwd, model: $model, modelReasoningEffort: $effort,
@@ -350,7 +350,7 @@ for agent_name in $hire_order; do
         }
       },
       budgetMonthlyCents: 0
-    }')
+    } + (if $reportsTo == "" then {} else {reportsTo: $reportsTo} end)')
 
   log info "hiring $agent_name (profile=$profile_name target=$target)"
   resp=$(paperclip_hire_agent "$company_id" "$payload")
