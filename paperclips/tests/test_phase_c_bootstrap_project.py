@@ -32,6 +32,15 @@ def test_uses_topological_order():
     assert "reportsTo" in text or "topological" in text.lower()
 
 
+def test_root_agent_hire_omits_empty_reports_to_uuid():
+    text = SCRIPT.read_text()
+    payload_start = text.index("payload=$(jq -n")
+    payload = text[payload_start:text.index("log info \"hiring", payload_start)]
+
+    assert 'reportsTo: $reportsTo, capabilities' not in payload
+    assert 'if $reportsTo == "" then {} else {reportsTo: $reportsTo} end' in payload
+
+
 def test_supports_canary_flag():
     text = SCRIPT.read_text()
     assert "--canary" in text
