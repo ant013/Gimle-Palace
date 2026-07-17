@@ -78,7 +78,9 @@ async def native_search_code(
 
     pat = (pattern or query or "").strip()
     if not pat:
-        return _error("validation_error", "pattern (or query) is required", project=project)
+        return _error(
+            "validation_error", "pattern (or query) is required", project=project
+        )
 
     try:
         repo_path = await _resolve_repo_path(project)
@@ -116,7 +118,9 @@ async def native_search_code(
             proc.communicate(), timeout=_GREP_TIMEOUT_S
         )
     except asyncio.TimeoutError:
-        return _error("timeout", f"search timed out after {_GREP_TIMEOUT_S}s", project=project)
+        return _error(
+            "timeout", f"search timed out after {_GREP_TIMEOUT_S}s", project=project
+        )
     except Exception as exc:  # pragma: no cover - defensive
         return _error("grep_failed", str(exc), project=project)
 
@@ -136,7 +140,7 @@ async def native_search_code(
         if len(parts) < 3:
             continue
         fpath, lineno, text = parts
-        rel = fpath[len(base):].lstrip("/") if fpath.startswith(base) else fpath
+        rel = fpath[len(base) :].lstrip("/") if fpath.startswith(base) else fpath
         results.append(
             {
                 "file_path": rel,

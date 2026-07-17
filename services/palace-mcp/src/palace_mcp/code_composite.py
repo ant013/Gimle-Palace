@@ -1568,10 +1568,10 @@ def register_code_composite_tools(
                 if project_namespace is not None
                 else resolved_project
             )
-            resolution, did_you_mean = await _classify_zero_reference(
+            zero_resolution, did_you_mean = await _classify_zero_reference(
                 driver, _slug, req.qualified_name
             )
-            if resolution == "unresolved":
+            if zero_resolution == "unresolved":
                 return {
                     "ok": False,
                     "error_code": "symbol_not_found",
