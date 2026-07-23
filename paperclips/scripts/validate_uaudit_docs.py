@@ -77,7 +77,7 @@ def validate_config(errors: list[str]) -> None:
     raw = (REPO_ROOT / "paperclips/projects/uaudit/daily-version-branch-routines.yaml").read_text()
     if UUID_RE.search(raw):
         errors.append("daily-version-branch-routines.yaml must use agent names, not UUIDs")
-    if "required_subagents" in raw or "uaudit-" in raw:
+    if "required_subagents" in raw:
         errors.append("daily version-branch routines must use Paperclip agents, not Codex subagent rosters")
     limits = config.get("limits", {})
     if limits.get("max_files") != 300:

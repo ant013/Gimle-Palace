@@ -56,6 +56,188 @@ require_command python3
 require_env PAPERCLIP_API_URL
 require_env PAPERCLIP_API_KEY
 
+install_uaudit_delivery_helper() {
+  local team_root="$1"
+  local source="${REPO_ROOT}/paperclips/projects/uaudit/runtime/uaudit_delivery_contract.py"
+  local tools_dir="${team_root}/.uaudit-tools"
+  local destination="${tools_dir}/uaudit_delivery_contract.py"
+  local install_manifest="${tools_dir}/uaudit_delivery_contract.manifest.json"
+  local pending_install="${tools_dir}/uaudit_delivery_contract.pending.json"
+  local source_sha destination_sha manifest_sha="" manifest_schema manifest_file pending_previous trusted_previous
+  local helper_tmp manifest_tmp pending_tmp
+
+  [ -f "$source" ] || die "UAudit delivery helper source missing: $source"
+  mkdir -p "$tools_dir"
+  chmod 755 "$tools_dir"
+
+  source_sha=$(python3 - "$source" <<'PY'
+import hashlib
+import pathlib
+import sys
+
+print(hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest())
+PY
+)
+
+  # Recover only a transaction explicitly prepared by this installer. This
+  # distinguishes a split rename from arbitrary helper/manifest tampering.
+  if [ -e "$pending_install" ]; then
+    [ -f "$pending_install" ] && [ ! -L "$pending_install" ] || \
+      die "UAudit helper pending transaction is not a regular file"
+    python3 - "$pending_install" <<'PY' || die "UAudit helper pending transaction must be read-only"
+import pathlib
+import sys
+
+raise SystemExit(1 if pathlib.Path(sys.argv[1]).stat().st_mode & 0o222 else 0)
+PY
+    jq -e '
+      type == "object" and
+      keys == ["previous_sha256", "schema_version", "target_sha256"] and
+      .schema_version == "uaudit-helper-install-pending/v1" and
+      (.target_sha256 | type == "string" and test("^[0-9a-f]{64}$")) and
+      (.previous_sha256 == null or (.previous_sha256 | type == "string" and test("^[0-9a-f]{64}$")))
+    ' "$pending_install" >/dev/null || die "UAudit helper pending transaction is malformed"
+    [ "$(jq -r '.target_sha256' "$pending_install")" = "$source_sha" ] || \
+      die "UAudit helper pending transaction targets a different source generation"
+    pending_previous=$(jq -r '.previous_sha256 // ""' "$pending_install")
+    if [ -f "$destination" ]; then
+      destination_sha=$(python3 - "$destination" <<'PY'
+import hashlib
+import pathlib
+import sys
+
+print(hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest())
+PY
+)
+      if [ "$destination_sha" = "$source_sha" ]; then
+        manifest_tmp=$(mktemp "${tools_dir}/.uaudit_delivery_contract.manifest.json.XXXXXX")
+        jq -n \
+          --arg schema_version "uaudit-helper-install/v1" \
+          --arg file "uaudit_delivery_contract.py" \
+          --arg sha256 "$source_sha" \
+          '{schema_version: $schema_version, file: $file, sha256: $sha256}' > "$manifest_tmp"
+        chmod 444 "$destination" "$manifest_tmp"
+        mv -f "$manifest_tmp" "$install_manifest"
+        rm -f "$pending_install"
+        python3 "$destination" verify-install --manifest "$install_manifest" || \
+          die "recovered UAudit helper rejected its install manifest"
+        log ok "recovered split UAudit helper install: $destination"
+        return 0
+      fi
+      [ -n "$pending_previous" ] && [ "$destination_sha" = "$pending_previous" ] || \
+        die "UAudit helper pending transaction does not match installed bytes"
+    else
+      [ -z "$pending_previous" ] || \
+        die "UAudit helper disappeared during a prepared upgrade"
+    fi
+  fi
+
+  # Existing installs are immutable generations. A matching install is a no-op;
+  # a tampered/malformed generation must be investigated instead of silently
+  # healed. An older generation requires an explicit operator-approved digest.
+  if [ -e "$destination" ] || [ -e "$install_manifest" ]; then
+    [ -f "$destination" ] && [ ! -L "$destination" ] && \
+      [ -f "$install_manifest" ] && [ ! -L "$install_manifest" ] || \
+      die "UAudit helper install is incomplete (helper/manifest pair required)"
+    jq -e '
+      type == "object" and
+      keys == ["file", "schema_version", "sha256"]
+    ' "$install_manifest" >/dev/null || die "UAudit helper install manifest is invalid or has unknown fields"
+    manifest_schema=$(jq -r '.schema_version // ""' "$install_manifest")
+    manifest_file=$(jq -r '.file // ""' "$install_manifest")
+    manifest_sha=$(jq -r '.sha256 // ""' "$install_manifest")
+    [ "$manifest_schema" = "uaudit-helper-install/v1" ] || \
+      die "UAudit helper install manifest has unsupported schema"
+    [ "$manifest_file" = "uaudit_delivery_contract.py" ] || \
+      die "UAudit helper install manifest names an unexpected file"
+    [[ "$manifest_sha" =~ ^[0-9a-f]{64}$ ]] || \
+      die "UAudit helper install manifest has invalid sha256"
+    destination_sha=$(python3 - "$destination" <<'PY'
+import hashlib
+import pathlib
+import sys
+
+print(hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest())
+PY
+)
+    [ "$destination_sha" = "$manifest_sha" ] || \
+      die "UAudit delivery helper digest mismatch (installed bytes were modified)"
+    python3 - "$destination" "$install_manifest" <<'PY' || \
+      die "UAudit delivery helper and install manifest must be read-only"
+import pathlib
+import sys
+
+paths = (pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]))
+raise SystemExit(1 if any(path.stat().st_mode & 0o222 for path in paths) else 0)
+PY
+    if [ "$manifest_sha" = "$source_sha" ]; then
+      python3 "$destination" verify-install --manifest "$install_manifest" || \
+        die "UAudit delivery helper rejected its install manifest"
+      log ok "UAudit delivery helper already installed: $destination"
+      return 0
+    fi
+    trusted_previous="${UAUDIT_HELPER_TRUSTED_PREVIOUS_SHA256:-}"
+    [[ "$trusted_previous" =~ ^[0-9a-f]{64}$ ]] && \
+      [ "$trusted_previous" = "$manifest_sha" ] || \
+      die "UAudit helper generation differs from source and is not explicitly trusted for upgrade"
+  fi
+
+  helper_tmp=$(mktemp "${tools_dir}/.uaudit_delivery_contract.py.XXXXXX")
+  manifest_tmp=$(mktemp "${tools_dir}/.uaudit_delivery_contract.manifest.json.XXXXXX")
+  cp "$source" "$helper_tmp"
+  chmod 444 "$helper_tmp"
+  destination_sha=$(python3 - "$helper_tmp" <<'PY'
+import hashlib
+import pathlib
+import sys
+
+print(hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest())
+PY
+)
+  [ "$destination_sha" = "$source_sha" ] || die "UAudit helper staging digest mismatch"
+  jq -n \
+    --arg schema_version "uaudit-helper-install/v1" \
+    --arg file "uaudit_delivery_contract.py" \
+    --arg sha256 "$source_sha" \
+    '{schema_version: $schema_version, file: $file, sha256: $sha256}' \
+    > "$manifest_tmp"
+  chmod 444 "$manifest_tmp"
+
+  pending_tmp=$(mktemp "${tools_dir}/.uaudit_delivery_contract.pending.json.XXXXXX")
+  jq -n \
+    --arg schema_version "uaudit-helper-install-pending/v1" \
+    --arg target_sha256 "$source_sha" \
+    --arg previous_sha256 "$manifest_sha" \
+    '{
+      schema_version: $schema_version,
+      target_sha256: $target_sha256,
+      previous_sha256: (if $previous_sha256 == "" then null else $previous_sha256 end)
+    }' > "$pending_tmp"
+  chmod 444 "$pending_tmp"
+  mv -f "$pending_tmp" "$pending_install"
+
+  # The manifest is the commit marker and is therefore published last. A crash
+  # between the two renames is recovered only through the adjacent pending marker.
+  mv -f "$helper_tmp" "$destination"
+  mv -f "$manifest_tmp" "$install_manifest"
+  rm -f "$pending_install"
+
+  destination_sha=$(python3 - "$destination" <<'PY'
+import hashlib
+import pathlib
+import sys
+
+print(hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest())
+PY
+)
+  [ "$destination_sha" = "$source_sha" ] || die "UAudit helper post-install digest mismatch"
+  [ "$(jq -r '.sha256' "$install_manifest")" = "$source_sha" ] || \
+    die "UAudit helper install manifest digest mismatch"
+  python3 "$destination" verify-install --manifest "$install_manifest" || \
+    die "UAudit delivery helper rejected its install manifest"
+  log ok "UAudit delivery helper installed read-only: $destination"
+}
+
 manifest="${REPO_ROOT}/paperclips/projects/${project_key}/paperclip-agent-assembly.yaml"
 [ -f "$manifest" ] || die "manifest not found: $manifest"
 
@@ -71,10 +253,22 @@ log ok "journal: $journal"
 # Step 3: host paths setup
 log info "[3/13] host-local directory setup"
 host_dir="${HOME}/.paperclip/projects/${project_key}"
+host_dir_preexisting=0
+[ -d "$host_dir" ] && host_dir_preexisting=1
 mkdir -p "$host_dir"
+if [ "$host_dir_preexisting" -eq 0 ]; then
+  journal_record "$journal" "$(jq -n --arg p "$host_dir" '{kind:"host_directory_create",path:$p}')"
+fi
 bindings="${host_dir}/bindings.yaml"
 paths_file="${host_dir}/paths.yaml"
 plugins_file="${host_dir}/plugins.yaml"
+bindings_preexisting=0
+[ -f "$bindings" ] && bindings_preexisting=1
+
+record_host_file_create() {
+  local path="$1"
+  journal_record "$journal" "$(jq -n --arg p "$path" '{kind:"host_file_create",path:$p}')"
+}
 
 # Step 4: paths.yaml (prompt or load from --config)
 if [ ! -f "$paths_file" ]; then
@@ -97,6 +291,32 @@ overlay_root: "paperclips/projects/${project_key}/overlays"
 EOF
     log ok "wrote $paths_file"
   fi
+  chmod 600 "$paths_file"
+  record_host_file_create "$paths_file"
+fi
+
+# Resolve load-bearing reference roots only from host-local paths.yaml. The
+# committed manifest carries key names, never operator-specific absolute paths.
+while IFS= read -r required_key; do
+  [ -z "$required_key" ] && continue
+  [[ "$required_key" =~ ^[a-z][a-z0-9_]*$ ]] || \
+    die "invalid host-local path key in host_paths.required_existing: $required_key"
+  required_value=$(yq -r ".[\"${required_key}\"] // \"\"" "$paths_file")
+  [ -n "$required_value" ] && [ "$required_value" != "null" ] || \
+    die "required host-local path '$required_key' is unresolved in $paths_file"
+  case "$required_value" in
+    /*) ;;
+    *) die "required host-local path '$required_key' must be absolute: $required_value" ;;
+  esac
+  [ -d "$required_value" ] || \
+    die "required host-local path '$required_key' does not exist: $required_value"
+done < <(yq -r '.host_paths.required_existing[]? // ""' "$manifest")
+
+if [ "$project_key" = "uaudit" ]; then
+  team_root=$(yq -r '.team_workspace_root // ""' "$paths_file")
+  [ -n "$team_root" ] && [ "$team_root" != "null" ] || \
+    die "team_workspace_root required to install UAudit delivery helper"
+  install_uaudit_delivery_helper "$team_root"
 fi
 
 # Step 5: company create-or-reuse
@@ -108,6 +328,11 @@ if [ -n "$REUSE_BINDINGS" ]; then
     log info "bindings already at canonical location, skip cp"
   fi
   log info "imported bindings from $REUSE_BINDINGS"
+  if [ "$bindings_preexisting" -eq 0 ]; then
+    chmod 600 "$bindings"
+    record_host_file_create "$bindings"
+    bindings_preexisting=1
+  fi
 fi
 
 company_id=""
@@ -115,12 +340,69 @@ if [ -f "$bindings" ]; then
   company_id=$(yq -r '.company_id // ""' "$bindings")
 fi
 
+display_name=$(yq -r '.project.display_name' "$manifest")
+issue_prefix=$(yq -r '.project.issue_prefix' "$manifest")
+[ -n "$display_name" ] && [ "$display_name" != "null" ] || die "project.display_name missing"
+[[ "$issue_prefix" =~ ^[A-Z]{3}$ ]] || \
+  die "invalid project.issue_prefix for pinned Paperclip runtime (expected exactly three uppercase letters): $issue_prefix"
+
+companies_resp=$(paperclip_get "/api/companies")
+prefix_owner=$(printf '%s' "$companies_resp" | jq -r --arg prefix "$issue_prefix" '
+  (if type == "array" then . else (.companies // .items // []) end)
+  | map(select((.issuePrefix // .issue_prefix // "") == $prefix))
+  | first.id // ""
+')
+
 if [ -z "${company_id}" ] || [ "$company_id" = "null" ]; then
-  display_name=$(yq -r '.project.display_name' "$manifest")
-  log info "creating new company: $display_name"
-  company_resp=$(paperclip_post "/api/companies" "$(jq -n --arg n "$display_name" '{name:$n}')")
+  [ -z "$prefix_owner" ] || \
+    die "issue prefix $issue_prefix is already allocated to company $prefix_owner"
+  log info "creating new company with temporary prefix seed: $issue_prefix"
+  company_resp=$(paperclip_post "/api/companies" "$(jq -n --arg n "$issue_prefix" '{name:$n}')")
   company_id=$(echo "$company_resp" | jq -r '.id')
   [ -n "$company_id" ] && [ "$company_id" != "null" ] || die "company creation returned no id"
+
+  rollback_created_company_or_die() {
+    local reason="$1"
+    if paperclip_delete_company "$company_id" >/dev/null; then
+      journal_finalize "$journal" "failure" || \
+        log warn "failed to finalize journal after company compensation: $journal"
+      die "$reason; exact created company $company_id was rolled back"
+    fi
+    journal_finalize "$journal" "failure" || true
+    die "$reason; automatic rollback of exact created company $company_id failed — replay $journal"
+  }
+
+  company_journal_entry=$(jq -n \
+    --arg n "$display_name" \
+    --arg creation_name "$issue_prefix" \
+    --arg id "$company_id" \
+    --arg prefix "$issue_prefix" \
+    '{kind:"company_create",name:$n,creation_name:$creation_name,id:$id,issue_prefix:$prefix}')
+  journal_record "$journal" "$company_journal_entry" || \
+    rollback_created_company_or_die "failed to journal newly created company"
+
+  created_company=$(paperclip_get "/api/companies/${company_id}") || \
+    rollback_created_company_or_die "new company $company_id is not readable"
+  created_name=$(printf '%s' "$created_company" | jq -r '.name // ""')
+  created_prefix=$(printf '%s' "$created_company" | jq -r '.issuePrefix // .issue_prefix // ""')
+  [ "$created_name" = "$issue_prefix" ] || \
+    rollback_created_company_or_die "new company seed-name mismatch: expected $issue_prefix, got ${created_name:-<empty>}"
+  [ "$created_prefix" = "$issue_prefix" ] || \
+    rollback_created_company_or_die "new company prefix mismatch: expected $issue_prefix, got ${created_prefix:-<empty>}"
+
+  paperclip_patch "/api/companies/${company_id}" \
+    "$(jq -n --arg n "$display_name" '{name:$n}')" >/dev/null || \
+    rollback_created_company_or_die "failed to rename new company to $display_name"
+
+  final_company=$(paperclip_get "/api/companies/${company_id}") || \
+    rollback_created_company_or_die "renamed company $company_id is not readable"
+  final_name=$(printf '%s' "$final_company" | jq -r '.name // ""')
+  final_prefix=$(printf '%s' "$final_company" | jq -r '.issuePrefix // .issue_prefix // ""')
+  [ "$final_name" = "$display_name" ] || \
+    rollback_created_company_or_die "final company name mismatch: expected $display_name, got ${final_name:-<empty>}"
+  [ "$final_prefix" = "$issue_prefix" ] || \
+    rollback_created_company_or_die "final company prefix mismatch: expected $issue_prefix, got ${final_prefix:-<empty>}"
+
   cat > "$bindings" <<EOF
 schemaVersion: 2
 company_id: "${company_id}"
@@ -128,8 +410,22 @@ agents: {}
 EOF
   chmod 600 "$bindings"
   chmod 700 "$(dirname "$bindings")"
+  if [ "$bindings_preexisting" -eq 0 ]; then
+    record_host_file_create "$bindings"
+    bindings_preexisting=1
+  fi
   log ok "company created: $company_id"
 else
+  company_resp=$(paperclip_get "/api/companies/${company_id}") || \
+    die "bound company $company_id not found"
+  live_name=$(printf '%s' "$company_resp" | jq -r '.name // ""')
+  live_prefix=$(printf '%s' "$company_resp" | jq -r '.issuePrefix // .issue_prefix // ""')
+  [ "$live_name" = "$display_name" ] || \
+    die "bound company $company_id display name mismatch: expected $display_name, got ${live_name:-<empty>}"
+  [ "$live_prefix" = "$issue_prefix" ] || \
+    die "bound company $company_id prefix mismatch: expected $issue_prefix, got ${live_prefix:-<empty>}"
+  [ -z "$prefix_owner" ] || [ "$prefix_owner" = "$company_id" ] || \
+    die "issue prefix $issue_prefix is already allocated to company $prefix_owner"
   log ok "company reused: $company_id"
 fi
 
@@ -196,18 +492,21 @@ for agent_name in $hire_order; do
   team_root=$(yq -r '.team_workspace_root // ""' "$paths_file")
   cwd="${team_root}/${agent_name}/workspace"
 
-  # Per-agent role/icon/model from manifest profile
+  # Per-agent role/icon/model. Explicit Paperclip identity wins; profile fallback
+  # preserves legacy manifests that predate paperclip_role/paperclip_icon.
   profile_name=$(echo "$agent_meta" | jq -r '.profile')
   case "$profile_name" in
-    cto)         hire_role="cto";         hire_icon="🧠" ;;
-    reviewer)    hire_role="reviewer";    hire_icon="🔎" ;;
-    implementer) hire_role="implementer"; hire_icon="🛠" ;;
-    qa)          hire_role="qa";          hire_icon="🧪" ;;
-    research)    hire_role="research";    hire_icon="📚" ;;
-    writer)      hire_role="writer";      hire_icon="✍" ;;
-    minimal|custom) hire_role="implementer"; hire_icon="🧑" ;;
+    cto)         fallback_role="cto";         fallback_icon="🧠" ;;
+    reviewer)    fallback_role="reviewer";    fallback_icon="🔎" ;;
+    implementer) fallback_role="implementer"; fallback_icon="🛠" ;;
+    qa)          fallback_role="qa";          fallback_icon="🧪" ;;
+    research)    fallback_role="research";    fallback_icon="📚" ;;
+    writer)      fallback_role="writer";      fallback_icon="✍" ;;
+    minimal|custom) fallback_role="implementer"; fallback_icon="🧑" ;;
     *) die "unknown profile '$profile_name' for agent $agent_name" ;;
   esac
+  hire_role=$(echo "$agent_meta" | jq -r --arg fallback "$fallback_role" '.paperclip_role // $fallback')
+  hire_icon=$(echo "$agent_meta" | jq -r --arg fallback "$fallback_icon" '.paperclip_icon // $fallback')
 
   agent_model=$(echo "$agent_meta" | jq -r '.model // "auto"')
   agent_effort=$(echo "$agent_meta" | jq -r '.modelReasoningEffort // "medium"')
@@ -224,7 +523,7 @@ for agent_name in $hire_order; do
     --arg effort "$agent_effort" \
     '{
       name: $name, role: $role, title: $title, icon: $icon,
-      reportsTo: $reportsTo, capabilities: "default",
+      capabilities: "default",
       adapterType: $adapter,
       adapterConfig: {
         cwd: $cwd, model: $model, modelReasoningEffort: $effort,
@@ -240,7 +539,7 @@ for agent_name in $hire_order; do
         }
       },
       budgetMonthlyCents: 0
-    }')
+    } + (if $reportsTo == "" then {} else {reportsTo: $reportsTo} end)')
 
   log info "hiring $agent_name (profile=$profile_name target=$target)"
   resp=$(paperclip_hire_agent "$company_id" "$payload")
@@ -328,13 +627,15 @@ deploy_one() {
 if [ "$CANARY" -eq 1 ]; then
   log info "CANARY mode: 2-stage deploy per spec §8.6"
   # Stage 1: read-only canary
-  canary_1=$(yq -r '.agents[] | select(.profile == "writer" or .profile == "research" or .profile == "qa") | .agent_name' "$manifest" | head -1)
+  canary_1=$(yq -r '[.agents[] | select(.profile == "writer" or .profile == "research" or .profile == "qa") | .agent_name][0] // ""' "$manifest")
   [ -n "$canary_1" ] || canary_1=$(yq -r '.agents[0].agent_name' "$manifest")
   log info "Stage 1 canary: $canary_1"
   deploy_one "$canary_1"
 
   # Stage 2: cto
-  canary_2=$(yq -r '.agents[] | select(.profile == "cto") | .agent_name' "$manifest" | head -1)
+  canary_2=$(yq -r '[.agents[] | select(.workflow_role == "inner_orchestrator") | .agent_name][0] // ""' "$manifest")
+  [ -n "$canary_2" ] || \
+    canary_2=$(yq -r '[.agents[] | select(.profile == "cto") | .agent_name][0] // ""' "$manifest")
   if [ -n "$canary_2" ]; then
     log info "Stage 2 canary: $canary_2"
     deploy_one "$canary_2"
@@ -357,12 +658,27 @@ log info "[11/13] setting up workspaces"
 team_root=$(yq -r '.team_workspace_root' "$paths_file")
 for agent_name in $hire_order; do
   ws="${team_root}/${agent_name}/workspace"
-  mkdir -p "$ws"
+  workspace_created=0
+  if [ ! -d "$ws" ]; then
+    mkdir -p "$ws"
+    workspace_created=1
+    journal_record "$journal" "$(jq -n \
+      --arg p "$ws" \
+      --arg f "AGENTS.md" \
+      '{kind:"managed_workspace_create",path:$p,managed_file:$f}')"
+  fi
   target=$(yq -r ".agents[] | select(.agent_name == \"${agent_name}\") | .target" "$manifest")
   # Phase H2-followup: honor manifest `output_path` (same logic as deploy_one).
   cp_src=$(yq -r ".agents[] | select(.agent_name == \"${agent_name}\") | .output_path // \"paperclips/dist/${project_key}/${target}/${agent_name}.md\"" "$manifest")
   # Security H2-followup CRIT-2: same traversal guard as deploy_one.
   validate_safe_repo_path "$cp_src"
+  if [ "$workspace_created" -eq 0 ] && [ -f "${ws}/AGENTS.md" ]; then
+    old_workspace_content=$(cat "${ws}/AGENTS.md")
+    journal_record "$journal" "$(jq -n \
+      --arg p "${ws}/AGENTS.md" \
+      --arg old "$old_workspace_content" \
+      '{kind:"workspace_file_snapshot",path:$p,old_content:$old}')"
+  fi
   cp "${REPO_ROOT}/${cp_src}" "${ws}/AGENTS.md"
 done
 
@@ -388,6 +704,32 @@ fi
 
 # Step 13: bootstrap watchdog
 log info "[13/13] bootstrap-watchdog"
+watchdog_config="${HOME}/.paperclip/watchdog-config.yaml"
+watchdog_plist="${HOME}/Library/LaunchAgents/work.ant013.gimle-watchdog.plist"
+watchdog_config_existed=false
+watchdog_plist_existed=false
+watchdog_config_content=""
+watchdog_plist_content=""
+if [ -f "$watchdog_config" ]; then
+  watchdog_config_existed=true
+  watchdog_config_content=$(cat "$watchdog_config")
+fi
+if [ -f "$watchdog_plist" ]; then
+  watchdog_plist_existed=true
+  watchdog_plist_content=$(cat "$watchdog_plist")
+fi
+journal_record "$journal" "$(jq -n \
+  --arg project "$project_key" \
+  --arg company "$company_id" \
+  --arg config_path "$watchdog_config" \
+  --arg config_content "$watchdog_config_content" \
+  --arg plist_path "$watchdog_plist" \
+  --arg plist_content "$watchdog_plist_content" \
+  --argjson config_existed "$watchdog_config_existed" \
+  --argjson plist_existed "$watchdog_plist_existed" \
+  '{kind:"watchdog_snapshot",project_key:$project,company_id:$company,
+    config_path:$config_path,config_existed:$config_existed,config_content:$config_content,
+    plist_path:$plist_path,plist_existed:$plist_existed,plist_content:$plist_content}')"
 "${SCRIPT_DIR}/bootstrap-watchdog.sh" "$project_key"
 
 journal_finalize "$journal" "success"
