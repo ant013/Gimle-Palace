@@ -1,345 +1,418 @@
-# UAudit v0.50 Migration Completion and Live Recovery
+# UAudit v0.50 Migration and Daily Delivery Recovery
 
 Status: review-ready
 
-Design revision: 1
+Design revision: 2 — availability-first
 
-Grounded repository state: `origin/develop` at `0e9cf57c00ff970f584256126b500166580e7a72`
+Grounded repository state: `origin/develop` at
+`0e9cf57c00ff970f584256126b500166580e7a72`
 
 Live evidence captured: 2026-07-23 on `Antons-iMac.local`
 
 ## Goal
 
-Restore daily Android and iOS UAudit delivery and complete the migration of both
-platforms to `version/0.50` without duplicating an already delivered Telegram
-report or corrupting the audit cursor.
+Restore dependable daily Android and iOS UAudit reports and complete the
+migration of both platforms to `version/0.50`.
+
+Availability is the primary criterion. Recovery uses at-least-once Telegram
+delivery semantics: a one-time duplicate report during recovery is acceptable.
+A stuck pipeline, skipped cursor range, or routine that does not run every day
+is not acceptable.
 
 Observable success means:
 
-- both repository-owned daily routines, roles, rendered bundles, and live
-  Paperclip routine descriptions use `version/0.50`;
-- both platforms use
-  `/Users/Shared/UnstoppableAudit/state/<platform>-version-audit.json` as the
-  only active cursor contract;
-- the live routine reconciler can map repository logical routine IDs to
-  Paperclip UUID routine records and reports a no-op after reconciliation;
-- Android `UNS-478` is reconciled without a second Telegram send;
-- iOS `UNS-481` is delivered exactly once and reconciled;
-- both routine locks are released, obsolete blocked generations are closed,
-  both schedules are active, and a fresh manual run reaches a valid terminal
-  state.
+- repository source, generated bundles, deployed agents, and both live
+  Paperclip routines use `version/0.50`;
+- the receipt-led delivery helper and its prompts are durable in `main`, not
+  only hot-patched on the iMac;
+- Android and iOS each complete a fresh manual daily run and deliver a report
+  or a validated no-change result;
+- both schedules are active, have a next-run timestamp, and can execute without
+  legacy cursor, lock, or issue blockers;
+- the reconciler maps stable repository routine identities to live Paperclip
+  UUID records and converges to a no-op.
+
+## User Decision
+
+The operator explicitly prioritized daily delivery over duplicate prevention:
+
+- recovery may resend an already delivered Android report;
+- retry after an indeterminate Telegram result may produce a duplicate;
+- duplicate avoidance must not keep either daily routine disabled or blocked.
+
+This does not permit silently skipping commits. Cursor movement must still be
+bound to a verified audit range and a successful delivery attempt.
 
 ## Incident Evidence
 
-The server, scheduler, watchdog, and Telegram plugin are healthy. The failures
-are contract drift:
+The Paperclip server, scheduler, watchdog, and Telegram plugin are running. The
+daily pipelines stopped because repository source, deployed prompts, routines,
+and state files describe different contracts:
 
-- Repository `develop` already has Android on `version/0.50`, but iOS remains
-  on `version/0.49`.
-- Repository config and the deployed delivery helper define canonical cursors
-  under `state/`, while live routine descriptions and hot-patched Android role
-  instructions refer to `artifacts/<InfraAgent>/cursor.json`.
-- The current reconciler keys API records by `id` and then looks them up using
-  logical config IDs such as `daily-android-version-0.50`. Live Paperclip IDs
-  are UUIDs, so the current dry-run fails with:
-
-  ```text
-  ERROR: routine 'daily-android-version-0.50' not found; creation is not implicit
-  ```
-
-- Android `UNS-478` has an immutable successful Telegram receipt
-  (`message_id=335`) and a matching held lock. Its state cursor is absent, so
-  helper reconciliation stopped after delivery.
-- iOS `UNS-481` has a complete validated delivery payload but no Telegram
-  receipt and no matching lock. Its `state/` cursor is stale `version/0.49`,
-  while the legacy artifact cursor is the verified `version/0.50` FROM SHA.
+- `origin/develop` has Android on `version/0.50`, while iOS remains on
+  `version/0.49`.
+- Live routines describe `version/0.50`, but deployed agents contain a mixture
+  of `version/0.49`, `version/0.50`, `state/` cursors, and legacy artifact
+  cursors.
+- Receipt-led helper source, installation logic, agent prompts, and tests exist
+  only on unmerged `origin/feature/uaudit-russian-audit-delivery`
+  (`cd919dd1..144169ab`). The deployed helper SHA matches that branch.
+- Deploying current `origin/develop` would overwrite the live receipt-led
+  prompts with the older direct Telegram/cursor flow.
+- The current reconciler looks up logical IDs in a map keyed by live UUIDs and
+  PATCHes an obsolete company-scoped endpoint.
+- Android `UNS-478` has a successful Telegram receipt and complete audit
+  payload, but the canonical state cursor is absent.
+- iOS `UNS-481` has a complete payload and no receipt. Its legacy artifact
+  cursor is the verified `version/0.50` FROM state.
+- iOS `status/bind-context.json` contains a stale digest. The current
+  `run-context.json`, delivery summary, and helper agree on
+  `918307dea7d692758ca9c1c58062a9166fc9cea19f17e099edcf6e3ba8161c35`.
 
 ## Assumptions
 
-- `state/<platform>-version-audit.json` remains the authoritative cursor
-  boundary; the helper will not be weakened to accept arbitrary artifact
-  paths.
-- Existing legacy artifact cursor files remain available as read-only migration
-  evidence but are no longer referenced by active routines or roles.
-- The `UAudit` Telegram file route remains the approved destination.
-- Live routine titles remain unique within the UAudit company. Matching still
-  fails closed if the title/marker/platform fallback is ambiguous.
-- Before live recovery, both FROM SHAs and all run/receipt digests will be
-  revalidated. Any mismatch stops the operation.
-- If the post-recovery Android delta exceeds configured limits at execution
-  time, normal daily intake will not be widened; a separate bounded catch-up
-  path will be created.
+- The existing receipt-led delivery contract remains the desired UAudit
+  workflow and must be synchronized back into repository source.
+- Telegram remains at-least-once. Exactly-once delivery is explicitly not a
+  requirement for this repair.
+- `state/<platform>-version-audit.json` is the only active cursor location.
+- Legacy cursor files remain read-only evidence and are never copied verbatim
+  into `state/`.
+- Existing blocked issues are recovery inputs, not reasons to leave schedules
+  disabled indefinitely.
+- Audit limits remain `30` commits, `300` files, and `3000` diff lines.
+- If the next delta exceeds those limits, a bounded catch-up generation is
+  created instead of widening the daily limits.
 
 ## Scope
 
 ### In scope
 
-1. Complete repository-owned iOS migration from `version/0.49` to
-   `version/0.50`.
-2. Keep Android and iOS routine definitions symmetric while preserving their
-   platform-specific agents, repository paths, and report filenames.
-3. Repair `reconcile_uaudit_routines.py` so it:
-   - resolves logical routine definitions to live UUID routines;
-   - renders canonical descriptions from config plus operator `paths.yaml`;
-   - patches assignee and description drift through
-     `PATCH /api/routines/<uuid>`;
-   - uses `baseRevisionId` for optimistic concurrency;
-   - fails on missing or ambiguous matches and never creates routines.
-4. Add tests for the current UUID API shape, description drift, no-op behavior,
-   ambiguous matches, and revision-bound apply requests.
-5. Document the state-cursor migration and receipt-safe recovery invariant.
-6. Deploy the approved bundles and repair the two existing live generations.
-7. Close only the obsolete UAudit daily issues superseded by the repaired
-   generations, then execute and monitor fresh routine runs.
+1. Port the receipt-led UAudit delivery family from
+   `origin/feature/uaudit-russian-audit-delivery` onto current `develop`.
+2. Resolve that family and both daily platforms to `version/0.50`, canonical
+   state cursors, and `version/0.50` lock names.
+3. Complete the repository-owned iOS `version/0.50` migration.
+4. Give each live routine a stable, version-independent repository identity.
+5. Repair the reconciler for UUID records, rendered descriptions,
+   revision-bound PATCHes, and partial-apply recovery.
+6. Deploy source-backed bundles and helper installation through the supported
+   release path.
+7. Recover or replay the Android and iOS pending ranges with at-least-once
+   delivery.
+8. Quarantine superseded generations and prove fresh daily runs for both
+   platforms before re-enabling schedules.
 
 ### Out of scope
 
-- Changing audit limits (`30` commits, `300` files, `3000` diff lines).
-- Changing schedules, Telegram destinations, audit findings, or product source.
-- Modifying the deployed delivery helper to accept legacy artifact cursors.
-- Deleting legacy cursor files or historical `phase_f` baselines.
-- Re-sending the Android `UNS-478` report.
-- Broad refactors of the Paperclip build/deploy system.
+- Telegram plugin exactly-once/idempotency implementation.
+- Changing Telegram destinations or audit report content.
+- Widening daily audit limits.
+- Deleting historical run artifacts, receipts, or legacy cursor evidence.
+- Broad Paperclip deployment refactors.
+- Cleanup of unrelated UAudit PR-audit issues.
 
 ## Affected Areas
 
-Expected repository files:
+The exact diff is determined by porting the already implemented receipt-led
+family and resolving it against current `develop`. Expected areas include:
 
 - `paperclips/projects/uaudit/daily-version-branch-routines.yaml`
-- `paperclips/projects/uaudit/roles-codex/uwi-platform-dispatcher.md`
-- `paperclips/projects/uaudit/overlays/codex/UWIInfraEngineer.md`
-- `paperclips/dist/uaudit/codex/UWICTO.md` (generated)
-- `paperclips/dist/uaudit/codex/UWIInfraEngineer.md` (generated)
+- `paperclips/projects/uaudit/runtime/uaudit_delivery_contract.py`
+- both platform dispatcher role sources
+- both InfraEngineer overlays
+- daily code, security, crypto, research, and QA producer overlays required by
+  the v1 sidecar contract
+- corresponding generated `paperclips/dist/uaudit/codex/*.md` bundles
+- `paperclips/dist/uaudit.resolved-assembly.json`
+- `paperclips/scripts/bootstrap-project.sh`
+- `paperclips/scripts/install-paperclip.sh`
+- `paperclips/scripts/versions.env`
 - `paperclips/scripts/reconcile_uaudit_routines.py`
-- `paperclips/tests/test_uaudit_dispatcher_bundles.py`
 - `paperclips/scripts/imac-agents-deploy.README.md`
 - `docs/paperclip-operations/telegram-report-delivery.md`
+- `paperclips/tests/test_uaudit_delivery_contract.py`
+- `paperclips/tests/test_uaudit_dispatcher_bundles.py`
+- helper/bootstrap/plugin-install contract tests touched by the source branch
 
 Expected live areas:
 
-- two Paperclip routine records and their revisions;
-- deployed UAudit agent `AGENTS.md` bundles;
-- `state/android-version-audit.json`;
-- `state/ios-version-audit.json` plus a preserved v0.49 backup;
-- the Android and iOS `version/0.50` lock directories;
-- issues `UNS-478` and `UNS-481`;
-- superseded daily issues explicitly listed in the live recovery section.
+- deployed UAudit helper and manifest;
+- all deployed UAudit agent bundles;
+- two live routine records and revisions;
+- Android and iOS canonical cursor files and lock directories;
+- pending daily generations and their dynamically discovered superseded
+  siblings.
 
 ## Design
 
-### 1. Canonical routine identity and description
+### 1. Synchronize the live delivery contract into source
 
-Add an exact `title` to each configured routine. The desired description is
-rendered deterministically as:
+Port the validated delivery-contract changes from
+`origin/feature/uaudit-russian-audit-delivery` rather than blindly merging the
+old branch.
+
+Conflict resolution must preserve current `develop` changes and apply these
+requirements:
+
+- Android and iOS routine IDs, branches, filenames, run bindings, and lock names
+  use `version/0.50`.
+- Both Infra roles use the deployed helper for `verify-install`,
+  `verify-payload`, `record-delivery`, and `reconcile-daily`.
+- All daily stages produce the structured sidecars expected by the helper.
+- The helper is installed atomically by repository-owned bootstrap logic and
+  verified through its adjacent manifest.
+- Old direct-send/manual-cursor instructions are absent from active bundles.
+- Generated bundles and tests are rebuilt from source.
+
+No UAudit deploy is allowed until the source helper, rendered prompts, and tests
+form one consistent `version/0.50` family.
+
+### 2. Stable routine identity
+
+Keep the versioned workflow ID for run context and locks:
+
+```yaml
+id: daily-ios-version-0.50
+routine_key: uaudit-daily-ios
+title: UAudit daily iOS version-branch audit
+```
+
+Android uses `routine_key: uaudit-daily-android`.
+
+The desired live description is rendered deterministically:
 
 ```text
 UAudit daily version-branch delta audit
-routine_id: <logical config id>
+routine_key: <uaudit-daily-android|uaudit-daily-ios>
 platform: <android|ios>
 branch: version/0.50
 repo: <rendered repo path>
 cursor: <rendered state cursor path>
 ```
 
-The new `routine_id:` line becomes the stable future match key. For the first
-migration of existing records that lack it, use an exact fallback over:
+Future matching uses the unique exact `routine_key`. Initial migration of a
+record without a key uses exact title, marker, and platform. A missing,
+duplicate, malformed, or conflicting key fails closed. A future migration to
+`0.51` updates the versioned workflow ID and description while retaining the
+same live UUID and `routine_key`.
 
-- routine title;
-- the configured marker line;
-- exact `platform:` line;
-- absence of a conflicting `routine_id:`.
+Config validation requires unique, non-empty, single-line IDs, keys, titles,
+platforms, branches, and templates.
 
-Zero or multiple candidates are errors. Logical ID and live UUID stay separate
-in the plan output.
+### 3. Revision-safe routine reconciliation
 
-Host paths are loaded with the existing precedence:
+The reconciler:
 
-1. `~/.paperclip/projects/<project>/paths.yaml`;
-2. committed `paths.local-example.yaml` for tests/CI.
+- loads host paths from `~/.paperclip/projects/uaudit/paths.yaml`, falling back
+  to the committed example only for tests;
+- uses the existing strict template resolver;
+- separates logical workflow ID, stable routine key, and live UUID;
+- builds and validates the complete two-routine plan before any write;
+- fetches each routine again immediately before PATCH;
+- PATCHes only changed assignee/description fields plus the fresh
+  `baseRevisionId` to `/api/routines/<live UUID>`;
+- verifies each write with a post-write GET;
+- never creates routines or changes schedules;
+- reports structured `updated`, `failed`, and `not_attempted` records and exits
+  non-zero after a partial apply;
+- converges safely when the operator reruns it after a conflict.
 
-Template resolution uses the existing strict
-`resolve_template_sources.resolve` contract. Unresolved placeholders fail the
-plan.
+Tests cover UUID payloads, stable-key migration, ambiguous identity,
+description drift, no-op behavior, stale revisions, first-PATCH-success plus
+second-PATCH-409, and successful rerun.
 
-### 2. Revision-safe reconciliation
+### 4. Release and quiescence gates
 
-The dry-run plan reports, per routine:
+Before state recovery:
 
-- logical routine ID;
-- live UUID;
-- live revision ID;
-- current and desired assignee;
-- current and desired description;
-- a bounded patch object;
-- whether an update is needed.
+1. Merge the implementation into `develop`.
+2. Pause both routines and all UAudit agents, then wait for zero active
+   heartbeat runs.
+3. Capture a fresh dynamic snapshot of open routine-generated issues.
+4. Deploy `--from-develop` for a paused smoke and verify source/rendered/helper
+   hashes.
+5. Complete the normal release cut to `main`.
+6. Run the production UAudit deploy from `main`.
+7. Verify the deployed helper manifest and active bundle hashes match `main`.
+8. Run reconciler dry-run/apply/no-op while routines remain paused.
 
-Apply mode sends only changed mutable fields plus:
+Failure before step 7 leaves the routines and agents paused and performs no
+cursor or Telegram recovery.
+
+### 5. Canonical cursor migration
+
+Preserve the old iOS state file as a timestamped backup. Legacy artifact
+cursors remain unchanged.
+
+Create each canonical FROM cursor atomically with exactly:
 
 ```json
-{"baseRevisionId": "<latestRevisionId>"}
+{"last_successfully_audited_sha":"<verified FROM SHA>"}
 ```
 
-to `PATCH /api/routines/<live UUID>`. A revision conflict is surfaced and not
-blindly retried. Routine creation remains unsupported. Schedule triggers,
-catch-up policy, priority, and status are not changed by the reconciler.
+No `platform`, `branch`, operator note, legacy `sha`, or timestamp key is copied.
+After rename, re-read the file, require the exact key set, and record its SHA-256
+in a non-secret migration manifest.
 
-### 3. Live recovery ordering
+Verified FROM values:
 
-All mutable steps use a fresh read immediately before the write.
+- Android: `4b32556a4196e1fde1c8de3d082922b1231a912a`
+- iOS: `86451ae5a691aff73883232cda80b2a9f962d8d3`
 
-1. Revalidate the two routine records, relevant issue states, helper install,
-   run payloads, cursor SHAs, lock metadata, and delivery receipt.
-2. Pause both live routines with revision-bound routine PATCHes so no new
-   generation can overlap recovery.
-3. Deploy the approved UAudit bundles from merged `develop` using the supported
-   `--from-develop` smoke path. Verify both platform roles say
-   `version/0.50` and use `state/` cursors.
-4. Run the repaired reconciler in dry-run and apply modes. Verify a second
-   dry-run is a no-op while routines remain paused.
-5. Preserve the old iOS state cursor as a timestamped v0.49 backup. Do not
-   delete either legacy artifact cursor.
-6. Atomically seed canonical FROM cursors:
-   - Android from verified `UNS-473` /
-     `4b32556a4196e1fde1c8de3d082922b1231a912a`;
-   - iOS from verified `UNS-459` /
-     `86451ae5a691aff73883232cda80b2a9f962d8d3`.
-7. Write a non-secret migration manifest containing source/destination paths,
-   before/after hashes, issue IDs, and timestamps.
-8. Android recovery:
-   - post explicit Board resume approval on `UNS-478`;
-   - wake `UWAInfraEngineer` under corrected instructions;
-   - require it to reuse the existing receipt and execute helper
-     `reconcile-daily`;
-   - verify cursor advances to
-     `f49bd4a78eea0f13eaa27d787977f66311afd46e`, `cursor.done` and
-     `workflow.done` exist, the lock is released, and no second Telegram
-     delivery occurred.
-9. iOS recovery:
-   - recreate only the exact
-     `state/locks/daily-ios-version-0.50.lock` metadata bound to `UNS-481`
-     and its existing run-context digest;
-   - post explicit Board resume approval;
-   - wake `UWIInfraEngineer` under corrected instructions;
-   - require one Telegram receipt followed by helper `reconcile-daily`;
-   - verify cursor advances to
-     `8a63bfda028dd8543115b26dd777235a53304311`, terminal markers exist,
-     and the lock is released.
-10. Close superseded generations with an explanatory Board comment:
-    - Android: cancel `UNS-476`, `UNS-482`, `UNS-485`, `UNS-487`, and
-      `UNS-490` after `UNS-478` is terminal.
-    - iOS: mark `UNS-480` done after its catch-up `UNS-481` is terminal;
-      cancel `UNS-483`, `UNS-486`, `UNS-488`, `UNS-489`, and `UNS-491`.
-11. Re-enable both routines with fresh `baseRevisionId` values.
-12. Trigger each routine once manually with distinct idempotency keys and
-    monitor it to terminal state:
-    - iOS should be a no-op unless upstream changed;
-    - Android audits the remaining verified delta if it is within limits.
-13. Verify live reconciler dry-run is a no-op, routines are active, locks are
-    absent, cursors are current, Telegram plugin remains ready, and the next
-    scheduled run timestamps are populated.
-14. After the validated change is included in the normal release cut to
-    `main`, run the production UAudit agent deploy without `--from-develop`.
-    Verify the deployed bundle hashes and reconciler no-op are unchanged. This
-    prevents a later main-based deploy from reverting the live migration.
+Only the helper writes the expanded TO cursor metadata.
 
-At no point is a cursor advanced by an operator directly to a TO SHA. The
-operator may only seed the verified FROM state needed to restore the helper's
-compare-and-set contract; the deployed helper performs every TO advancement.
+### 6. Availability-first recovery
 
-## Analog Delta Matrix
+Recover one platform at a time. Keep schedules paused and enable only the agents
+needed for the current platform.
 
-| Slice | Analog family | Coverage | Invariants to preserve | Required differences | Rejected differences | Failure modes | Tests before code | Verification |
-|---|---|---|---|---|---|---|---|---|
-| Canonical v0.50 config | Primary: current Android v0.50 config/role/overlay/dist family. Supporting: symmetric generated-bundle tests. Counterexample: hard-coded v0.49 reconcile fixture. | Contract, implementation, composition, consumers, lifecycle language, generated output, and tests are present. | Platform-specific repo paths and agents; state cursor root; staged daily chain; delivery-after-audit rule. | Apply the Android v0.50 shape to iOS and add stable routine titles/IDs for reconciliation. | Editing historical baselines, widening limits, or copying Android agent names into iOS. | Mixed branch text; stale rendered dist; wrong filename; artifact cursor reintroduced. | Assert both active routines are v0.50/state and generated bundles contain no active v0.49 path. | Build uaudit codex bundles, targeted pytest, exact `rg` drift scan, diff review. |
-| Live routine reconciliation | Primary: current dry-run/apply reconciler skeleton. Supporting: host-local template resolver, Paperclip update schema, reconcile tests. Counterexample: UUID-keyed normalization plus logical-ID lookup and obsolete endpoint. | CLI lifecycle, auth boundary, path dependency, API revision contract, failure path, and test seam are covered. | Default dry-run; no implicit creation; names resolved through bindings; fail closed on missing data. | Stable description identity, UUID matching, canonical rendered description, `/api/routines/<uuid>`, and `baseRevisionId`. | Persisting environment UUIDs in committed config; fuzzy first-match behavior; blind retry on conflict. | Missing/duplicate routine; unresolved paths; stale revision; partial multi-routine apply. | Reproduce current “routine not found”; add UUID, ambiguity, no-op, description drift, and apply-request tests. | Targeted pytest, fixture dry-run, authenticated live dry-run/apply/no-op. |
-| Cursor and lock recovery | Primary: deployed receipt-bound `reconcile_daily` CAS. Supporting: repository state contract and the two immutable run states. Counterexample: manual TO overwrite or duplicate send. | Receipt, lock, cursor lifecycle, trust boundary, idempotent markers, consumers, and live verification commands are covered. | Immutable run context; exact lock binding; delivery before cursor; FROM/TO CAS; no overlapping generation. | Seed canonical FROM state, restore only the missing iOS lock, resume Android without send and iOS with one send. | Changing helper path checks, deleting evidence, resending Android, or force-clearing locks. | Wrong SHA/digest; duplicate Telegram send; stale cursor overwrite; schedule race; oversized new delta. | Existing helper verification commands and pre-mutation hash/API snapshot; no direct code-unit seam exists for host state. | Helper verify/reconcile output, marker/hash checks, issue/routine API states, manual end-to-end routine runs. |
+#### Android
+
+Preferred path:
+
+- validate the `UNS-478` payload, existing receipt, run context, and lock;
+- post explicit resume approval;
+- wake the corrected Android Infra role;
+- let it reuse the receipt and reconcile the cursor to
+  `f49bd4a78eea0f13eaa27d787977f66311afd46e`.
+
+Availability fallback:
+
+- if the receipt-led generation cannot be reconciled because its immutable
+  artifacts are inconsistent, create a fresh bounded recovery generation for
+  the same verified FROM..TO range;
+- allow Telegram delivery again;
+- require helper reconciliation to the same TO.
+
+A duplicate Android report is acceptable. Direct cursor advancement without a
+successful recovery generation is not.
+
+#### iOS
+
+- recompute the canonical `run-context.json` digest immediately before lock
+  creation;
+- require it to equal the delivery summary and `verify-payload` result;
+- reject stale `status/bind-context.json` digest evidence;
+- recreate the exact `daily-ios-version-0.50.lock` metadata for `UNS-481`;
+- post explicit resume approval and wake the corrected iOS Infra role;
+- retry the at-least-once Telegram step when necessary;
+- require helper reconciliation to
+  `8a63bfda028dd8543115b26dd777235a53304311`.
+
+One or more duplicate iOS messages during an indeterminate recovery are
+acceptable. The cursor must advance only after a successful receipt is
+recorded.
+
+### 7. Fresh daily proof and activation
+
+After both recovery cursors reach their verified TO values:
+
+1. Dynamically query open issues by `originKind=routine_execution` and each live
+   routine UUID.
+2. Cancel only no-receipt generations superseded by the recovered ranges.
+3. Keep schedules paused and manually run iOS, then Android, with distinct
+   idempotency keys.
+4. Monitor each run to a valid terminal state. If the upstream head is
+   unchanged, a validated no-change result is acceptable.
+5. Confirm no active lock remains for either completed generation.
+6. Activate both routines last with fresh revision IDs.
+7. Verify next-run timestamps, Telegram plugin readiness, and reconciler no-op.
+
+The issue numbers observed during diagnosis remain baseline evidence, not an
+exhaustive cleanup list.
 
 ## Verification Plan
 
-### Repository checks
+Repository checks:
 
 ```bash
+python3 -m pytest paperclips/tests/test_uaudit_delivery_contract.py -q
 python3 -m pytest paperclips/tests/test_uaudit_dispatcher_bundles.py -q
+python3 -m pytest paperclips/tests/test_phase_c_bootstrap_project.py -q
+python3 -m pytest paperclips/tests/test_phase_c_install_paperclip.py -q
 python3 paperclips/scripts/validate_uaudit_docs.py
 bash paperclips/build.sh --project uaudit --target codex
 git diff --check
 ```
 
-Then verify generated output is stable and scoped:
+Targeted drift scan:
 
 ```bash
-git status --short
-rg -n 'daily-(android|ios)-version-0\\.49|version/0\\.49|UWAInfraEngineer/cursor|UWIInfraEngineer/cursor' \
-  paperclips/projects/uaudit paperclips/dist/uaudit/codex \
-  paperclips/scripts/reconcile_uaudit_routines.py \
-  paperclips/tests/test_uaudit_dispatcher_bundles.py
+rg -n 'daily-(android|ios)-version-0\.49|version/0\.49|artifacts/.*/cursor\.json' \
+  paperclips/projects/uaudit paperclips/dist/uaudit/codex
 ```
 
-Any remaining `0.49` match must be intentionally historical and outside the
-active paths above.
+Remaining `0.49` text is allowed only in historical specs, baselines, or
+migration evidence.
 
-### Live checks
+Live checks:
 
-- Paperclip routine GET before/after with UUID, description, status,
-  `latestRevisionId`, trigger enabled state, and next run timestamp.
-- Reconciler dry-run before apply, apply output, and no-op dry-run after apply.
-- Deployed role-file exact checks for branch and cursor constants.
-- SHA-256 and JSON-schema checks for both canonical cursor files, both run
-  contexts, receipts, and lock metadata.
-- `verify-install`, `verify-payload`, and `reconcile-daily` helper commands.
-- Android proof that `message_id=335` remains the only `UNS-478` receipt.
-- iOS proof of exactly one new `UNS-481` receipt.
-- Issue terminal states and absence of both routine lock directories.
-- Manual routine runs monitored to terminal state.
-- Telegram plugin `ready` with no `lastError`.
+- zero active UAudit heartbeat runs before deploy and recovery;
+- deployed helper/manifest and bundle hashes match released source;
+- both routine GETs show stable keys, `version/0.50`, state cursors, fresh
+  revisions, and paused status during recovery;
+- helper `verify-install`, `verify-payload`, and `reconcile-daily` succeed;
+- canonical cursor JSON passes exact-key validation;
+- recovery delivery has at least one successful receipt; duplicate count is
+  recorded but does not fail acceptance;
+- fresh iOS and Android manual runs reach terminal state;
+- no active completed-generation locks remain;
+- routines are active only after manual proof and have next-run timestamps;
+- Telegram plugin remains ready with no `lastError`.
 
 ## Acceptance Criteria
 
-1. Active repository paths contain no iOS `version/0.49` routine, role, bundle,
-   filename, or no-op message.
-2. Both config routines use canonical state cursor templates and stable titles.
-3. Current live UUID routine payloads can be reconciled without storing UUIDs
-   in committed config.
-4. Reconciler dry-run is deterministic; apply is revision-bound; a second
-   dry-run reports no changes.
-5. Tests fail against the old logical-ID/UUID behavior and pass after the fix.
-6. Android `UNS-478` is terminal, its canonical cursor is TO, its lock is gone,
-   and no duplicate Telegram send exists.
-7. iOS `UNS-481` is terminal, its canonical cursor is TO, its lock is gone, and
-   exactly one delivery receipt exists.
-8. Legacy cursor evidence and the old iOS v0.49 state are preserved
-   recoverably.
-9. Superseded blocked daily issues are terminal with explicit provenance.
-10. Both routines are active with canonical descriptions and successful fresh
-    manual-run evidence.
-11. No secrets are written to source, logs, migration manifests, issue
-    comments, or reports.
-12. The release-cut `main` contains the migration and the final production
-    agent deploy preserves the verified `develop` smoke state.
+1. Receipt-led UAudit source, helper installation, prompts, generated bundles,
+   and tests are present in released `main`.
+2. Both active platform families use `version/0.50` and canonical state cursors.
+3. Stable routine keys map to the existing live UUIDs and survive a simulated
+   `0.50 -> 0.51` description migration.
+4. Reconciler dry-run/apply/rerun is revision-safe and converges after partial
+   failure.
+5. Android recovery reaches its verified TO cursor and has at least one
+   successful delivery receipt.
+6. iOS recovery reaches its verified TO cursor and has at least one successful
+   delivery receipt.
+7. Duplicate recovery messages, if any, are documented and do not block
+   completion.
+8. Both platforms complete a fresh manual daily run under the released prompts.
+9. Both schedules are active, have future next-run timestamps, and no stale
+   generation can block the next run.
+10. Legacy evidence remains recoverable and no secrets appear in source,
+    manifests, logs, comments, or reports.
 
-## Rollback
+## Rollback and Failure Handling
 
-- Repository rollback uses the previous known-good commit and the documented
-  agent deploy `--target-sha` path.
-- Live routine rollback uses Paperclip routine revisions, not hand-reconstructed
-  payloads.
-- Cursor rollback is allowed only before a new successful generation consumes
-  the migrated cursor. Restore the preserved pre-migration file and routine
-  revision together while routines are paused.
-- A Telegram receipt is never rolled back or resent. If a post-send
-  reconciliation fails, recovery resumes from that immutable receipt.
+- Before any recovery Telegram receipt, repository/deploy/routine changes may be
+  rolled back while all UAudit execution remains paused.
+- After a successful receipt or cursor CAS, do not revert that platform to
+  `version/0.49`; continue forward from the recorded receipt and cursor.
+- Success on one platform is retained if the other platform fails.
+- A deployment, helper, or reconciler failure leaves schedules paused and
+  produces an explicit operator-visible blocker.
+- An indeterminate Telegram result may be retried because availability and
+  eventual daily delivery take precedence over duplicate suppression.
 
 ## Open Questions
 
-No design choice is currently blocking.
+No product decision is blocking. The operator has accepted at-least-once
+delivery and possible recovery duplicates.
 
 Execution-time gates remain:
 
-- protected-branch review and merge must complete before `--from-develop`
-  deployment;
-- the normal release cut to `main` and production agent deploy must complete
-  before the migration is considered durable;
-- all live SHAs, revisions, and issue states must still match the evidence
-  recorded here;
-- an oversized post-recovery upstream delta requires a separate catch-up
-  decision rather than an implicit limit change.
+- the receipt-led source family must be reconciled with current `develop`;
+- protected-branch review and release to `main` must complete before live state
+  recovery;
+- live SHAs, revisions, run digests, and issue states must be re-read before
+  every mutation;
+- an oversized post-recovery delta requires a bounded catch-up generation.
+
+## Analog Delta Matrix
+
+| Slice | Primary analog | Preserved invariants | Required delta | Rejected alternative | Verification |
+|---|---|---|---|---|---|
+| Source/live delivery convergence | Receipt-led family on `origin/feature/uaudit-russian-audit-delivery` and its deployed helper | Structured sidecars, helper validation, receipt before cursor, lock-bound run context | Port onto current `develop`; resolve both platforms and locks to `version/0.50`; preserve newer develop fixes | Deploy current develop and overwrite the live helper prompts | Helper, bootstrap, bundle, and generated-output tests; released/deployed hash comparison |
+| Version migration | Current Android `version/0.50` family plus iOS migration commit `92738184` | Platform-specific agents, repos, filenames, limits, staged chain | Apply the same version/cursor/lock contract to iOS and all receipt-led consumers | Change only five visible iOS files while leaving v1 prompts on `0.49` | Build, targeted drift scan, symmetric bundle assertions |
+| Routine reconciliation | Existing dry-run CLI plus Paperclip UUID/revision API | Default dry-run, no implicit creation, host bindings, fail closed | Stable version-independent key, rendered description, UUID PATCH, per-record CAS and partial-apply resume | Versioned key or fuzzy title-first matching | UUID, ambiguity, version-transition, 409, rerun, and no-op tests |
+| Live recovery | Deployed helper FROM/TO CAS and existing complete runs | No skipped range, receipt before cursor, one active generation per platform | At-least-once retry and duplicate-tolerant recovery; exact cursor schema; corrected iOS digest | Exactly-once claim or direct unbound TO write | Helper verification, receipt/cursor/lock evidence, fresh manual runs |
