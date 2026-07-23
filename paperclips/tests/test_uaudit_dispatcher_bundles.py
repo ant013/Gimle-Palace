@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import copy
 import re
 import sys
 import tomllib
@@ -17,9 +18,12 @@ UUID_RE = re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
 sys.path.insert(0, str(SCRIPTS))
 
 from reconcile_uaudit_routines import (  # noqa: E402
+    apply_plan,
     build_plan,
     load_config,
+    load_paths,
     normalize_current_routines,
+    render_description,
     required_agent_names,
     resolve_agent_ids,
     validate_config_agents,
@@ -34,10 +38,14 @@ def test_daily_routine_config_uses_names_not_uuids_and_resolves_agents():
     raw = CONFIG.read_text()
     assert not UUID_RE.search(raw)
     assert "required_subagents" not in raw
-    assert "uaudit-" not in raw
     config = load_config(CONFIG)
     assert config["limits"] == {"max_commits": 30, "max_files": 300, "max_diff_lines": 3000}
     assert {r["platform"] for r in config["routines"]} == {"android", "ios"}
+    assert {r["branch"] for r in config["routines"]} == {"version/0.50"}
+    assert {r["routine_key"] for r in config["routines"]} == {
+        "uaudit-daily-android",
+        "uaudit-daily-ios",
+    }
     agents = resolve_agent_ids("uaudit", REPO / "paperclips/projects/uaudit/bindings.local-example.yaml")
     validate_config_agents(config, agents)
     assert {
@@ -247,21 +255,209 @@ def test_pr_subagents_emit_only_the_strict_v1_envelope():
         assert "raw diff content" in instructions or "raw-diff" in instructions
 
 
-def test_reconcile_plan_is_dry_run_and_uses_dispatcher_assignments():
+def _paths():
+    return load_paths(
+        "uaudit",
+        REPO / "paperclips/projects/uaudit/paths.local-example.yaml",
+    )
+
+
+def _legacy_live_routine(config, routine, assignee, *, suffix="1"):
+    paths = _paths()
+    description = "\n".join(
+        (
+            config["marker"],
+            f"platform: {routine['platform']}",
+            f"branch: {routine['branch']}",
+            f"repo: {render_description(config, routine, paths).splitlines()[4][6:]}",
+            f"cursor: {render_description(config, routine, paths).splitlines()[5][8:]}",
+        )
+    )
+    return {
+        "id": f"00000000-0000-0000-0000-0000000000{suffix}",
+        "title": routine["title"],
+        "description": description,
+        "assigneeAgentId": assignee,
+        "latestRevisionId": f"revision-{suffix}",
+    }
+
+
+def test_reconcile_plan_matches_legacy_records_and_renders_stable_keys():
     config = load_config(CONFIG)
     agents = resolve_agent_ids("uaudit", REPO / "paperclips/projects/uaudit/bindings.local-example.yaml")
-    current = normalize_current_routines({
-        "routines": [
-            {"id": "daily-android-version-0.49", "assigneeAgentId": "old-android"},
-            {"id": "daily-ios-version-0.49", "assigneeAgentId": agents["UWICTO"]},
-        ]
-    })
-    plan = build_plan(config, agents, current)
+    android, ios = config["routines"]
+    current = normalize_current_routines(
+        {
+            "routines": [
+                _legacy_live_routine(config, android, "old-android", suffix="11"),
+                _legacy_live_routine(config, ios, agents["UWICTO"], suffix="12"),
+            ]
+        }
+    )
+    plan = build_plan(config, agents, current, _paths())
     by_id = {item["routine_id"]: item for item in plan}
-    assert by_id["daily-android-version-0.49"]["dispatcher"] == "UWACTO"
-    assert by_id["daily-android-version-0.49"]["desired_assigneeAgentId"] == agents["UWACTO"]
-    assert by_id["daily-android-version-0.49"]["needs_update"] is True
-    assert by_id["daily-ios-version-0.49"]["needs_update"] is False
+    assert by_id["daily-android-version-0.50"]["dispatcher"] == "UWACTO"
+    assert by_id["daily-android-version-0.50"]["desired_assigneeAgentId"] == agents["UWACTO"]
+    assert by_id["daily-android-version-0.50"]["live_uuid"].endswith("11")
+    assert by_id["daily-android-version-0.50"]["needs_update"] is True
+    assert by_id["daily-ios-version-0.50"]["needs_update"] is True
+    assert "routine_key: uaudit-daily-android" in by_id["daily-android-version-0.50"]["desired_description"]
+    assert by_id["daily-android-version-0.50"]["patch"]["baseRevisionId"] == "revision-11"
+
+
+def test_reconcile_stable_key_survives_next_version_without_new_live_record():
+    config = load_config(CONFIG)
+    agents = resolve_agent_ids("uaudit", REPO / "paperclips/projects/uaudit/bindings.local-example.yaml")
+    paths = _paths()
+    current = []
+    for index, routine in enumerate(config["routines"], start=21):
+        current.append(
+            {
+                "id": f"00000000-0000-0000-0000-0000000000{index}",
+                "title": routine["title"],
+                "description": render_description(config, routine, paths),
+                "assigneeAgentId": agents[routine["dispatcher"]],
+                "latestRevisionId": f"revision-{index}",
+            }
+        )
+    next_config = copy.deepcopy(config)
+    for routine in next_config["routines"]:
+        routine["id"] = routine["id"].replace("0.50", "0.51")
+        routine["branch"] = "version/0.51"
+    plan = build_plan(next_config, agents, current, paths)
+    assert {item["live_uuid"] for item in plan} == {
+        "00000000-0000-0000-0000-000000000021",
+        "00000000-0000-0000-0000-000000000022",
+    }
+    assert all(item["needs_update"] for item in plan)
+    assert all("branch: version/0.51" in item["desired_description"] for item in plan)
+
+
+def test_reconcile_rejects_ambiguous_legacy_fallback():
+    config = load_config(CONFIG)
+    agents = resolve_agent_ids("uaudit", REPO / "paperclips/projects/uaudit/bindings.local-example.yaml")
+    android = config["routines"][0]
+    duplicate_a = _legacy_live_routine(config, android, "old-a", suffix="31")
+    duplicate_b = _legacy_live_routine(config, android, "old-b", suffix="32")
+    try:
+        build_plan(
+            {**config, "routines": [android]},
+            agents,
+            [duplicate_a, duplicate_b],
+            _paths(),
+        )
+    except ValueError as exc:
+        assert "ambiguous" in str(exc)
+    else:
+        raise AssertionError("ambiguous legacy fallback must fail")
+
+
+def test_reconcile_rejects_conflicting_stable_identity():
+    config = load_config(CONFIG)
+    agents = resolve_agent_ids("uaudit", REPO / "paperclips/projects/uaudit/bindings.local-example.yaml")
+    android = config["routines"][0]
+    live = _legacy_live_routine(config, android, "old-a", suffix="33")
+    live["description"] = live["description"].replace(
+        "platform: android",
+        "routine_key: uaudit-daily-android\nplatform: ios",
+    )
+    try:
+        build_plan({**config, "routines": [android]}, agents, [live], _paths())
+    except ValueError as exc:
+        assert "conflicting platform" in str(exc)
+    else:
+        raise AssertionError("conflicting stable identity must fail")
+
+
+def test_config_rejects_duplicate_stable_keys(tmp_path):
+    data = yaml.safe_load(CONFIG.read_text())
+    data["routines"][1]["routine_key"] = data["routines"][0]["routine_key"]
+    config_path = tmp_path / "duplicate-routine-key.yaml"
+    config_path.write_text(yaml.safe_dump(data, sort_keys=False))
+    try:
+        load_config(config_path)
+    except ValueError as exc:
+        assert "routine routine_key values must be unique" in str(exc)
+    else:
+        raise AssertionError("duplicate routine keys must fail")
+
+
+def test_explicit_missing_paths_source_does_not_fall_back(tmp_path):
+    missing = tmp_path / "missing-paths.yaml"
+    try:
+        load_paths("uaudit", missing)
+    except ValueError as exc:
+        assert "missing explicit" in str(exc)
+    else:
+        raise AssertionError("an explicit missing paths source must fail")
+
+
+def test_reconcile_partial_apply_reports_409_and_rerun_converges():
+    config = load_config(CONFIG)
+    agents = resolve_agent_ids("uaudit", REPO / "paperclips/projects/uaudit/bindings.local-example.yaml")
+    paths = _paths()
+    android, ios = config["routines"]
+    states = {
+        item["id"]: item
+        for item in (
+            _legacy_live_routine(config, android, "old-android", suffix="41"),
+            _legacy_live_routine(config, ios, "old-ios", suffix="42"),
+        )
+    }
+    fail_ios = {"value": True}
+
+    def request(method, url, token, body):
+        live_uuid = url.rsplit("/", 1)[-1]
+        if method == "GET":
+            return copy.deepcopy(states[live_uuid])
+        assert method == "PATCH"
+        if live_uuid.endswith("42") and fail_ios["value"]:
+            raise RuntimeError("PATCH failed HTTP 409")
+        assert body["baseRevisionId"] == states[live_uuid]["latestRevisionId"]
+        states[live_uuid].update(
+            {key: value for key, value in body.items() if key != "baseRevisionId"}
+        )
+        states[live_uuid]["latestRevisionId"] += "-next"
+        return copy.deepcopy(states[live_uuid])
+
+    first_plan = build_plan(config, agents, list(states.values()), paths)
+    first_result, first_ok = apply_plan(
+        "http://paperclip.test",
+        "redacted",
+        config,
+        agents,
+        paths,
+        first_plan,
+        request=request,
+    )
+    assert first_ok is False
+    assert [item["routine_id"] for item in first_result["updated"]] == [
+        "daily-android-version-0.50"
+    ]
+    assert [item["routine_id"] for item in first_result["failed"]] == [
+        "daily-ios-version-0.50"
+    ]
+
+    fail_ios["value"] = False
+    second_plan = build_plan(config, agents, list(states.values()), paths)
+    second_result, second_ok = apply_plan(
+        "http://paperclip.test",
+        "redacted",
+        config,
+        agents,
+        paths,
+        second_plan,
+        request=request,
+    )
+    assert second_ok is True
+    assert [item["routine_id"] for item in second_result["updated"]] == [
+        "daily-ios-version-0.50"
+    ]
+    assert [item["routine_id"] for item in second_result["unchanged"]] == [
+        "daily-android-version-0.50"
+    ]
+    final_plan = build_plan(config, agents, list(states.values()), paths)
+    assert all(not item["needs_update"] for item in final_plan)
 
 
 def test_validate_uaudit_docs_script_passes():

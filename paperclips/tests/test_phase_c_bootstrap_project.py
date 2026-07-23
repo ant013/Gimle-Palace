@@ -54,7 +54,7 @@ def test_canary_selection_does_not_sigpipe_under_pipefail():
     text = SCRIPT.read_text()
     canary_block = text[text.index('if [ "$CANARY" -eq 1 ]'):text.index("# Step 11: workspaces")]
     assert not re.search(r"\|\s*head(?:\s+-n)?\s+-?1\b", canary_block)
-    assert canary_block.count("][0] // \"\"") == 2
+    assert canary_block.count("][0] // \"\"") == 3
 
 
 def test_calls_bootstrap_watchdog_at_end():

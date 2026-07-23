@@ -107,7 +107,7 @@
             "custom"
           ],
           "roleId": "codex:uwi-platform-dispatcher",
-          "sha256": "c4bc36e4750aef88f70241182a0411a6b2fd35f0c62dfe041cd3b48d7666ef95",
+          "sha256": "89d7f8c79ffa2993ff5a61ea7e3ca401f81530a195b61b69a12993f791d2efcd",
           "source": "paperclips/projects/uaudit/roles-codex/uwi-platform-dispatcher.md",
           "workspaceCwd": ""
         },
@@ -123,7 +123,7 @@
             "custom"
           ],
           "roleId": "codex:uwa-platform-dispatcher",
-          "sha256": "31296707876dcf65bd5fa509f609c19f3dc7dc67c174cc277c12d9c8da308dc8",
+          "sha256": "4591dabda3e183a800b9b1079203814e5383357549da2397e351be328e59bf4d",
           "source": "paperclips/projects/uaudit/roles-codex/uwa-platform-dispatcher.md",
           "workspaceCwd": ""
         },
@@ -267,7 +267,7 @@
             "implementer"
           ],
           "roleId": "codex:cx-infra-engineer",
-          "sha256": "3451e7155928561ebdcd134dd6dd88deb9073c670fd7407e162361376a5fc207",
+          "sha256": "249c85178f2aa6f50951ad06c9f5710f1514e132e3145a7d6ca982b3e4b5e8fe",
           "source": "paperclips/roles-codex/cx-infra-engineer.md",
           "workspaceCwd": ""
         },
@@ -283,7 +283,7 @@
             "implementer"
           ],
           "roleId": "codex:cx-infra-engineer",
-          "sha256": "b3a527d988ab2c8d71cd994ee3378933036181798ba81f2d96298cd11c0d958f",
+          "sha256": "57ab49353a725f9a9cb1006b77d3a42ed1dd547d34465845ad2bb25b49271ccd",
           "source": "paperclips/roles-codex/cx-infra-engineer.md",
           "workspaceCwd": ""
         },

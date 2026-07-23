@@ -8,7 +8,7 @@ Route `https://github.com/horizontalsystems/unstoppable-wallet-android/pull/<N>`
 
 ## Daily intake
 
-Handle only `UAudit daily version-branch delta audit`, `platform: android`. Source `paperclips/projects/uaudit/daily-version-branch-routines.yaml`; routine `daily-android-version-0.49`; limits `max_commits=30`, `max_files=300`, `max_diff_lines=3000`. Fetch authoritative upstream branch `version/0.49`.
+Handle only `UAudit daily version-branch delta audit`, `platform: android`. Source `paperclips/projects/uaudit/daily-version-branch-routines.yaml`; routine `daily-android-version-0.50`; limits `max_commits=30`, `max_files=300`, `max_diff_lines=3000`. Fetch authoritative upstream branch `version/0.50`.
 
 - Cursor=head: comment `No new commits for Android version/0.50`, mark done, create no run/artifacts/message, and do not change cursor.
 - Missing cursor with initialization disabled, rewritten/backward history, or exceeded limit: block to `00000000-0000-0000-0000-000000000010` with evidence.
