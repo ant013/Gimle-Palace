@@ -9,14 +9,6 @@ Grounded repository state: `origin/develop` at
 
 Live evidence captured: 2026-07-23 on `Antons-iMac.local`
 
-Implementation verification amendment: a fresh Android proof run exposed that
-the dispatcher could still discover the read-only legacy artifact cursor
-because its role did not explicitly pin intake to the canonical `state/`
-cursor. The approved canonical-cursor design therefore also requires both
-dispatcher roles to name the exact `state/<platform>-version-audit.json` path,
-preserve it in every issue handoff, ignore the legacy artifact cursor, and
-cover the rendered rule with a regression test.
-
 ## Goal
 
 Restore dependable daily Android and iOS UAudit reports and complete the
