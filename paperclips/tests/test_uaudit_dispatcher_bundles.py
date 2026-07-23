@@ -125,6 +125,26 @@ def test_generated_dispatcher_bundles_start_staged_daily_chain():
         assert "max_files=300" in text
 
 
+def test_generated_dispatchers_pin_canonical_daily_cursors():
+    expected = {
+        "UWACTO": (
+            "/state/android-version-audit.json",
+            "/artifacts/",
+        ),
+        "UWICTO": (
+            "/state/ios-version-audit.json",
+            "/artifacts/",
+        ),
+    }
+    for name, (canonical, legacy) in expected.items():
+        text = (REPO / f"paperclips/dist/uaudit/codex/{name}.md").read_text()
+        assert canonical in text
+        assert "FROM is only" in text
+        assert "preserve this cursor" in text
+        assert legacy in text
+        assert "Never read a cursor below" in text
+
+
 def test_infra_bundles_use_staged_daily_delivery_not_subagent_fanout():
     forbidden = [
         "If the cursor file is missing, create it",
