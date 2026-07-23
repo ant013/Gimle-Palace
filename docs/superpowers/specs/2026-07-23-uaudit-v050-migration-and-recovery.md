@@ -1,8 +1,11 @@
 # UAudit v0.50 Migration Completion and Live Recovery
 
-Status: review-ready  
-Design revision: 1  
-Grounded repository state: `origin/develop` at `0e9cf57c00ff970f584256126b500166580e7a72`  
+Status: review-ready
+
+Design revision: 1
+
+Grounded repository state: `origin/develop` at `0e9cf57c00ff970f584256126b500166580e7a72`
+
 Live evidence captured: 2026-07-23 on `Antons-iMac.local`
 
 ## Goal
