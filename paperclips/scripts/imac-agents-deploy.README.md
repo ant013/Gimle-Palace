@@ -162,4 +162,4 @@ python3 paperclips/scripts/reconcile_uaudit_routines.py --project-key uaudit
 python3 paperclips/scripts/reconcile_uaudit_routines.py --project-key uaudit --apply
 ```
 
-The reconciliation config is `paperclips/projects/uaudit/daily-version-branch-routines.yaml`. It refers to agents by name only; the script resolves UUIDs through existing UAA bindings. Missing routines fail by default and are not created implicitly.
+The reconciliation config is `paperclips/projects/uaudit/daily-version-branch-routines.yaml`. It refers to agents by name and routines by stable `routine_key`; the script resolves existing Paperclip UUIDs, renders host-local repo/cursor paths, and applies description/assignee drift with `baseRevisionId`. Missing or ambiguous routines fail by default and are not created implicitly. A partial apply exits non-zero with `updated`, `failed`, and `not_attempted` records; re-run after a fresh read to converge.

@@ -1,230 +1,48 @@
-
 ## Daily Version-Branch Code Audit Stage (Android)
 
-When `UWACTO` assigns a UAudit daily version-branch issue with
-`mode=daily_code_audit`, do not run PR-audit subagents. Read only the prepared
-`$RUN/{profile.json,commits.tsv,files.tsv,diff.patch}` and the checked-out
-Android repo at `{{paths.project_root}}/repos/android/unstoppable-wallet-android`.
+For `mode=daily_code_audit`, set `HELPER={{paths.team_workspace_root}}/.uaudit-tools/uaudit_delivery_contract.py`; do not run PR subagents. Read only the bound prepared inputs, `$RUN/run-context.json`, and Android repo. Write human evidence to `$RUN/code.md`; atomically publish strict `$RUN/code.findings.json` with `schema_version=1`, exact copied `run_binding`, `stage="code"`, `source_agent="UWAKotlinAuditor"`, `audit_status=complete|partial|blocked`, structured findings, typed `{text,material}` limitations, and status-valid `block_reason`. Every finding has exactly `severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification`; keep all three location keys and use either relative `file`+positive `line`+`area:null` or `file:null,line:null`+nonempty `area`. Finding prose, every limitation `text`, and non-null blocked `block_reason` must be Russian; `block_reason` is null for complete/partial. Include variant impact in evidence where relevant. Do not count/deduplicate or add schema fields.
 
-Write `$RUN/code.md` with code-level findings, no-finding areas, limitations,
-Android variant impact, and exact file/line evidence for the supplied FROM..TO
-range. Then write `$RUN/code.done`, comment
-`code.md ready for UNS-<N> Android daily audit`, PATCH assignee to
-`{{bindings.agents.UWASecurityAuditor}}` with `mode=daily_security_audit`, and
-stop. Do not send Telegram, update cursors, or invoke `uaudit-*` Codex subagents
-on daily issues.
+Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/code.findings.json"`; only it creates digest-bound `status/code.done.json`. Validation failure or `blocked` PATCHes issue blocked and stops without completion. Otherwise assign `{{bindings.agents.UWASecurityAuditor}}` with `mode=daily_security_audit`. Never send Telegram or update state/cursors.
 
 ## UAudit Incremental PR Audit Coordinator (Android)
 
-You are the coordinator for Android incremental PR audits. Do not perform a
-solo full audit when a PR URL is present. Prepare bounded artifacts, invoke the
-required UAudit-owned Codex subagents, aggregate their JSON outputs, write one
-English report, then hand off to `UWAInfraEngineer`.
+For a `https://github.com/horizontalsystems/unstoppable-wallet-android/pull/<N>` issue, coordinate four read-only reviewers, then use the deployed helper for validation, aggregation, Russian rendering, and delivery payload. Never perform a solo full audit, send Telegram, or implement canonicalization/counting yourself.
 
-### Trigger
+### Required fanout
 
-This protocol applies only when the issue body contains:
+Immediately after intake, invoke in parallel with explicit matching `spawn_agent.agent_type`; no generic fallback:
 
-```text
-https://github.com/horizontalsystems/unstoppable-wallet-android/pull/<N>
-```
+| `stage` | `source_agent` / agent type | output |
+| --- | --- | --- |
+| `code` | `uaudit-kotlin-audit-specialist` | `$RUN/code.findings.json` |
+| `bug` | `uaudit-bug-hunter` | `$RUN/bug.findings.json` |
+| `security` | `uaudit-security-auditor` | `$RUN/security.findings.json` |
+| `crypto` | `uaudit-blockchain-auditor` | `$RUN/crypto.findings.json` |
 
-For non-PR work, follow the base role and `_common.md`.
+Give only `pr.diff`, `pr.json`, repo root, exact `$RUN/run-context.json`, and a narrow role prompt. Reviewers must not write files, post/deploy, or read secrets. Wait at most 180 seconds; retry the same exact type once. Tool rejection, timeout, missing slot, generic agent, malformed/blocked result, or source mismatch atomically records `status/blocked`, PATCHes issue blocked, and produces no completion payload.
 
-### Required Subagents
+### Immutable run and intake
 
-Invoke these exact Codex subagents. Missing or unavailable subagents block the
-run; do not fall back to generic marketplace agents.
+Set `RUN={{paths.team_workspace_root}}/UNS-<issueNumber>-audit`, `REPO={{paths.project_root}}/repos/android/unstoppable-wallet-android`, `HELPER={{paths.team_workspace_root}}/.uaudit-tools/uaudit_delivery_contract.py`. Only the coordinator writes `$RUN`, using temp+validate+atomic `mv`.
 
-- `uaudit-kotlin-audit-specialist`
-- `uaudit-bug-hunter`
-- `uaudit-security-auditor`
-- `uaudit-blockchain-auditor`
+First run `python3 "$HELPER" verify-install --manifest "{{paths.team_workspace_root}}/.uaudit-tools/uaudit_delivery_contract.manifest.json"`; failure blocks.
 
-Subagents are read-only reviewers. They must not write files, post Paperclip
-comments, deploy, or read secrets. Give each subagent only the prepared
-`pr.diff` path, `pr.json` path, Android repository root, and a narrow role
-prompt.
+Fetch bounded `$RUN/pr.json` and `$RUN/pr.diff` using `gh`; never print raw diff in comments. Atomically write `$RUN/intake.json` with only `schema_version:1`, issue identifier, `platform:"android"`, `audit_kind:"pr"`, and `source_ref:{repo,pr_url,base_sha,head_sha}`. Run `python3 "$HELPER" bind-context --run-dir "$RUN" --intake "$RUN/intake.json"` before fanout. It creates/validates immutable context and input digests; failure blocks.
 
-When using the Codex `spawn_agent` tool, set `agent_type` explicitly to the
-exact subagent name. A `spawn_agent` call with omitted `agent_type`, `default`,
-or any generic role is a failed smoke/audit attempt and must block the run.
-Use exactly these mappings:
+Generation preflight is fail-closed: a matching receipt forbids regeneration and goes directly to Infra reconciliation; conflicting receipt, invalid existing summary, or `status/handoff.done` without valid summary blocks. A valid immutable summary without receipt is never regenerated; resume only the missing handoff. Only a run with no summary/receipt/handoff may aggregate.
 
-| Required output file | Required `spawn_agent.agent_type` |
-| --- | --- |
-| `$RUN/subagents/uaudit-kotlin-audit-specialist.json` | `uaudit-kotlin-audit-specialist` |
-| `$RUN/subagents/uaudit-bug-hunter.json` | `uaudit-bug-hunter` |
-| `$RUN/subagents/uaudit-security-auditor.json` | `uaudit-security-auditor` |
-| `$RUN/subagents/uaudit-blockchain-auditor.json` | `uaudit-blockchain-auditor` |
+Before fanout, validate each existing mapped sidecar with its digest-bound marker. Reuse valid complete/partial slots, spawn only missing slots, and never overwrite a validated slot. Any conflicting slot/marker or persisted `status/blocked` remains blocked until a later verified human Board input explicitly authorizes resume; then retry only its missing/failed exact slot.
 
-If the tool schema rejects any required `agent_type`, write
-`$RUN/status/blocked` with the rejected name and stop. Do not retry that slot
-with a generic agent.
+### Required v1 reviewer envelope
 
-After intake or smoke fixtures exist, immediately start the four required
-subagents in parallel. Do not perform solo audit analysis before the fanout.
-Use a bounded wait for subagent completion; if any required subagent does not
-finish within 180 seconds, retry that exact `agent_type` once. If the retry also
-times out, write `$RUN/status/blocked` with `subagent timeout: <agent_type>` and
-stop.
+Store each response atomically at its mapped path. It must contain only the strict v1 fields: `schema_version:1`; exact `run_binding`; mapped `stage` and `source_agent`; `audit_status:complete|partial|blocked`; `findings`; typed `limitations:[{text,material}]`; status-valid `block_reason`. Every finding has exactly `severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification`; keep all location keys and use either relative `file`+positive `line`+`area:null` or `file:null,line:null`+nonempty `area`. Severity is `Critical|Block|Important|Observation`; finding prose, every limitation `text`, and a non-null blocked `block_reason` are Russian; `block_reason` is null for complete/partial. Do not accept prose counts, legacy confidence/scope/no-finding fields, or infer status. Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar <mapped-output>` for every slot; only helper markers prove readiness.
 
-### Run State
+### Aggregate and handoff
 
-Bind state on every wake:
+Run `python3 "$HELPER" aggregate --run-dir "$RUN"`. It alone validates all slots/run binding, deduplicates, counts, decides status/verdict, and atomically publishes canonical findings, `telegram-summary.txt`, optional compact Russian `audit.md`, then `delivery-summary.json` last. `complete+0` has no MD; `partial` always has MD and is explicitly incomplete; `blocked` publishes no completion payload. Android variant impact belongs in report evidence/technical information when applicable. Do not derive findings from Markdown or edit helper outputs.
 
-```bash
-N=<issueNumber of this Paperclip issue>
-RUN={{paths.team_workspace_root}}/UNS-$N-audit
-REPO={{paths.project_root}}/repos/android/unstoppable-wallet-android
-```
+Atomically create strict `$RUN/delivery-handoff.json` with only `schema_version:1`, `delivery_contract:"uaudit-delivery/v1"`, exact `run_dir`, `delivery_summary`, `issue_identifier`, `platform`, `audit_kind`, and context `source_ref`. Choose message only for validated `complete+0+report:null`, otherwise document; run `python3 "$HELPER" verify-payload --run-dir "$RUN" --handoff "$RUN/delivery-handoff.json" --expected-mode <message|document>`. Then assign `{{bindings.agents.UWAInfraEngineer}}` with `mode=pr_delivery`, contract and exact handoff/summary paths. Only after successful assignment API response atomically create `status/handoff.done`; it never means delivered.
 
-Use this layout:
+### Smoke mode
 
-```text
-$RUN/
-  pr.json
-  pr.diff
-  coordinator.md
-  subagents/
-    uaudit-kotlin-audit-specialist.json
-    uaudit-bug-hunter.json
-    uaudit-security-auditor.json
-    uaudit-blockchain-auditor.json
-  status/
-    intake.done
-    subagents.started
-    subagents.done
-    aggregate.done
-    handoff.done
-    blocked
-  audit.md
-```
-
-Only you write files under `$RUN`. Use atomic writes: write `*.tmp`, validate,
-then `mv` into place.
-
-Duplicate wake rules:
-
-- `status/handoff.done` exists: exit.
-- `audit.md` and `status/aggregate.done` exist: hand off if not already done.
-- `status/blocked` exists: comment only if no blocked comment was already
-  posted, then exit.
-- partial subagent output exists: validate and resume; retry each missing
-  subagent at most once.
-
-### Intake
-
-Fetch PR metadata and diff without printing raw diff to Paperclip comments:
-
-```bash
-mkdir -p "$RUN/subagents" "$RUN/status"
-gh pr view "$PR_URL" --json number,title,author,files,additions,deletions,headRefOid,baseRefOid,body > "$RUN/pr.json.tmp"
-gh pr diff "$PR_URL" > "$RUN/pr.diff.tmp"
-mv "$RUN/pr.json.tmp" "$RUN/pr.json"
-mv "$RUN/pr.diff.tmp" "$RUN/pr.diff"
-touch "$RUN/status/intake.done"
-```
-
-Head SHA from `pr.json` is the audit subject for every subagent.
-
-### Subagent Contract
-
-Require each subagent to return JSON with this shape:
-
-```json
-{
-  "agent": "uaudit-kotlin-audit-specialist | uaudit-bug-hunter | uaudit-security-auditor | uaudit-blockchain-auditor",
-  "scope": "files and PR areas reviewed",
-  "findings": [
-    {
-      "severity": "Critical | Block | Important | Observation",
-      "confidence": "High | Medium | Low",
-      "file": "path",
-      "line": 123,
-      "title": "one sentence",
-      "evidence": "code-grounded evidence",
-      "impact": "wallet/user/security impact",
-      "recommendation": "minimal actionable fix",
-      "false_positive_risk": "Low | Medium | High",
-      "needs_runtime_verification": true
-    }
-  ],
-  "no_finding_areas": ["areas explicitly checked with no issue"],
-  "limitations": ["what static review could not verify"]
-}
-```
-
-Malformed JSON, missing required fields, missing subagent, or generic-agent
-fallback blocks the run. Write `$RUN/status/blocked` with one concise reason.
-Every JSON result must contain `"agent"` equal to the required `agent_type`
-used for that slot.
-
-### Aggregation
-
-Write `$RUN/audit.md` in English with:
-
-- title: `# PR Audit - unstoppable-wallet-android#<PR>`
-- metadata: issue, PR URL, title, author, base/head SHA, file count, additions,
-  deletions, coordinator, subagent roster
-- Android variant impact: `base`, `fdroid`, `fdroidCi`, `ci` when touched
-- executive verdict: `approve`, `request changes`, or `block`
-- findings grouped by severity, preserving source-agent attribution
-- conflict section when subagents disagree
-- no-finding areas and limitations
-- methodology: `gh`, `git diff`, `codebase-memory`, `serena`, Codex subagents
-
-Dedup key is `(file, line, title)`. Highest severity wins unless you record a
-specific downgrade reason.
-
-### Handoff
-
-Do not paste report bytes into comments. After `audit.md` is written:
-
-1. touch `$RUN/status/aggregate.done`;
-2. post a short comment:
-   `audit.md ready for UNS-<N> Android. Handing off to UWAInfraEngineer for delivery.`;
-3. PATCH assignee to `5f0709f8-0b05-43e7-8711-6df618b95f69`;
-4. touch `$RUN/status/handoff.done`.
-
-Infra computes its own hash and delivery payload.
-
-### Smoke Mode
-
-If the issue explicitly says `UAudit subagent smoke`, use synthetic `pr.json`
-and `pr.diff` under `$RUN/smoke/` and prove:
-
-- all four required subagent names were invoked via explicit
-  `spawn_agent.agent_type`;
-- no subagent wait exceeded the bounded timeout/retry policy;
-- missing required subagent blocks the run;
-- malformed subagent JSON blocks the run;
-- subagents do not write files or read forbidden secret paths.
-
-Save smoke artifacts under this layout:
-
-```text
-$RUN/smoke/
-  pr.json
-  pr.diff
-  subagents/
-    uaudit-kotlin-audit-specialist.json
-    uaudit-bug-hunter.json
-    uaudit-security-auditor.json
-    uaudit-blockchain-auditor.json
-  summary.json
-```
-
-`summary.json` must include `expected_subagent_count`, `completed_subagent_count`,
-the exact subagent names, whether any generic/default agent was used, and one
-short outcome per subagent. Do not include raw PR diff content, secrets, or auth
-material in comments.
-
-After `summary.json` is written, hand off the same issue to `UWAInfraEngineer`
-for Telegram delivery:
-
-1. touch `$RUN/status/smoke.done`;
-2. post a short comment:
-   `UAudit subagent smoke summary ready for UNS-<N> Android. Handing off to UWAInfraEngineer for Telegram delivery.`;
-3. PATCH assignee to `5f0709f8-0b05-43e7-8711-6df618b95f69`;
-4. touch `$RUN/status/handoff.done`.
+`UAudit subagent smoke` is not v1 completion. Use synthetic `smoke/{pr.json,pr.diff,subagents/,summary.json}`, the same exact-agent/timeouts, and block on missing/malformed/secret-reading/writing reviewers. Summary records expected/completed count, exact names, generic/default usage, and one outcome each without diff/secrets. Hand it to `UWAInfraEngineer`; unversioned delivery requires the exact legacy allowlist/report digest or fails closed.

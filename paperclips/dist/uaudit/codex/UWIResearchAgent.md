@@ -78,10 +78,13 @@ Source of truth = Paperclip API now, not CLI session ("galaxy brain — ignore")
 
 ### @-mentions: trailing space after name
 
-Paperclip's parser captures trailing punctuation into the name (e.g. `@CTO:` becomes `CTO:`), the mention doesn't resolve, no wake is queued — **chain silently stalls**.
+Paperclip's parser captures trailing punctuation into the name (e.g. `@Role:`
+becomes `Role:`), the mention doesn't resolve, no wake is queued — **chain
+silently stalls**.
 
-**Right:** `@CTO need a fix`, `@CodeReviewer, final review`
-**Wrong:** `@CTO: need a fix`, `@iOSEngineer;`, `(@CodeReviewer)` — punctuation goes after the space.
+**Right:** target-local role mention followed by a space.
+**Wrong:** `@Role: need a fix`, `@Role;`, `(@Role)` — punctuation goes after
+the space.
 
 ### Handoff: PATCH + comment with @mention + STOP
 
@@ -101,7 +104,7 @@ Got an @-mention with explicit handoff phrase (`"your turn"`, `"pick it up"`, `"
 
 **Do:**
 1. `GET /api/issues/{id}` → read `executionAgentNameKey`.
-2. Comment to holder: `"@CTO release execution lock on [UNS-5], I'm ready to close"`.
+2. Comment to the target-local lock holder: `"release execution lock on [UNS-5], I'm ready to close"`.
 3. Alternative — if holder unavailable, `PATCH ... assigneeAgentId=<original-assignee>` → originator closes.
 4. Don't retry close with the same JWT — without release, 409 keeps coming.
 
@@ -180,7 +183,8 @@ Reading files cold without graph context invites missing call sites and dead-cod
 **Every wake ends in one of two states:**
 
 1. `status=done`, OR
-2. **Atomic handoff** to next agent (or your CTO if next is unknown).
+2. **Atomic handoff** to next target-local agent (or your target-local CTO if
+   next is unknown).
 
 No third option. `assignee=me, status=in_progress|todo` between phases = chain dies silently.
 
@@ -196,9 +200,13 @@ ONE POST + ONE PATCH + STOP, **in this exact order**:
 
 POST + PATCH is the only reliable wake mechanism. Mention in POST wakes by mention; PATCH wakes by reassign.
 
-### Fallback: unknown recipient → CTO
+### Fallback: unknown recipient -> target-local CTO
 
-Phase chain unclear? **Handoff to your CTO** (`reportsTo` in manifest). If you ARE CTO and don't know → escalate Board per `universal/escalation-board.md`. NEVER drop the issue.
+Phase chain unclear? **Handoff to your target-local CTO** (`reportsTo` in
+manifest). If you ARE CTO and don't know -> escalate Board per
+`universal/escalation-board.md`. NEVER drop the issue. Do not cross from a
+Codex/CX lane to bare Claude-side roles, or from a Claude lane to CX-prefixed
+roles.
 
 ### Comment format — STRICT
 
@@ -224,17 +232,23 @@ Evidence/context goes ABOVE:
 
 ### Formal vs plain @-mention
 
-Use **formal** `[@<Role>](agent://<uuid>?i=<icon>)` — machine-verifiable if assignee PATCH flakes. Resolve the concrete UUID from the local roster for your target/team.
+Use **formal** `[@<Role>](agent://<uuid>?i=<icon>)` — machine-verifiable if
+assignee PATCH flakes. Resolve the concrete UUID from the local roster for your
+target/team.
 
 Examples:
-- ✅ `[@CodeReviewer](agent://<uuid>?i=<icon>) your turn.`
-- ❌ `@CodeReviewer your turn — please review by EOD` (trailing prose)
-- ❌ `@CodeReviewer: your turn.` (`@Role:` breaks parser — see `universal/wake-and-handoff-basics.md`)
-- ❌ `Reassigning to @CodeReviewer for review.` (no `your turn.` + no formal mention)
+- OK: `[@<TargetLocalReviewer>](agent://<uuid>?i=<icon>) your turn.`
+- Wrong: plain `@<Role> your turn` with trailing prose.
+- Wrong: `@<Role>:` because `@Role:` breaks parser — see
+  `universal/wake-and-handoff-basics.md`.
+- Wrong: `Reassigning to @<Role> for review.` because it has no `your turn.`
+  and no formal mention.
 
 ### Cross-team handoff
 
-Same procedure across claude ↔ codex; shared company, UUIDs resolve.
+Do not cross teams during normal phase handoff. A Codex/CX issue stays on
+CX/Codex roles; a Claude issue stays on Claude roles. Cross-team escalation
+requires explicit operator instruction.
 
 ### Self-checkout on explicit handoff
 
@@ -312,13 +326,9 @@ notification actions; lifecycle notifications are automatic.
 
 ## Daily Version-Branch Research Stage (iOS)
 
-When assigned a UAudit daily version-branch issue with
-`mode=daily_research`, read `$RUN/profile.json`, prior stage reports, and only
-the external references needed to resolve open library, protocol, or platform
-questions. Do not redo code/security/crypto review.
+For `mode=daily_research`, set `HELPER=/opt/uaa-example/uaudit/runs/.uaudit-tools/uaudit_delivery_contract.py`; read `$RUN/run-context.json`, validated prior sidecars/markers and only references needed for open library, protocol, or platform questions. Do not redo prior audits.
 
-Write `$RUN/research-context.md` with cited context, impact on open findings,
-and limitations. Then write `$RUN/research.done`, comment
-`research-context.md ready for UNS-<N> iOS daily audit`, PATCH assignee to
-`00000000-0000-0000-0000-000000000019` with `mode=daily_qa_verify`, and stop.
+Write cited human context to `$RUN/research-context.md`. Atomically publish `$RUN/research-context.findings.json` as the strict v1 envelope with exact copied `run_binding`, `stage="research_context"`, `source_agent="UWIResearchAgent"`, `audit_status=complete|partial|blocked`, structured findings, typed `{text,material}` limitations, and status-valid `block_reason`. Every finding has exactly `severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification`; location is either relative file+positive line+null area or null file/line+nonempty area. Finding prose, limitation text and non-null blocked reason are Russian; complete/partial use null block reason. Do not count/deduplicate or add fields.
+
+Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/research-context.findings.json"`; only it creates digest-bound `status/research_context.done.json`. Validation failure or `blocked` PATCHes issue blocked and stops without completion. Otherwise comment ready, PATCH `00000000-0000-0000-0000-000000000019` with `mode=daily_qa_verify`, and stop. Never send Telegram or update state/cursors.
 
