@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Dry-run or apply UAudit daily routine assignee reconciliation."""
+"""Dry-run or revision-safely reconcile repository-owned UAudit routines."""
 from __future__ import annotations
 
 import argparse
@@ -8,6 +8,7 @@ import os
 import sys
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,7 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from resolve_bindings import resolve_all  # noqa: E402
+from resolve_template_sources import resolve  # noqa: E402
 
 DEFAULT_CONFIG = REPO_ROOT / "paperclips/projects/uaudit/daily-version-branch-routines.yaml"
 DEFAULT_AUTH_PATHS = (
@@ -36,6 +38,33 @@ DAILY_CHAIN_KEYS = {
     "aggregator",
     "delivery_agent",
 }
+ROUTINE_REQUIRED_STRINGS = (
+    "id",
+    "routine_key",
+    "title",
+    "platform",
+    "branch",
+    "repo_local_path_template",
+    "cursor_path_template",
+    "dispatcher",
+    "infra_executor",
+    "pr_audit_coordinator",
+)
+IDENTITY_FIELDS = ("routine_key", "platform")
+
+
+def _single_line(value: Any, where: str) -> str:
+    if not isinstance(value, str) or not value or value != value.strip():
+        raise ValueError(f"{where} must be a non-empty trimmed string")
+    if "\n" in value or "\r" in value:
+        raise ValueError(f"{where} must be single-line")
+    return value
+
+
+def _require_unique(values: list[str], where: str) -> None:
+    duplicates = sorted({value for value in values if values.count(value) > 1})
+    if duplicates:
+        raise ValueError(f"{where} must be unique; duplicates: {', '.join(duplicates)}")
 
 
 def load_config(path: Path = DEFAULT_CONFIG) -> dict[str, Any]:
@@ -44,27 +73,79 @@ def load_config(path: Path = DEFAULT_CONFIG) -> dict[str, Any]:
         raise ValueError(f"{path}: root must be mapping")
     if data.get("schemaVersion") != 1:
         raise ValueError(f"{path}: schemaVersion must be 1")
+    marker = _single_line(data.get("marker"), f"{path}: marker")
     limits = data.get("limits")
     routines = data.get("routines")
-    if not isinstance(limits, dict) or not isinstance(routines, list):
-        raise ValueError(f"{path}: expected limits mapping and routines list")
+    if not isinstance(limits, dict) or not isinstance(routines, list) or not routines:
+        raise ValueError(f"{path}: expected limits mapping and non-empty routines list")
     for key in ("max_commits", "max_files", "max_diff_lines"):
         if not isinstance(limits.get(key), int) or limits[key] <= 0:
             raise ValueError(f"{path}: limits.{key} must be positive integer")
-    for routine in routines:
+
+    validated: list[dict[str, Any]] = []
+    for index, routine in enumerate(routines):
         if not isinstance(routine, dict):
-            raise ValueError(f"{path}: each routine must be a mapping")
+            raise ValueError(f"{path}: routines[{index}] must be a mapping")
+        for key in ROUTINE_REQUIRED_STRINGS:
+            _single_line(routine.get(key), f"{path}: routines[{index}].{key}")
+        if routine["platform"] not in {"android", "ios"}:
+            raise ValueError(f"{path}: routines[{index}].platform must be android or ios")
+        if not routine["branch"].startswith("version/"):
+            raise ValueError(f"{path}: routines[{index}].branch must start with version/")
         if "required_subagents" in routine:
             raise ValueError(f"{path}: daily routines must use daily_chain, not required_subagents")
         chain = routine.get("daily_chain")
         if not isinstance(chain, dict):
-            raise ValueError(f"{path}: routine {routine.get('id')!r} missing daily_chain mapping")
+            raise ValueError(f"{path}: routine {routine['id']!r} missing daily_chain mapping")
         missing_chain = sorted(DAILY_CHAIN_KEYS - set(chain))
         if missing_chain:
-            raise ValueError(f"{path}: routine {routine.get('id')!r} missing daily_chain keys: {', '.join(missing_chain)}")
-        non_string_chain = sorted(key for key in DAILY_CHAIN_KEYS if not isinstance(chain.get(key), str))
+            raise ValueError(
+                f"{path}: routine {routine['id']!r} missing daily_chain keys: "
+                f"{', '.join(missing_chain)}"
+            )
+        non_string_chain = sorted(
+            key
+            for key in DAILY_CHAIN_KEYS
+            if not isinstance(chain.get(key), str) or not chain[key].strip()
+        )
         if non_string_chain:
-            raise ValueError(f"{path}: routine {routine.get('id')!r} daily_chain keys must be agent names: {', '.join(non_string_chain)}")
+            raise ValueError(
+                f"{path}: routine {routine['id']!r} daily_chain keys must be agent names: "
+                f"{', '.join(non_string_chain)}"
+            )
+        validated.append(routine)
+
+    for key in ("id", "routine_key", "title", "platform"):
+        _require_unique([routine[key] for routine in validated], f"{path}: routine {key} values")
+    data["marker"] = marker
+    return data
+
+
+def _choose_local_source(project_key: str, filename: str, explicit: Path | None) -> Path:
+    fallback = REPO_ROOT / "paperclips" / "projects" / project_key / filename
+    if explicit is not None:
+        if not explicit.is_file():
+            raise ValueError(f"missing explicit {filename} source: {explicit}")
+        return explicit
+    operator = (
+        Path.home()
+        / ".paperclip"
+        / "projects"
+        / project_key
+        / filename.replace(".local-example", "")
+    )
+    if operator.is_file():
+        return operator
+    if fallback.is_file():
+        return fallback
+    raise ValueError(f"missing {filename} source: {operator}")
+
+
+def load_paths(project_key: str, paths_path: Path | None = None) -> dict[str, Any]:
+    chosen = _choose_local_source(project_key, "paths.local-example.yaml", paths_path)
+    data = yaml.safe_load(chosen.read_text())
+    if not isinstance(data, dict):
+        raise ValueError(f"{chosen}: paths source must be a mapping")
     return data
 
 
@@ -77,7 +158,7 @@ def resolve_agent_ids(project_key: str, bindings_path: Path | None) -> dict[str,
     agents = merged.get("agents")
     if not isinstance(agents, dict):
         raise ValueError("bindings source did not resolve agents mapping")
-    return {str(k): str(v) for k, v in agents.items()}
+    return {str(key): str(value) for key, value in agents.items()}
 
 
 def required_agent_names(config: dict[str, Any]) -> set[str]:
@@ -89,9 +170,7 @@ def required_agent_names(config: dict[str, Any]) -> set[str]:
                 names.add(value)
         chain = routine.get("daily_chain")
         if isinstance(chain, dict):
-            for value in chain.values():
-                if isinstance(value, str):
-                    names.add(value)
+            names.update(str(value) for value in chain.values() if isinstance(value, str))
     return names
 
 
@@ -101,43 +180,161 @@ def validate_config_agents(config: dict[str, Any], agent_ids: dict[str, str]) ->
         raise ValueError(f"routine config references unknown agents: {', '.join(missing)}")
 
 
-def normalize_current_routines(payload: Any) -> dict[str, dict[str, Any]]:
+def normalize_current_routines(payload: Any) -> list[dict[str, Any]]:
     if isinstance(payload, dict) and isinstance(payload.get("routines"), list):
         items = payload["routines"]
     elif isinstance(payload, dict) and isinstance(payload.get("data"), list):
         items = payload["data"]
     elif isinstance(payload, list):
         items = payload
+    elif isinstance(payload, dict) and isinstance(payload.get("id"), str):
+        items = [payload]
     else:
-        raise ValueError("routines API response must be list or contain routines/data list")
-    result: dict[str, dict[str, Any]] = {}
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        rid = item.get("id") or item.get("key") or item.get("name")
-        if isinstance(rid, str):
-            result[rid] = item
+        raise ValueError("routines API response must be a routine, list, or contain routines/data list")
+    result = [item for item in items if isinstance(item, dict) and isinstance(item.get("id"), str)]
+    live_ids = [str(item["id"]) for item in result]
+    _require_unique(live_ids, "live routine ids")
     return result
 
 
-def build_plan(config: dict[str, Any], agent_ids: dict[str, str], current: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
-    plan: list[dict[str, Any]] = []
-    for routine in config["routines"]:
-        rid = routine["id"]
-        current_item = current.get(rid)
-        if current_item is None:
-            raise ValueError(f"routine {rid!r} not found; creation is not implicit")
-        dispatcher = routine["dispatcher"]
-        desired = agent_ids[dispatcher]
-        current_assignee = current_item.get("assigneeAgentId") or current_item.get("assignee_agent_id")
-        plan.append({
-            "routine_id": rid,
-            "platform": routine.get("platform"),
-            "dispatcher": dispatcher,
-            "desired_assigneeAgentId": desired,
-            "current_assigneeAgentId": current_assignee,
-            "needs_update": current_assignee != desired,
-        })
+def _description_identity(item: dict[str, Any], marker: str) -> dict[str, str]:
+    description = item.get("description")
+    if description is None:
+        description = ""
+    if not isinstance(description, str):
+        raise ValueError(f"live routine {item.get('id')!r} description must be a string")
+    lines = description.splitlines()
+    values: dict[str, str] = {}
+    relevant = marker in lines or any(line.startswith("routine_key") for line in lines)
+    if not relevant:
+        return values
+    for field in IDENTITY_FIELDS:
+        prefix = f"{field}: "
+        malformed = [line for line in lines if line.startswith(field) and not line.startswith(prefix)]
+        if malformed:
+            raise ValueError(f"live routine {item.get('id')!r} has malformed {field} line")
+        matches = [line[len(prefix):] for line in lines if line.startswith(prefix)]
+        if len(matches) > 1:
+            raise ValueError(f"live routine {item.get('id')!r} has duplicate {field} lines")
+        if matches:
+            values[field] = _single_line(matches[0], f"live routine {item.get('id')!r} {field}")
+    return values
+
+
+def render_description(config: dict[str, Any], routine: dict[str, Any], paths: dict[str, Any]) -> str:
+    sources = {"paths": paths}
+    repo_path = resolve(routine["repo_local_path_template"], sources)
+    cursor_path = resolve(routine["cursor_path_template"], sources)
+    return "\n".join(
+        (
+            config["marker"],
+            f"routine_key: {routine['routine_key']}",
+            f"platform: {routine['platform']}",
+            f"branch: {routine['branch']}",
+            f"repo: {repo_path}",
+            f"cursor: {cursor_path}",
+        )
+    )
+
+
+def _match_live_routine(
+    config: dict[str, Any],
+    routine: dict[str, Any],
+    current: list[dict[str, Any]],
+) -> dict[str, Any]:
+    marker = config["marker"]
+    identities = [(item, _description_identity(item, marker)) for item in current]
+    by_key = [item for item, identity in identities if identity.get("routine_key") == routine["routine_key"]]
+    if len(by_key) > 1:
+        raise ValueError(f"routine key {routine['routine_key']!r} matches multiple live routines")
+    if by_key:
+        identity = next(identity for item, identity in identities if item is by_key[0])
+        if identity.get("platform") != routine["platform"]:
+            raise ValueError(
+                f"routine key {routine['routine_key']!r} has conflicting platform identity"
+            )
+        return by_key[0]
+
+    fallback_base: list[tuple[dict[str, Any], dict[str, str]]] = []
+    for item, identity in identities:
+        description = item.get("description") or ""
+        lines = description.splitlines() if isinstance(description, str) else []
+        if (
+            item.get("title") == routine["title"]
+            and marker in lines
+            and identity.get("platform") == routine["platform"]
+        ):
+            fallback_base.append((item, identity))
+    conflicting = [
+        item
+        for item, identity in fallback_base
+        if identity.get("routine_key") not in (None, routine["routine_key"])
+    ]
+    if conflicting:
+        raise ValueError(
+            f"routine {routine['id']!r} fallback candidate has conflicting routine_key"
+        )
+    fallback = [item for item, identity in fallback_base if "routine_key" not in identity]
+    if not fallback:
+        raise ValueError(f"routine {routine['id']!r} not found; creation is not implicit")
+    if len(fallback) > 1:
+        raise ValueError(f"routine {routine['id']!r} fallback is ambiguous")
+    return fallback[0]
+
+
+def _plan_one(
+    config: dict[str, Any],
+    routine: dict[str, Any],
+    agent_ids: dict[str, str],
+    paths: dict[str, Any],
+    current: list[dict[str, Any]],
+) -> dict[str, Any]:
+    current_item = _match_live_routine(config, routine, current)
+    live_uuid = _single_line(current_item.get("id"), f"routine {routine['id']!r} live id")
+    live_revision = _single_line(
+        current_item.get("latestRevisionId") or current_item.get("latest_revision_id"),
+        f"routine {routine['id']!r} latestRevisionId",
+    )
+    dispatcher = routine["dispatcher"]
+    desired_assignee = agent_ids[dispatcher]
+    current_assignee = current_item.get("assigneeAgentId") or current_item.get("assignee_agent_id")
+    desired_description = render_description(config, routine, paths)
+    current_description = current_item.get("description") or ""
+    patch: dict[str, Any] = {}
+    if current_assignee != desired_assignee:
+        patch["assigneeAgentId"] = desired_assignee
+    if current_description != desired_description:
+        patch["description"] = desired_description
+    if patch:
+        patch["baseRevisionId"] = live_revision
+    return {
+        "routine_id": routine["id"],
+        "routine_key": routine["routine_key"],
+        "platform": routine["platform"],
+        "dispatcher": dispatcher,
+        "live_uuid": live_uuid,
+        "live_revision_id": live_revision,
+        "current_assigneeAgentId": current_assignee,
+        "desired_assigneeAgentId": desired_assignee,
+        "current_description": current_description,
+        "desired_description": desired_description,
+        "patch": patch,
+        "needs_update": bool(patch),
+    }
+
+
+def build_plan(
+    config: dict[str, Any],
+    agent_ids: dict[str, str],
+    current: list[dict[str, Any]],
+    paths: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    chosen_paths = paths if paths is not None else load_paths(str(config.get("project") or "uaudit"))
+    plan = [
+        _plan_one(config, routine, agent_ids, chosen_paths, current)
+        for routine in config["routines"]
+    ]
+    _require_unique([item["live_uuid"] for item in plan], "matched live routine ids")
     return plan
 
 
@@ -172,16 +369,94 @@ def resolve_token(api_url: str, auth_json: Path | None) -> str:
 
 def request_json(method: str, url: str, token: str, body: dict[str, Any] | None = None) -> Any:
     data = None if body is None else json.dumps(body).encode("utf-8")
-    headers = {"Authorization": f"Bearer {token}", "User-Agent": "uaudit-routine-reconcile/1.0"}
+    headers = {"Authorization": f"Bearer {token}", "User-Agent": "uaudit-routine-reconcile/2.0"}
     if data is not None:
         headers["Content-Type"] = "application/json"
-    req = urllib.request.Request(url, data=data, headers=headers, method=method)
+    request = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(req, timeout=30) as response:
+        with urllib.request.urlopen(request, timeout=30) as response:
             raw = response.read().decode("utf-8")
     except urllib.error.HTTPError as exc:
-        raise RuntimeError(f"{method} {url} failed HTTP {exc.code}: {exc.read().decode('utf-8', 'ignore')}") from exc
+        detail = exc.read().decode("utf-8", "ignore")
+        raise RuntimeError(f"{method} {url} failed HTTP {exc.code}: {detail}") from exc
     return json.loads(raw) if raw else {}
+
+
+def _config_for_routine(config: dict[str, Any], routine_id: str) -> dict[str, Any]:
+    routine = next(item for item in config["routines"] if item["id"] == routine_id)
+    return {**config, "routines": [routine]}
+
+
+def apply_plan(
+    api_url: str,
+    token: str,
+    config: dict[str, Any],
+    agent_ids: dict[str, str],
+    paths: dict[str, Any],
+    plan: list[dict[str, Any]],
+    request: Callable[[str, str, str, dict[str, Any] | None], Any] = request_json,
+) -> tuple[dict[str, Any], bool]:
+    result: dict[str, list[dict[str, Any]]] = {
+        "updated": [],
+        "unchanged": [],
+        "failed": [],
+        "not_attempted": [],
+    }
+    pending = [item for item in plan if item["needs_update"]]
+    result["unchanged"].extend(
+        {"routine_id": item["routine_id"], "live_uuid": item["live_uuid"]}
+        for item in plan
+        if not item["needs_update"]
+    )
+    base_url = api_url.rstrip("/")
+    for index, initial in enumerate(pending):
+        endpoint = f"{base_url}/api/routines/{initial['live_uuid']}"
+        try:
+            fresh_payload = request("GET", endpoint, token, None)
+            fresh = normalize_current_routines(fresh_payload)
+            one_config = _config_for_routine(config, initial["routine_id"])
+            fresh_item = build_plan(one_config, agent_ids, fresh, paths)[0]
+            if fresh_item["live_uuid"] != initial["live_uuid"]:
+                raise ValueError("fresh routine identity resolved to a different live UUID")
+            if not fresh_item["needs_update"]:
+                result["unchanged"].append(
+                    {"routine_id": fresh_item["routine_id"], "live_uuid": fresh_item["live_uuid"]}
+                )
+                continue
+            request("PATCH", endpoint, token, fresh_item["patch"])
+            verified_payload = request("GET", endpoint, token, None)
+            verified = build_plan(
+                one_config,
+                agent_ids,
+                normalize_current_routines(verified_payload),
+                paths,
+            )[0]
+            if verified["needs_update"]:
+                raise RuntimeError("post-write GET still reports routine drift")
+            result["updated"].append(
+                {
+                    "routine_id": verified["routine_id"],
+                    "live_uuid": verified["live_uuid"],
+                    "revision_id": verified["live_revision_id"],
+                }
+            )
+        except Exception as exc:
+            result["failed"].append(
+                {
+                    "routine_id": initial["routine_id"],
+                    "live_uuid": initial["live_uuid"],
+                    "error": str(exc),
+                }
+            )
+            result["not_attempted"].extend(
+                {
+                    "routine_id": remaining["routine_id"],
+                    "live_uuid": remaining["live_uuid"],
+                }
+                for remaining in pending[index + 1:]
+            )
+            return result, False
+    return result, True
 
 
 def main() -> int:
@@ -189,6 +464,7 @@ def main() -> int:
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--project-key", default="uaudit")
     parser.add_argument("--bindings", type=Path)
+    parser.add_argument("--paths", type=Path)
     parser.add_argument("--company-id")
     parser.add_argument("--api-url", default=os.environ.get("PAPERCLIP_API_URL", "http://localhost:3100"))
     parser.add_argument("--auth-json", type=Path)
@@ -203,6 +479,7 @@ def main() -> int:
         config = load_config(args.config)
         agent_ids = resolve_agent_ids(args.project_key, args.bindings)
         validate_config_agents(config, agent_ids)
+        paths = load_paths(args.project_key, args.paths)
 
         company_id = args.company_id
         token = None
@@ -210,29 +487,48 @@ def main() -> int:
             current_payload = json.loads(args.current_routines_json.read_text())
         else:
             if not company_id:
-                fallback_bindings = yaml.safe_load((REPO_ROOT / "paperclips/projects/uaudit/bindings.local-example.yaml").read_text())
-                company_id = fallback_bindings.get("company_id") if isinstance(fallback_bindings, dict) else None
+                fallback_bindings = yaml.safe_load(
+                    (REPO_ROOT / "paperclips/projects/uaudit/bindings.local-example.yaml").read_text()
+                )
+                company_id = (
+                    fallback_bindings.get("company_id")
+                    if isinstance(fallback_bindings, dict)
+                    else None
+                )
             if not company_id:
                 raise ValueError("--company-id is required when reading live routines")
             token = resolve_token(args.api_url, args.auth_json)
-            current_payload = request_json("GET", f"{args.api_url.rstrip('/')}/api/companies/{company_id}/routines", token)
+            current_payload = request_json(
+                "GET",
+                f"{args.api_url.rstrip('/')}/api/companies/{company_id}/routines",
+                token,
+            )
 
         current = normalize_current_routines(current_payload)
-        plan = build_plan(config, agent_ids, current)
-        result = {"mode": "apply" if args.apply else "dry-run", "company_id": company_id, "updates": plan}
+        plan = build_plan(config, agent_ids, current, paths)
+        result: dict[str, Any] = {
+            "mode": "apply" if args.apply else "dry-run",
+            "company_id": company_id,
+            "updates": plan,
+        }
 
+        success = True
         if args.apply:
             if args.current_routines_json:
                 raise ValueError("--apply cannot be used with --current-routines-json")
             if token is None:
                 token = resolve_token(args.api_url, args.auth_json)
-            for item in plan:
-                if item["needs_update"]:
-                    body = {"assigneeAgentId": item["desired_assigneeAgentId"]}
-                    request_json("PATCH", f"{args.api_url.rstrip('/')}/api/companies/{company_id}/routines/{item['routine_id']}", token, body)
+            result["apply"], success = apply_plan(
+                args.api_url,
+                token,
+                config,
+                agent_ids,
+                paths,
+                plan,
+            )
 
         print(json.dumps(result, indent=2, sort_keys=True))
-        return 0
+        return 0 if success else 1
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1

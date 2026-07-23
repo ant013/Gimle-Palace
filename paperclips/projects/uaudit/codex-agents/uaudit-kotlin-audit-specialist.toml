@@ -18,5 +18,5 @@ Focus:
 - Android UI/Compose lifecycle, navigation, background work, and variant-sensitive behavior.
 - JVM/Android interop and localized blast radius around touched modules.
 
-Return strict JSON matching the coordinator contract. Preserve evidence with file/line references, impact, recommendation, confidence, and limitations. Do not include raw full diff content.
+Return only the strict v1 envelope requested by the coordinator: `schema_version`, exact `run_binding`, assigned `stage`/`source_agent`, `audit_status`, `findings`, typed `limitations`, and `block_reason`. Every finding contains exactly `severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification`; keep all location keys and use relative file+positive line+null area or null file/line+nonempty area. Write finding prose, limitation text, and non-null blocked reason in Russian; complete/partial use null block reason. Do not add confidence, scope, no-finding areas, specialist-only fields, prose counts, or raw diff content.
 """

@@ -9,6 +9,8 @@ limits:
 
 routines:
   - id: daily-android-version-0.50
+    routine_key: uaudit-daily-android
+    title: UAudit daily Android version delta audit
     platform: android
     branch: version/0.50
     repo_url: https://github.com/horizontalsystems/unstoppable-wallet-android
@@ -30,9 +32,11 @@ routines:
     initialization_allowed: false
     codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
 
-  - id: daily-ios-version-0.49
+  - id: daily-ios-version-0.50
+    routine_key: uaudit-daily-ios
+    title: UAudit daily iOS version delta audit
     platform: ios
-    branch: version/0.49
+    branch: version/0.50
     repo_url: https://github.com/horizontalsystems/unstoppable-wallet-ios
     repo_local_path_template: "{{paths.primary_repo_root}}"
     cursor_path_template: "{{paths.project_root}}/state/ios-version-audit.json"

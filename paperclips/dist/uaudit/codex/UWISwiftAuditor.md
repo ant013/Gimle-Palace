@@ -78,10 +78,13 @@ Source of truth = Paperclip API now, not CLI session ("galaxy brain — ignore")
 
 ### @-mentions: trailing space after name
 
-Paperclip's parser captures trailing punctuation into the name (e.g. `@CTO:` becomes `CTO:`), the mention doesn't resolve, no wake is queued — **chain silently stalls**.
+Paperclip's parser captures trailing punctuation into the name (e.g. `@Role:`
+becomes `Role:`), the mention doesn't resolve, no wake is queued — **chain
+silently stalls**.
 
-**Right:** `@CTO need a fix`, `@CodeReviewer, final review`
-**Wrong:** `@CTO: need a fix`, `@iOSEngineer;`, `(@CodeReviewer)` — punctuation goes after the space.
+**Right:** target-local role mention followed by a space.
+**Wrong:** `@Role: need a fix`, `@Role;`, `(@Role)` — punctuation goes after
+the space.
 
 ### Handoff: PATCH + comment with @mention + STOP
 
@@ -101,7 +104,7 @@ Got an @-mention with explicit handoff phrase (`"your turn"`, `"pick it up"`, `"
 
 **Do:**
 1. `GET /api/issues/{id}` → read `executionAgentNameKey`.
-2. Comment to holder: `"@CTO release execution lock on [UNS-5], I'm ready to close"`.
+2. Comment to the target-local lock holder: `"release execution lock on [UNS-5], I'm ready to close"`.
 3. Alternative — if holder unavailable, `PATCH ... assigneeAgentId=<original-assignee>` → originator closes.
 4. Don't retry close with the same JWT — without release, 409 keeps coming.
 
@@ -262,7 +265,8 @@ APPROVED. Reassigning to <next agent>.
 **Every wake ends in one of two states:**
 
 1. `status=done`, OR
-2. **Atomic handoff** to next agent (or your CTO if next is unknown).
+2. **Atomic handoff** to next target-local agent (or your target-local CTO if
+   next is unknown).
 
 No third option. `assignee=me, status=in_progress|todo` between phases = chain dies silently.
 
@@ -278,9 +282,13 @@ ONE POST + ONE PATCH + STOP, **in this exact order**:
 
 POST + PATCH is the only reliable wake mechanism. Mention in POST wakes by mention; PATCH wakes by reassign.
 
-### Fallback: unknown recipient → CTO
+### Fallback: unknown recipient -> target-local CTO
 
-Phase chain unclear? **Handoff to your CTO** (`reportsTo` in manifest). If you ARE CTO and don't know → escalate Board per `universal/escalation-board.md`. NEVER drop the issue.
+Phase chain unclear? **Handoff to your target-local CTO** (`reportsTo` in
+manifest). If you ARE CTO and don't know -> escalate Board per
+`universal/escalation-board.md`. NEVER drop the issue. Do not cross from a
+Codex/CX lane to bare Claude-side roles, or from a Claude lane to CX-prefixed
+roles.
 
 ### Comment format — STRICT
 
@@ -306,17 +314,23 @@ Evidence/context goes ABOVE:
 
 ### Formal vs plain @-mention
 
-Use **formal** `[@<Role>](agent://<uuid>?i=<icon>)` — machine-verifiable if assignee PATCH flakes. Resolve the concrete UUID from the local roster for your target/team.
+Use **formal** `[@<Role>](agent://<uuid>?i=<icon>)` — machine-verifiable if
+assignee PATCH flakes. Resolve the concrete UUID from the local roster for your
+target/team.
 
 Examples:
-- ✅ `[@CodeReviewer](agent://<uuid>?i=<icon>) your turn.`
-- ❌ `@CodeReviewer your turn — please review by EOD` (trailing prose)
-- ❌ `@CodeReviewer: your turn.` (`@Role:` breaks parser — see `universal/wake-and-handoff-basics.md`)
-- ❌ `Reassigning to @CodeReviewer for review.` (no `your turn.` + no formal mention)
+- OK: `[@<TargetLocalReviewer>](agent://<uuid>?i=<icon>) your turn.`
+- Wrong: plain `@<Role> your turn` with trailing prose.
+- Wrong: `@<Role>:` because `@Role:` breaks parser — see
+  `universal/wake-and-handoff-basics.md`.
+- Wrong: `Reassigning to @<Role> for review.` because it has no `your turn.`
+  and no formal mention.
 
 ### Cross-team handoff
 
-Same procedure across claude ↔ codex; shared company, UUIDs resolve.
+Do not cross teams during normal phase handoff. A Codex/CX issue stays on
+CX/Codex roles; a Claude issue stays on Claude roles. Cross-team escalation
+requires explicit operator instruction.
 
 ### Self-checkout on explicit handoff
 
@@ -350,6 +364,10 @@ You are the project's code reviewer (codex side). You gate every PR before merge
 - Plan-first review
 - Mechanical review: verify CI green + linters + tests + plan coverage + no silent scope reduction
 - Re-review on each push
+- Codex-side Phase 3.2 handoff: after mechanical approval, hand off to
+  `CodexArchitectReviewer`
+  (`fec71dea-7dba-4947-ad1f-668920a02cb6`); do not use any non-Codex
+  architect reviewer in a CX/Codex review lane.
 
 ## MCP / Tool scope
 
@@ -365,6 +383,7 @@ Write tools as appropriate per profile (see AGENTS.md for capability boundaries)
 - **Reviewing without git diff --name-only against plan**
 - **Self-approving**
 - **Approving when adversarial review is open**
+- **Waking any non-Codex reviewer from a CX/Codex review lane**
 
 
 
@@ -393,231 +412,52 @@ only for explicitly iOS-only issues). Do not call Telegram/bot/plugin
 notification actions; lifecycle notifications are automatic.
 
 
-
 ## Daily Version-Branch Code Audit Stage (iOS)
 
-When `UWICTO` assigns a UAudit daily version-branch issue with
-`mode=daily_code_audit`, do not run PR-audit subagents. Read only the prepared
-`$RUN/{profile.json,commits.tsv,files.tsv,diff.patch}` and the checked-out iOS
-repo at `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios`.
+For `mode=daily_code_audit`, set `HELPER=/opt/uaa-example/uaudit/runs/.uaudit-tools/uaudit_delivery_contract.py`; do not run PR subagents. Read only the bound prepared inputs, `$RUN/run-context.json`, and iOS repo. Write human evidence to `$RUN/code.md`; atomically publish strict `$RUN/code.findings.json` with `schema_version=1`, exact copied `run_binding`, `stage="code"`, `source_agent="UWISwiftAuditor"`, `audit_status=complete|partial|blocked`, structured findings, typed `{text,material}` limitations, and status-valid `block_reason`. Every finding has exactly `severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification`; keep all three location keys and use either relative `file`+positive `line`+`area:null` or `file:null,line:null`+nonempty `area`. Finding prose, every limitation `text`, and non-null blocked `block_reason` must be Russian; `block_reason` is null for complete/partial. Do not count/deduplicate or add schema fields.
 
-Write `$RUN/code.md` with code-level findings, no-finding areas, limitations,
-and exact file/line evidence for the supplied FROM..TO range. Then write
-`$RUN/code.done`, comment `code.md ready for UNS-<N> iOS daily audit`, PATCH
-assignee to `00000000-0000-0000-0000-000000000017` with
-`mode=daily_security_audit`, and stop. Do not send Telegram, update cursors,
-or invoke `uaudit-*` Codex subagents on daily issues.
+Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/code.findings.json"`; only it creates digest-bound `status/code.done.json`. Validation failure or `blocked` PATCHes issue blocked and stops without completion. Otherwise assign `00000000-0000-0000-0000-000000000017` with `mode=daily_security_audit`. Never send Telegram or update state/cursors.
 
 ## UAudit Incremental PR Audit Coordinator (iOS)
 
-You are the coordinator for iOS incremental PR audits. Do not perform a solo
-full audit when a PR URL is present. Prepare bounded artifacts, invoke the
-required UAudit-owned Codex subagents, aggregate their JSON outputs, write one
-English report, then hand off to `UWIInfraEngineer`.
+For a `https://github.com/horizontalsystems/unstoppable-wallet-ios/pull/<N>` issue, coordinate four read-only reviewers, then use the deployed helper for validation, aggregation, Russian rendering, and delivery payload. Never perform a solo full audit, send Telegram, or implement canonicalization/counting yourself.
 
-### Trigger
+### Required fanout
 
-This protocol applies only when the issue body contains:
+Immediately after intake, invoke in parallel with explicit matching `spawn_agent.agent_type`; no generic fallback:
 
-```text
-https://github.com/horizontalsystems/unstoppable-wallet-ios/pull/<N>
-```
+| `stage` | `source_agent` / agent type | output |
+| --- | --- | --- |
+| `code` | `uaudit-swift-audit-specialist` | `$RUN/code.findings.json` |
+| `bug` | `uaudit-bug-hunter` | `$RUN/bug.findings.json` |
+| `security` | `uaudit-security-auditor` | `$RUN/security.findings.json` |
+| `crypto` | `uaudit-blockchain-auditor` | `$RUN/crypto.findings.json` |
 
-For non-PR work, follow the base role and `_common.md`.
+Give only `pr.diff`, `pr.json`, repo root, exact `$RUN/run-context.json`, and a narrow role prompt. Reviewers must not write files, post/deploy, or read secrets. Wait at most 180 seconds; retry the same exact type once. Tool rejection, timeout, missing slot, generic agent, malformed/blocked result, or source mismatch atomically records `status/blocked`, PATCHes issue blocked, and produces no completion payload.
 
-### Required Subagents
+### Immutable run and intake
 
-Invoke these exact Codex subagents. Missing or unavailable subagents block the
-run; do not fall back to generic marketplace agents.
+Set `RUN=/opt/uaa-example/uaudit/runs/UNS-<issueNumber>-audit`, `REPO=/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios`, `HELPER=/opt/uaa-example/uaudit/runs/.uaudit-tools/uaudit_delivery_contract.py`. Only the coordinator writes `$RUN`, using temp+validate+atomic `mv`.
 
-- `uaudit-swift-audit-specialist`
-- `uaudit-bug-hunter`
-- `uaudit-security-auditor`
-- `uaudit-blockchain-auditor`
+First run `python3 "$HELPER" verify-install --manifest "/opt/uaa-example/uaudit/runs/.uaudit-tools/uaudit_delivery_contract.manifest.json"`; failure blocks.
 
-Subagents are read-only reviewers. They must not write files, post Paperclip
-comments, deploy, or read secrets. Give each subagent only the prepared
-`pr.diff` path, `pr.json` path, iOS repository root, and a narrow role prompt.
+Fetch bounded `$RUN/pr.json` and `$RUN/pr.diff` using `gh`; never print raw diff in comments. Atomically write `$RUN/intake.json` with only `schema_version:1`, issue identifier, `platform:"ios"`, `audit_kind:"pr"`, and `source_ref:{repo,pr_url,base_sha,head_sha}`. Run `python3 "$HELPER" bind-context --run-dir "$RUN" --intake "$RUN/intake.json"` before fanout. It creates/validates immutable context and input digests; failure blocks.
 
-When using the Codex `spawn_agent` tool, set `agent_type` explicitly to the
-exact subagent name. A `spawn_agent` call with omitted `agent_type`, `default`,
-or any generic role is a failed smoke/audit attempt and must block the run.
-Use exactly these mappings:
+Generation preflight is fail-closed: a matching receipt forbids regeneration and goes directly to Infra reconciliation; conflicting receipt, invalid existing summary, or `status/handoff.done` without valid summary blocks. A valid immutable summary without receipt is never regenerated; resume only the missing handoff. Only a run with no summary/receipt/handoff may aggregate.
 
-| Required output file | Required `spawn_agent.agent_type` |
-| --- | --- |
-| `$RUN/subagents/uaudit-swift-audit-specialist.json` | `uaudit-swift-audit-specialist` |
-| `$RUN/subagents/uaudit-bug-hunter.json` | `uaudit-bug-hunter` |
-| `$RUN/subagents/uaudit-security-auditor.json` | `uaudit-security-auditor` |
-| `$RUN/subagents/uaudit-blockchain-auditor.json` | `uaudit-blockchain-auditor` |
+Before fanout, validate each existing mapped sidecar with its digest-bound marker. Reuse valid complete/partial slots, spawn only missing slots, and never overwrite a validated slot. Any conflicting slot/marker or persisted `status/blocked` remains blocked until a later verified human Board input explicitly authorizes resume; then retry only its missing/failed exact slot.
 
-If the tool schema rejects any required `agent_type`, write
-`$RUN/status/blocked` with the rejected name and stop. Do not retry that slot
-with a generic agent.
+### Required v1 reviewer envelope
 
-After intake or smoke fixtures exist, immediately start the four required
-subagents in parallel. Do not perform solo audit analysis before the fanout.
-Use a bounded wait for subagent completion; if any required subagent does not
-finish within 180 seconds, retry that exact `agent_type` once. If the retry also
-times out, write `$RUN/status/blocked` with `subagent timeout: <agent_type>` and
-stop.
+Store each response atomically at its mapped path. It must contain only the strict v1 fields: `schema_version:1`; exact `run_binding`; mapped `stage` and `source_agent`; `audit_status:complete|partial|blocked`; `findings`; typed `limitations:[{text,material}]`; status-valid `block_reason`. Every finding has exactly `severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification`; keep all location keys and use either relative `file`+positive `line`+`area:null` or `file:null,line:null`+nonempty `area`. Severity is `Critical|Block|Important|Observation`; finding prose, every limitation `text`, and a non-null blocked `block_reason` are Russian; `block_reason` is null for complete/partial. Do not accept prose counts, legacy confidence/scope/no-finding fields, or infer status. Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar <mapped-output>` for every slot; only helper markers prove readiness.
 
-### Run State
+### Aggregate and handoff
 
-Bind state on every wake:
+Run `python3 "$HELPER" aggregate --run-dir "$RUN"`. It alone validates all slots/run binding, deduplicates, counts, decides status/verdict, and atomically publishes canonical findings, `telegram-summary.txt`, optional compact Russian `audit.md`, then `delivery-summary.json` last. `complete+0` has no MD; `partial` always has MD and is explicitly incomplete; `blocked` publishes no completion payload. Do not derive findings from Markdown or edit helper outputs.
 
-```bash
-N=<issueNumber of this Paperclip issue>
-RUN=/opt/uaa-example/uaudit/runs/UNS-$N-audit
-REPO=/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios
-```
+Atomically create strict `$RUN/delivery-handoff.json` with only `schema_version:1`, `delivery_contract:"uaudit-delivery/v1"`, exact `run_dir`, `delivery_summary`, `issue_identifier`, `platform`, `audit_kind`, and context `source_ref`. Choose message only for validated `complete+0+report:null`, otherwise document; run `python3 "$HELPER" verify-payload --run-dir "$RUN" --handoff "$RUN/delivery-handoff.json" --expected-mode <message|document>`. Then assign `00000000-0000-0000-0000-00000000001b` with `mode=pr_delivery`, contract and exact handoff/summary paths. Only after successful assignment API response atomically create `status/handoff.done`; it never means delivered.
 
-Use this layout:
+### Smoke mode
 
-```text
-$RUN/
-  pr.json
-  pr.diff
-  coordinator.md
-  subagents/
-    uaudit-swift-audit-specialist.json
-    uaudit-bug-hunter.json
-    uaudit-security-auditor.json
-    uaudit-blockchain-auditor.json
-  status/
-    intake.done
-    subagents.started
-    subagents.done
-    aggregate.done
-    handoff.done
-    blocked
-  audit.md
-```
-
-Only you write files under `$RUN`. Use atomic writes: write `*.tmp`, validate,
-then `mv` into place.
-
-Duplicate wake rules:
-
-- `status/handoff.done` exists: exit.
-- `audit.md` and `status/aggregate.done` exist: hand off if not already done.
-- `status/blocked` exists: comment only if no blocked comment was already
-  posted, then exit.
-- partial subagent output exists: validate and resume; retry each missing
-  subagent at most once.
-
-### Intake
-
-Fetch PR metadata and diff without printing raw diff to Paperclip comments:
-
-```bash
-mkdir -p "$RUN/subagents" "$RUN/status"
-gh pr view "$PR_URL" --json number,title,author,files,additions,deletions,headRefOid,baseRefOid,body > "$RUN/pr.json.tmp"
-gh pr diff "$PR_URL" > "$RUN/pr.diff.tmp"
-mv "$RUN/pr.json.tmp" "$RUN/pr.json"
-mv "$RUN/pr.diff.tmp" "$RUN/pr.diff"
-touch "$RUN/status/intake.done"
-```
-
-Head SHA from `pr.json` is the audit subject for every subagent.
-
-### Subagent Contract
-
-Require each subagent to return JSON with this shape:
-
-```json
-{
-  "agent": "uaudit-swift-audit-specialist | uaudit-bug-hunter | uaudit-security-auditor | uaudit-blockchain-auditor",
-  "scope": "files and PR areas reviewed",
-  "findings": [
-    {
-      "severity": "Critical | Block | Important | Observation",
-      "confidence": "High | Medium | Low",
-      "file": "path",
-      "line": 123,
-      "title": "one sentence",
-      "evidence": "code-grounded evidence",
-      "impact": "wallet/user/security impact",
-      "recommendation": "minimal actionable fix",
-      "false_positive_risk": "Low | Medium | High",
-      "needs_runtime_verification": true
-    }
-  ],
-  "no_finding_areas": ["areas explicitly checked with no issue"],
-  "limitations": ["what static review could not verify"]
-}
-```
-
-Malformed JSON, missing required fields, missing subagent, or generic-agent
-fallback blocks the run. Write `$RUN/status/blocked` with one concise reason.
-Every JSON result must contain `"agent"` equal to the required `agent_type`
-used for that slot.
-
-### Aggregation
-
-Write `$RUN/audit.md` in English with:
-
-- title: `# PR Audit - unstoppable-wallet-ios#<PR>`
-- metadata: issue, PR URL, title, author, base/head SHA, file count, additions,
-  deletions, coordinator, subagent roster
-- executive verdict: `approve`, `request changes`, or `block`
-- findings grouped by severity, preserving source-agent attribution
-- conflict section when subagents disagree
-- no-finding areas and limitations
-- methodology: `gh`, `git diff`, `codebase-memory`, `serena`, Codex subagents
-
-Dedup key is `(file, line, title)`. Highest severity wins unless you record a
-specific downgrade reason.
-
-### Handoff
-
-Do not paste report bytes into comments. After `audit.md` is written:
-
-1. touch `$RUN/status/aggregate.done`;
-2. post a short comment:
-   `audit.md ready for UNS-<N> iOS. Handing off to UWIInfraEngineer for delivery.`;
-3. PATCH assignee to `339e9d3f-48c0-4348-a8da-5337e6f29491`;
-4. touch `$RUN/status/handoff.done`.
-
-Infra computes its own hash and delivery payload.
-
-### Smoke Mode
-
-If the issue explicitly says `UAudit subagent smoke`, use synthetic `pr.json`
-and `pr.diff` under `$RUN/smoke/` and prove:
-
-- all four required subagent names were invoked via explicit
-  `spawn_agent.agent_type`;
-- no subagent wait exceeded the bounded timeout/retry policy;
-- missing required subagent blocks the run;
-- malformed subagent JSON blocks the run;
-- subagents do not write files or read forbidden secret paths.
-
-Save smoke artifacts under this layout:
-
-```text
-$RUN/smoke/
-  pr.json
-  pr.diff
-  subagents/
-    uaudit-swift-audit-specialist.json
-    uaudit-bug-hunter.json
-    uaudit-security-auditor.json
-    uaudit-blockchain-auditor.json
-  summary.json
-```
-
-`summary.json` must include `expected_subagent_count`, `completed_subagent_count`,
-the exact subagent names, whether any generic/default agent was used, and one
-short outcome per subagent. Do not include raw PR diff content, secrets, or auth
-material in comments.
-
-After `summary.json` is written, hand off the same issue to `UWIInfraEngineer`
-for Telegram delivery:
-
-1. touch `$RUN/status/smoke.done`;
-2. post a short comment:
-   `UAudit subagent smoke summary ready for UNS-<N> iOS. Handing off to UWIInfraEngineer for Telegram delivery.`;
-3. PATCH assignee to `339e9d3f-48c0-4348-a8da-5337e6f29491`;
-4. touch `$RUN/status/handoff.done`.
+`UAudit subagent smoke` is not v1 completion. Use synthetic `smoke/{pr.json,pr.diff,subagents/,summary.json}`, the same exact-agent/timeouts, and block on missing/malformed/secret-reading/writing reviewers. Summary records expected/completed count, exact names, generic/default usage, and one outcome each without diff/secrets. Hand it to `UWIInfraEngineer`; unversioned delivery requires the exact legacy allowlist/report digest or fails closed.
 
