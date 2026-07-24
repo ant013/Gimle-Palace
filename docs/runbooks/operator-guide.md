@@ -329,8 +329,10 @@ For details on all 15 preflight checks, see
 
 ## 6. Running Semantic Analysis (`project analyze`)
 
-The `project analyze` CLI runs the full analysis pipeline for one project:
-resolve paths → prepare SCIP → start runtime → run MCP tools → emit report.
+This guide owns the legacy iMac Docker runtime on port `8080`. The CLI now
+defaults to the native macOS runtime on port `8765` and does not manage Docker
+unless explicitly requested. Therefore every Docker-starting command in this
+section must pass both `--manage-runtime` and the Docker MCP URL.
 
 ### 6.1 Verify CLI entrypoint
 
@@ -357,9 +359,16 @@ uv run python -m palace_mcp.cli project analyze \
   --repo-path /Users/Shared/Ios/HorizontalSystems/unstoppable-wallet-ios \
   --slug uw-ios-app \
   --language-profile swift \
+  --manage-runtime \
+  --url http://localhost:8080/mcp \
   --report-out .gimle/runtime/project-analyze/uw-ios-app-analysis-report.md \
   --summary-out .gimle/runtime/project-analyze/uw-ios-app-analysis-summary.json
 ```
+
+`--manage-runtime` allows the CLI to write the compose override and
+start/recreate the legacy runtime. `--url` is required because Docker publishes
+host port `8080`, while the CLI default is the already-running native service
+on `8765`.
 
 Expected output files:
 - `.gimle/runtime/project-analyze/<slug>-analysis-report.md`

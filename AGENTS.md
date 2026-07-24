@@ -33,6 +33,22 @@ Before any git history or branch operation in a new run:
 git fetch origin --prune
 ```
 
+## Worktree Lifecycle
+
+- Primary, production, the active `PALACE_SERVICE_ROOT` native-runtime source,
+  and stable Paperclip team workspaces are persistent. Never remove them as
+  task cleanup.
+- An ad hoc worktree created by the current session stays while the task is
+  active or awaiting review. At terminal success, fetch its remote, remove only
+  session-owned generated files, require a clean status and `HEAD` equal to its
+  upstream, then remove that exact path from outside the worktree with
+  `git worktree remove` (no `--force`).
+- If the path is dirty, unpushed, locked, persistent, or of uncertain
+  ownership, preserve it and report the exact path and reason. Never fall back
+  to `rm -rf` or broad `git worktree prune` for task cleanup.
+- The full command sequence and persistent-path examples live in
+  [`docs/contributing/branch-flow.md`](docs/contributing/branch-flow.md).
+
 ## Paperclip Workflow
 
 Product slices larger than about 200 LOC or crossing multiple areas should go
