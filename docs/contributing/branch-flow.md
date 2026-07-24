@@ -74,14 +74,36 @@ At terminal success:
    git -C <owning-repo> worktree remove <exact-created-path>
    ```
 
-4. Report either successful removal or the preserved path and reason in the
+4. If and only if that command refuses the otherwise eligible worktree because
+   it contains initialized submodules, verify their state before removing their
+   working copies:
+
+   ```bash
+   test -z "$(git -C <exact-created-path> submodule status --recursive |
+     sed -n '/^[+U]/p')"
+   git -C <exact-created-path> submodule foreach --recursive \
+     'test -z "$(git status --short)"'
+   git -C <exact-created-path> submodule deinit --all
+   test -z "$(git -C <exact-created-path> status --short)"
+   test "$(git -C <exact-created-path> rev-parse HEAD)" = \
+     "$(git -C <exact-created-path> rev-parse '@{upstream}')"
+   git -C <owning-repo> worktree remove --force <exact-created-path>
+   ```
+
+   A leading `+` or `U` from `submodule status`, a dirty nested repository, or
+   any changed superproject state blocks this exception. One `--force` is
+   allowed only because Git does not support ordinary removal of a worktree
+   that has per-worktree submodule metadata; it is not permission to bypass any
+   ownership, clean-tree, pushed-SHA, lock, or persistence check.
+5. Report either successful removal or the preserved path and reason in the
    terminal handoff.
 
 A missing upstream, unequal SHA, dirty status, lock, uncertain ownership, or
-persistent path blocks cleanup. Preserve the directory. Do not use `--force`,
-do not fall back to `rm -rf`, and do not run broad `git worktree prune` as a
-task-cleanup shortcut. A successful `git worktree remove` already removes the
-target's administrative metadata.
+persistent path blocks cleanup. Preserve the directory. Outside the narrow
+verified-clean submodule case above, do not use `--force`. Never fall back to
+`rm -rf`, and do not run broad `git worktree prune` as a task-cleanup shortcut.
+A successful `git worktree remove` already removes the target's administrative
+metadata.
 
 ## Required status checks on develop
 

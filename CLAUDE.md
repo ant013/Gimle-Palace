@@ -33,8 +33,10 @@ docs during UAA Phase H1 CLAUDE.md decompose (2026-05-17).
 Creator-owned ad hoc task worktrees are temporary; primary, production, the
 active `PALACE_SERVICE_ROOT` native-runtime source, and Paperclip team
 workspaces are persistent. At terminal success, remove only the exact clean
-worktree whose `HEAD` equals its upstream, using non-forced
-`git worktree remove` from outside that worktree. Preserve and report dirty,
+worktree whose `HEAD` equals its upstream, using `git worktree remove` from
+outside that worktree. Start without force; the only force exception is Git's
+clean-initialized-submodule refusal, after verified-clean submodules are
+deinitialized and the superproject is rechecked. Preserve and report dirty,
 unpushed, locked, persistent, or unknown-owner paths. Never use `rm -rf` or
 broad `git worktree prune` as task cleanup. See
 [Branch Flow](docs/contributing/branch-flow.md#worktree-lifecycle).

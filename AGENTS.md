@@ -42,7 +42,13 @@ git fetch origin --prune
   active or awaiting review. At terminal success, fetch its remote, remove only
   session-owned generated files, require a clean status and `HEAD` equal to its
   upstream, then remove that exact path from outside the worktree with
-  `git worktree remove` (no `--force`).
+  `git worktree remove`.
+- Use non-forced removal first. Git refuses even clean worktrees that contain
+  initialized submodules; only for that exact error, first verify every
+  submodule is clean and at the recorded commit, deinitialize them, recheck the
+  superproject, and retry the exact-path removal with one `--force`. Never use
+  this exception for a dirty, unpushed, locked, persistent, or unknown-owner
+  path.
 - If the path is dirty, unpushed, locked, persistent, or of uncertain
   ownership, preserve it and report the exact path and reason. Never fall back
   to `rm -rf` or broad `git worktree prune` for task cleanup.
