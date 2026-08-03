@@ -872,11 +872,20 @@ def _render_telegram(binding: Mapping[str, Any], status: str, counts: Mapping[st
 
 
 def _diff_counts(path: Path) -> tuple[int, int, int]:
-    raw = _read_bytes(path)
-    text = raw.decode("utf-8", errors="replace")
-    files = sum(1 for line in text.splitlines() if line.startswith("diff --git "))
-    additions = sum(1 for line in text.splitlines() if line.startswith("+") and not line.startswith("+++"))
-    deletions = sum(1 for line in text.splitlines() if line.startswith("-") and not line.startswith("---"))
+    if path.is_symlink() or not path.is_file():
+        _fail(f"invalid diff file: {path}")
+    files = additions = deletions = 0
+    try:
+        with path.open("rb") as stream:
+            for line in stream:
+                if line.startswith(b"diff --git "):
+                    files += 1
+                elif line.startswith(b"+") and not line.startswith(b"+++"):
+                    additions += 1
+                elif line.startswith(b"-") and not line.startswith(b"---"):
+                    deletions += 1
+    except OSError as exc:
+        raise ContractError(f"cannot read diff file: {path}") from exc
     return files, additions, deletions
 
 

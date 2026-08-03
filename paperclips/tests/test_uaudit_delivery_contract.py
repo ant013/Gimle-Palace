@@ -141,6 +141,7 @@ def prepare_run(
     platform: str = "ios",
     statuses: dict[str, str] | None = None,
     findings: dict[str, list[dict]] | None = None,
+    diff_patch: bytes | None = None,
     validate: bool = True,
 ) -> dict:
     helper = install_helper(root)
@@ -171,7 +172,9 @@ def prepare_run(
         write_json(run / "profile.json", {"branch": ref["branch"]})
         (run / "commits.tsv").write_text(f"{HEAD_SHA}\tИзменение\n")
         (run / "files.tsv").write_text("Sources/Wallet/Auth.swift\n")
-        (run / "diff.patch").write_text("diff --git a/A b/A\n--- a/A\n+++ b/A\n@@\n-old\n+new\n")
+        (run / "diff.patch").write_bytes(
+            diff_patch or b"diff --git a/A b/A\n--- a/A\n+++ b/A\n@@\n-old\n+new\n"
+        )
         lock = root / "state" / "locks" / f"{ref['routine_id']}.lock"
         lock.mkdir(parents=True)
         write_json(
@@ -394,6 +397,23 @@ def test_complete_zero_removes_stale_reports_and_uses_message_receipt(tmp_path: 
     stored = read_json(fixture["run"] / "delivery-result.json")
     assert stored["report_sha256"] is None
     assert stored["route_source"] == "file_route"
+
+
+def test_daily_aggregate_streams_diff_larger_than_generic_file_limit(tmp_path: Path):
+    diff = b"diff --git a/A b/A\n--- a/A\n+++ b/A\n" + (b"+new\n" * (17 * 1024 * 1024 // 5))
+    fixture = prepare_run(
+        tmp_path,
+        kind="daily_delta",
+        platform="android",
+        statuses={"qa_verify": "partial"},
+        diff_patch=diff,
+    )
+
+    result = aggregate(fixture)
+
+    assert result["mode"] == "document"
+    report = (fixture["run"] / "audit-final.md").read_text()
+    assert "добавлений — 3565158" in report
 
 
 def test_partial_zero_requires_document_and_allowlisted_human_approval(tmp_path: Path):
