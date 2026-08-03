@@ -258,32 +258,32 @@
         {
           "agentId": "",
           "agentName": "UWIInfraEngineer",
-          "bytes": 26015,
+          "bytes": 25941,
           "family": "implementer",
-          "lines": 466,
+          "lines": 462,
           "output": "paperclips/dist/uaudit/codex/UWIInfraEngineer.md",
           "platform": "ios",
           "profiles": [
             "implementer"
           ],
           "roleId": "codex:cx-infra-engineer",
-          "sha256": "e5a2336d82bed49fa6bb96f42e410d6901a6931e411187ed659ea5ecbf5a88b5",
+          "sha256": "d6e6a7bed146cb911934469b62d48d6c5e5aacad0aa61fbe1bfabfcb4a3a9825",
           "source": "paperclips/roles-codex/cx-infra-engineer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "",
           "agentName": "UWAInfraEngineer",
-          "bytes": 26056,
+          "bytes": 25982,
           "family": "implementer",
-          "lines": 466,
+          "lines": 462,
           "output": "paperclips/dist/uaudit/codex/UWAInfraEngineer.md",
           "platform": "android",
           "profiles": [
             "implementer"
           ],
           "roleId": "codex:cx-infra-engineer",
-          "sha256": "5485d8c89a6014db290ac3f9dcdba48157e88b9119c3c61f4ad96281cb4f2549",
+          "sha256": "efc847b6f62c0b6bfb18c64a6d1efdfc57b5e8358ea5b56442ed846cece5a1a3",
           "source": "paperclips/roles-codex/cx-infra-engineer.md",
           "workspaceCwd": ""
         },

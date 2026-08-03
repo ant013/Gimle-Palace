@@ -434,11 +434,7 @@ For explicitly authorized `mode=initialize_cursor`, require the exact supplied u
 
 ## V1 PR and daily delivery
 
-For a receipt-validated `audit_kind=forced_full`, preserve the normal payload
-and Telegram receipt checks but never call `reconcile-daily`, touch a daily
-cursor, or alter a recurring routine. After a matching receipt and Board
-comment, write only the terminal workflow marker and release the distinct
-forced-full lock.
+For receipt-validated `audit_kind=forced_full`, keep normal payload/Telegram receipt checks but never call `reconcile-daily`, touch daily cursor/routine; after matching receipt + Board comment, write workflow marker and release its forced lock.
 
 First run `python3 "$HELPER" verify-install --manifest "/opt/uaa-example/uaudit/runs/.uaudit-tools/uaudit_delivery_contract.manifest.json"`; failure blocks.
 
