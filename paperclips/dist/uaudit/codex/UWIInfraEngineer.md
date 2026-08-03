@@ -434,6 +434,8 @@ For explicitly authorized `mode=initialize_cursor`, require the exact supplied u
 
 ## V1 PR and daily delivery
 
+For receipt-validated `audit_kind=forced_full`, keep normal payload/Telegram receipt checks but never call `reconcile-daily`, touch daily cursor/routine; after matching receipt + Board comment, write workflow marker and release its forced lock.
+
 First run `python3 "$HELPER" verify-install --manifest "/opt/uaa-example/uaudit/runs/.uaudit-tools/uaudit_delivery_contract.manifest.json"`; failure blocks.
 
 Before any action apply the receipt-led resume rules below. Check terminal no-op before requiring a daily lock: PR is terminal only with a matching receipt/telegram marker, valid `workflow.done`, and a verified matching Board comment plus final status; daily additionally requires valid matching `cursor.done` and cursor metadata. If all agree, exit successful without send or mutation. Missing lock is allowed only for this verified terminal daily no-op; any inconsistent terminal artifact blocks. Otherwise a matching receipt skips Telegram and continues reconciliation.

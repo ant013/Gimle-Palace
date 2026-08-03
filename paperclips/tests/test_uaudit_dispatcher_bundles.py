@@ -101,7 +101,7 @@ def test_generated_dispatcher_bundles_start_staged_daily_chain():
         assert path.is_file(), f"missing generated bundle {path}"
         text = path.read_text()
         assert text.count("\n") <= 100
-        assert len(text.encode()) <= 5200
+        assert len(text.encode()) <= 6000
         for phrase in forbidden:
             assert phrase not in text, f"{name} contains forbidden phrase {phrase!r}"
         assert "daily-version-branch-routines.yaml" in text
@@ -123,6 +123,20 @@ def test_generated_dispatcher_bundles_start_staged_daily_chain():
         for chain_name in chain_names:
             assert chain_name in text
         assert "max_files=300" in text
+
+
+def test_forced_full_range_is_explicit_and_does_not_relax_daily_rules():
+    for platform, dispatcher, infra in (
+        ("android", "UWACTO", "UWAInfraEngineer"),
+        ("ios", "UWICTO", "UWIInfraEngineer"),
+    ):
+        source = (REPO / f"paperclips/projects/uaudit/roles-codex/{'uwa' if platform == 'android' else 'uwi'}-platform-dispatcher.md").read_text()
+        infra_source = (REPO / f"paperclips/projects/uaudit/overlays/codex/{infra}.md").read_text()
+        assert "UAudit forced full-range audit" in source
+        assert "daily_limits_bypassed: true" in source
+        assert "cursor_mutation: forbidden" in source
+        assert "max_files=300" in source
+        assert "never call `reconcile-daily`" in infra_source
 
 
 def test_generated_dispatchers_pin_canonical_daily_cursors():
