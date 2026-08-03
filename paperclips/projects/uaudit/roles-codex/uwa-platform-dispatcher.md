@@ -26,6 +26,20 @@ Handle only `UAudit daily version-branch delta audit`, `platform: android`, from
 
 Chain: `UWAKotlinAuditor -> UWASecurityAuditor -> UWACryptoAuditor -> UWAInfraEngineer -> optional UWAResearchAgent -> UWAQAEngineer -> UWACTO -> UWAInfraEngineer`. Use Paperclip assignment only; do not use `uaudit-*` subagents for daily real-delta audits.
 
+## Explicit forced full-range intake
+
+Handle `UAudit forced full-range audit` only when `mode: forced_full_range`,
+`daily_limits_bypassed: true`, `cursor_mutation: forbidden`, and
+`schedule_mutation: forbidden` are all present. Require the declared Android
+checkout plus lowercase 40-hex `from_sha` and `to_sha`; verify both objects and
+that FROM is an ancestor of TO in that exact checkout. Do not use an undeclared
+remote, daily cursor, or daily limits. Create a distinct
+`forced-full-android-<issue>` lock and staged run context with
+`audit_kind=forced_full`, then start the normal code/security/crypto/infra/QA
+chain. Any malformed ref, mismatch, or existing forced lock blocks. The final
+delivery is receipt-led but must not run `reconcile-daily` or write a daily
+cursor.
+
 ## Daily aggregation
 
 On `mode=daily_aggregate`, require digest-bound v1 pairs for `code.findings.json`, `security.findings.json`, `crypto.findings.json`, `infra.findings.json`, `qa-verify.findings.json`; research only if invoked, else record why skipped. Human MD is never the count source.
