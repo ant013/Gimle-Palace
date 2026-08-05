@@ -34,6 +34,7 @@ def test_fullaudit_exactly_models_the_eight_role_team_and_writes_are_minimal():
     ]
     assert data["sandbox"] == {
         "mode": "constrained",
+        "bypass_approvals_and_sandbox": True,
         "agent_cwd_path_key": "agent_source_root",
         "runtime_env": {"PAPERCLIP_API_URL": "paperclip_runtime_api_url"},
     }
@@ -77,6 +78,8 @@ def test_bootstrap_retains_legacy_default_but_enforces_constrained_fullaudit_roo
     assert 'sandbox_mode=$(yq -r \'.sandbox.mode // "legacy"\' "$manifest")' in text
     assert "sandbox_bypass=true" in text
     assert 'if [ "$sandbox_mode" = "constrained" ]; then' in text
+    assert "sandbox_bypass=$(yq -r '.sandbox.bypass_approvals_and_sandbox // false' \"$manifest\")" in text
+    assert 'constrained sandbox bypass_approvals_and_sandbox must be true or false' in text
     assert 'kit_root="${project_root}/workspace/repos"' in text
     assert "may not target Git metadata or environment files" in text
     assert "dangerouslyBypassApprovalsAndSandbox: $bypass" in text
