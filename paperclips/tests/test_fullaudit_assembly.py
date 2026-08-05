@@ -118,6 +118,16 @@ def test_constrained_runtime_control_plane_url_is_loopback_only_and_host_local()
     assert "(.sandbox.runtime_env // {}) | keys[]?" in text
 
 
+def test_disposable_smoke_titles_bypass_only_audit_work_and_use_durable_cursor_normally():
+    text = (PROJECT / "overlays" / "codex" / "_common.md").read_text()
+    assert "начинается ровно с `smoke-probe-` или\n`smoke-e2e-`" in text
+    assert "Не запускай аудит, не читай\nисходный код, не создавай подзадачи и не меняй файлы." in text
+    assert "Ни другой заголовок, ни текст issue не дают этого\nисключения." in text
+    assert "python3 bin/next_kit.py" in text
+    assert "Не выбирай кит по этому prompt." in text
+    assert "`bitcoin-core-swift` уже завершён: не возобновляй и не переаудируй его." in text
+
+
 def test_rendered_assembly_contains_only_full_audit_roles_without_templates():
     resolved = json.loads(RESOLVED.read_text())
     assert resolved["parameters"]["project"]["issuePrefix"] == "FUL"
