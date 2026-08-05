@@ -35,7 +35,7 @@ def test_fullaudit_exactly_models_the_eight_role_team_and_writes_are_minimal():
     assert data["sandbox"] == {
         "mode": "constrained",
         "bypass_approvals_and_sandbox": True,
-        "agent_cwd_path_key": "agent_source_root",
+        "workspace_git_source_path_key": "agent_source_root",
         "runtime_env": {"PAPERCLIP_API_URL": "paperclip_runtime_api_url"},
     }
     assert data["mcp"]["runtime_smoke_required"] == ["codebase-memory", "context7"]
@@ -94,11 +94,13 @@ def test_bootstrap_builds_from_its_repository_not_the_callers_cwd():
     assert '"${REPO_ROOT}/paperclips/build.sh" --project "$project_key" --target "$target"' in build_section
 
 
-def test_constrained_trusted_cwd_is_git_checked_and_never_becomes_writable_root():
+def test_fullaudit_uses_per_agent_git_cwd_instead_of_a_shared_source_checkout():
     text = (REPO / "paperclips" / "scripts" / "bootstrap-project.sh").read_text()
-    assert "agent_cwd_path_key" in text
-    assert "agent cwd is not a Git worktree" in text
-    assert 'cwd="$trusted_cwd"' in text
+    assert "workspace_git_source_path_key" in text
+    assert 'runtime_cwd="${workspace_cwd}/repo"' in text
+    assert 'git clone --branch "$integration_branch" --single-branch "$workspace_source" "$runtime_cwd"' in text
+    assert 'cp "${REPO_ROOT}/${cp_src}" "${ws}/repo/AGENTS.md"' in text
+    assert "refusing non-empty unmanaged runtime workspace" in text
     assert 'writable_roots=$(jq -n --arg workspace "$workspace_cwd"' in text
     assert 'read_only_roots=$(jq -n --arg cwd "$cwd" --arg kit "$kit_root"' in text
 

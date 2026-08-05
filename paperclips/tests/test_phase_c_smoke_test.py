@@ -75,6 +75,16 @@ def test_runtime_mcp_markers_are_derived_from_the_project_manifest():
     assert "SMOKE_EXPECTED_MCP_LIST" in text
 
 
+def test_stage_3_checks_per_agent_runtime_cwd_when_manifest_requests_git_workspaces():
+    text = SCRIPT.read_text()
+    stage = text[text.index("stage_3_workspaces()") : text.index("stage_4_watchdog()")]
+    assert "workspace_git_source_path_key" in stage
+    assert 'runtime_cwd="${ws}/repo"' in stage
+    assert 'runtime Git workspace missing' in stage
+    assert 'paperclip_get_agent_config "$agent_id"' in stage
+    assert 'runtime cwd mismatch for $agent_name' in stage
+
+
 def test_git_capabilities_follow_profile_not_workflow_role():
     text = PROBES.read_text()
     assert 'local git_policy="$profile"' in text

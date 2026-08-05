@@ -95,9 +95,20 @@ stage_2_company_and_agents() {
 stage_3_workspaces() {
   log info "[3/7] workspaces exist + AGENTS.md deployed"
   team_root=$(yq -r '.team_workspace_root' "${HOME}/.paperclip/projects/${project_key}/paths.yaml")
+  workspace_git_source_path_key=$(yq -r '.sandbox.workspace_git_source_path_key // ""' "$manifest")
   for agent_name in $(yq -r '.agents | keys | .[]' "$bindings"); do
     ws="${team_root}/${agent_name}/workspace"
-    [ -f "${ws}/AGENTS.md" ] || die "workspace AGENTS.md missing: ${ws}/AGENTS.md"
+    if [ -n "$workspace_git_source_path_key" ] && [ "$workspace_git_source_path_key" != "null" ]; then
+      runtime_cwd="${ws}/repo"
+      [ -d "${runtime_cwd}/.git" ] || die "runtime Git workspace missing: ${runtime_cwd}"
+      [ -f "${runtime_cwd}/AGENTS.md" ] || die "runtime AGENTS.md missing: ${runtime_cwd}/AGENTS.md"
+      agent_id=$(yq -r ".agents[\"${agent_name}\"]" "$bindings")
+      configured_cwd=$(paperclip_get_agent_config "$agent_id" | jq -r '.adapterConfig.cwd // ""')
+      [ "$configured_cwd" = "$runtime_cwd" ] || \
+        die "runtime cwd mismatch for $agent_name: expected $runtime_cwd"
+    else
+      [ -f "${ws}/AGENTS.md" ] || die "workspace AGENTS.md missing: ${ws}/AGENTS.md"
+    fi
   done
   log ok "  workspaces verified"
 }
