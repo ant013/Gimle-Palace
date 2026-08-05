@@ -466,10 +466,10 @@ for agent_name in $hire_order; do
   validate_agent_name "$agent_name"
   # Bracket-syntax: kebab agent_names (e.g., `cx-cto`) — yq dot-path would treat `-` as subtraction.
   existing=$(yq -r ".agents[\"${agent_name}\"] // \"\"" "$bindings")
+  existing_agent_config=""
   if [ -n "$existing" ] && [ "$existing" != "null" ]; then
-    if paperclip_get_agent_config "$existing" >/dev/null 2>&1; then
-      log info "agent $agent_name already hired: $existing"
-      continue
+    if existing_agent_config=$(paperclip_get_agent_config "$existing" 2>/dev/null); then
+      log info "agent $agent_name already hired: $existing; reconciling managed config"
     else
       log warn "agent $agent_name UUID $existing not found in API — will re-hire"
     fi
@@ -586,6 +586,39 @@ for agent_name in $hire_order; do
       },
       budgetMonthlyCents: 0
     } + (if $reportsTo == "" then {} else {reportsTo: $reportsTo} end)')
+
+  if [ -n "$existing_agent_config" ]; then
+    # Compare only fields controlled by this bootstrap. Paperclip may add
+    # unrelated adapter defaults, which must not turn every run into a PATCH.
+    managed_config_filter='{
+      adapterType,
+      adapterConfig: (.adapterConfig | {
+        cwd, model, modelReasoningEffort,
+        instructionsFilePath, instructionsEntryFile, instructionsBundleMode,
+        maxTurnsPerRun, timeoutSec, graceSec,
+        dangerouslyBypassApprovalsAndSandbox,
+        writableRoots, sourceRootsReadOnly, env
+      }),
+      runtimeConfig: (.runtimeConfig | {
+        heartbeat: {enabled, intervalSec, wakeOnDemand, maxConcurrentRuns, cooldownSec}
+      })
+    }'
+    current_managed=$(echo "$existing_agent_config" | jq -cS "$managed_config_filter") || \
+      die "cannot read managed config for existing agent $agent_name"
+    desired_managed=$(echo "$payload" | jq -cS "$managed_config_filter") || \
+      die "cannot build managed config for existing agent $agent_name"
+    if [ "$current_managed" = "$desired_managed" ]; then
+      log info "agent $agent_name managed config already current"
+    else
+      paperclip_update_agent_config "$existing" "$desired_managed" >/dev/null || \
+        die "failed to reconcile managed config for existing agent $agent_name ($existing)"
+      journal_record "$journal" "$(jq -n \
+        --arg n "$agent_name" --arg id "$existing" \
+        '{kind:"agent_config_reconcile",name:$n,id:$id}')"
+      log ok "reconciled managed config for $agent_name"
+    fi
+    continue
+  fi
 
   log info "hiring $agent_name (profile=$profile_name target=$target)"
   resp=$(paperclip_hire_agent "$company_id" "$payload")

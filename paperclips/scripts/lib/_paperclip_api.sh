@@ -99,6 +99,14 @@ paperclip_get_agent_config() {
   paperclip_get "/api/agents/${agent_id}/configuration"
 }
 
+# Reconcile managed configuration for an already hired agent without changing
+# its identity or hierarchy. The API treats this as a partial update.
+paperclip_update_agent_config() {
+  local agent_id="$1"
+  local payload="$2"
+  paperclip_patch "/api/agents/${agent_id}" "$payload"
+}
+
 # Phase C followup CRIT-1 part 2: inverse of paperclip_hire_agent for rollback.
 paperclip_delete_agent() {
   local agent_id="$1"
