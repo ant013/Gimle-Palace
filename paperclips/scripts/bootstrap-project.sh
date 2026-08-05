@@ -616,7 +616,10 @@ log info "[9/13] building agent prompts"
 targets_used=$(yq -r '.agents[].target' "$manifest" | sort -u)
 for target in $targets_used; do
   log info "  building target=$target"
-  "${REPO_ROOT}/paperclips/build.sh" --project "$project_key" --target "$target" || \
+  (
+    cd "$REPO_ROOT"
+    "${REPO_ROOT}/paperclips/build.sh" --project "$project_key" --target "$target"
+  ) || \
     die "build failed for project=$project_key target=$target"
 done
 
