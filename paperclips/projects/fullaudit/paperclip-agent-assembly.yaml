@@ -1,0 +1,181 @@
+schemaVersion: 2
+
+project:
+  key: fullaudit
+  display_name: fullAudit
+  system_name: fullAudit
+  issue_prefix: FUL
+  integration_branch: main
+  specs_dir: docs/specs
+  plans_dir: docs/plans
+
+domain:
+  wallet_target_short: fullAudit
+  wallet_target_name: HorizontalSystems libraries
+  wallet_target_slug: full-audit
+
+evidence:
+  merge_without_smoke_issue: FUL-bootstrap
+  graphiti_mock_issue: FUL-bootstrap
+  release_reset_issue: FUL-bootstrap
+  asyncmock_driver_issue: FUL-bootstrap
+  worktree_discipline_issue_pair: FUL-bootstrap
+  qa_worktree_discipline_issue: FUL-bootstrap
+  mcp_wire_contract_issue: FUL-bootstrap
+  qa_deploy_checklist_issue: FUL-bootstrap
+  review_scope_drift_issue: FUL-bootstrap
+  qa_to_cto_stall_issue: FUL-bootstrap
+  handoff_flake_issue: FUL-bootstrap
+  pre_slim_baseline_issue: FUL-bootstrap
+  cr_to_pe_stall_issue: FUL-bootstrap
+  handoff_misclassified_issue: FUL-bootstrap
+  post_merge_stall_issue: FUL-bootstrap
+
+paths:
+  overlay_root: paperclips/projects/fullaudit/overlays
+  project_rules_file: AGENTS.md
+
+host_paths:
+  required_existing:
+    - project_root
+    - gimle_skills_root
+
+sandbox:
+  mode: constrained
+
+mcp:
+  service_name: fullaudit
+  package_name: fullaudit
+  tool_namespace: fullaudit
+  base_required:
+    - codebase-memory
+    - context7
+    - serena
+    - github
+    - sequential-thinking
+  codebase_memory_projects:
+    primary: full-audit
+  additions:
+    project: []
+    by_role: {}
+
+skills:
+  additions:
+    project:
+      - analog-driven-change
+      - gimle-evidence
+    by_role: {}
+
+subagents:
+  additions:
+    project:
+      - fullaudit-domain-auditor
+      - fullaudit-verifier
+    by_role: {}
+
+targets:
+  codex:
+    instruction_entry_file: AGENTS.md
+    adapter_type: codex_local
+    deploy_mode: api
+    instructions_bundle_mode: managed
+
+compatibility:
+  legacy_output_paths: false
+
+agents:
+  - agent_name: FullAuditCEO
+    role_source: paperclips/projects/fullaudit/roles-codex/ceo.md
+    profile: cto
+    target: codex
+    model: gpt-5.6-sol
+    modelReasoningEffort: xhigh
+    paperclip_role: ceo
+    paperclip_icon: crown
+    workflow_role: outer_walker
+    primary_codebase_memory_project: full-audit
+  - agent_name: FullAuditCTO
+    role_source: paperclips/projects/fullaudit/roles-codex/cto.md
+    profile: cto
+    target: codex
+    reportsTo: FullAuditCEO
+    model: gpt-5.6-sol
+    modelReasoningEffort: xhigh
+    paperclip_role: cto
+    paperclip_icon: shield
+    workflow_role: inner_orchestrator
+    primary_codebase_memory_project: full-audit
+    sandbox:
+      writable_paths:
+        - runs
+  - agent_name: FullAuditSwiftAuditor
+    role_source: paperclips/projects/fullaudit/roles-codex/auditor.md
+    profile: reviewer
+    target: codex
+    reportsTo: FullAuditCTO
+    model: gpt-5.6-sol
+    modelReasoningEffort: xhigh
+    paperclip_role: security
+    paperclip_icon: eye
+    workflow_role: reviewer
+    primary_codebase_memory_project: full-audit
+  - agent_name: FullAuditKotlinAuditor
+    role_source: paperclips/projects/fullaudit/roles-codex/auditor.md
+    profile: reviewer
+    target: codex
+    reportsTo: FullAuditCTO
+    model: gpt-5.6-sol
+    modelReasoningEffort: xhigh
+    paperclip_role: security
+    paperclip_icon: eye
+    workflow_role: reviewer
+    primary_codebase_memory_project: full-audit
+  - agent_name: FullAuditProtocolAuditor
+    role_source: paperclips/projects/fullaudit/roles-codex/auditor.md
+    profile: reviewer
+    target: codex
+    reportsTo: FullAuditCTO
+    model: gpt-5.6-sol
+    modelReasoningEffort: xhigh
+    paperclip_role: security
+    paperclip_icon: shield
+    workflow_role: reviewer
+    primary_codebase_memory_project: full-audit
+  - agent_name: FullAuditEvidenceReviewer
+    role_source: paperclips/projects/fullaudit/roles-codex/verifier.md
+    profile: reviewer
+    target: codex
+    reportsTo: FullAuditCTO
+    model: gpt-5.6-sol
+    modelReasoningEffort: xhigh
+    paperclip_role: security
+    paperclip_icon: search
+    workflow_role: reviewer
+    primary_codebase_memory_project: full-audit
+  - agent_name: FullAuditReportPublisher
+    role_source: paperclips/projects/fullaudit/roles-codex/publisher.md
+    profile: writer
+    target: codex
+    reportsTo: FullAuditCTO
+    model: gpt-5.6-sol
+    modelReasoningEffort: xhigh
+    paperclip_role: engineer
+    paperclip_icon: file-code
+    workflow_role: writer
+    primary_codebase_memory_project: full-audit
+    sandbox:
+      writable_paths:
+        - runs
+        - reports
+        - site/dist
+  - agent_name: FullAuditQAEngineer
+    role_source: paperclips/projects/fullaudit/roles-codex/qa.md
+    profile: qa
+    target: codex
+    reportsTo: FullAuditCTO
+    model: gpt-5.6-sol
+    modelReasoningEffort: xhigh
+    paperclip_role: qa
+    paperclip_icon: bug
+    workflow_role: qa
+    primary_codebase_memory_project: full-audit

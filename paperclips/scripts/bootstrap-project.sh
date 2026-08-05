@@ -510,6 +510,35 @@ for agent_name in $hire_order; do
 
   agent_model=$(echo "$agent_meta" | jq -r '.model // "auto"')
   agent_effort=$(echo "$agent_meta" | jq -r '.modelReasoningEffort // "medium"')
+  sandbox_mode=$(yq -r '.sandbox.mode // "legacy"' "$manifest")
+  sandbox_bypass=true
+  writable_roots='[]'
+  read_only_roots='[]'
+  scratch_dir="${team_root}/${agent_name}/scratch"
+  if [ "$sandbox_mode" = "constrained" ]; then
+    project_root=$(yq -r '.project_root // ""' "$paths_file")
+    [ -n "$project_root" ] && [ "$project_root" != "null" ] || die "constrained sandbox requires project_root"
+    mkdir -p "$scratch_dir"
+    writable_roots=$(jq -n --arg cwd "$cwd" --arg scratch "$scratch_dir" '[$cwd, $scratch]')
+    while IFS= read -r rel; do
+      [ -z "$rel" ] && continue
+      case "$rel" in
+        /*|*..*|*'//'*) die "unsafe sandbox writable path for $agent_name: $rel" ;;
+        .git|.git/*|*/.git|*/.git/*|.env|.env/*|*/.env|*/.env/*)
+          die "sandbox writable path for $agent_name may not target Git metadata or environment files: $rel"
+          ;;
+      esac
+      candidate="${project_root}/${rel}"
+      mkdir -p "$candidate"
+      writable_roots=$(echo "$writable_roots" | jq --arg p "$candidate" '. + [$p]')
+    done < <(echo "$agent_meta" | jq -r '.sandbox.writable_paths[]?')
+    kit_root="${project_root}/workspace/repos"
+    [ -d "$kit_root" ] || mkdir -p "$kit_root"
+    read_only_roots=$(jq -n --arg p "$kit_root" '[$p]')
+    sandbox_bypass=false
+  elif [ "$sandbox_mode" != "legacy" ]; then
+    die "unknown sandbox mode '$sandbox_mode'"
+  fi
 
   payload=$(jq -n \
     --arg name "$agent_name" \
@@ -521,6 +550,9 @@ for agent_name in $hire_order; do
     --arg adapter "${target}_local" \
     --arg model "$agent_model" \
     --arg effort "$agent_effort" \
+    --argjson bypass "$sandbox_bypass" \
+    --argjson writable "$writable_roots" \
+    --argjson readonly "$read_only_roots" \
     '{
       name: $name, role: $role, title: $title, icon: $icon,
       capabilities: "default",
@@ -530,7 +562,8 @@ for agent_name in $hire_order; do
         instructionsFilePath: "AGENTS.md", instructionsEntryFile: "AGENTS.md",
         instructionsBundleMode: "managed",
         maxTurnsPerRun: 200, timeoutSec: 0, graceSec: 15,
-        dangerouslyBypassApprovalsAndSandbox: true, env: {}
+        dangerouslyBypassApprovalsAndSandbox: $bypass,
+        writableRoots: $writable, sourceRootsReadOnly: $readonly, env: {}
       },
       runtimeConfig: {
         heartbeat: {
