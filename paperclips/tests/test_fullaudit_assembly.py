@@ -98,6 +98,15 @@ def test_constrained_trusted_cwd_is_git_checked_and_never_becomes_writable_root(
     assert 'read_only_roots=$(jq -n --arg cwd "$cwd" --arg kit "$kit_root"' in text
 
 
+def test_bootstrap_reconciles_existing_agents_in_place_without_configuration_churn():
+    text = (REPO / "paperclips" / "scripts" / "bootstrap-project.sh").read_text()
+    assert 'existing_agent_config=$(paperclip_get_agent_config "$existing"' in text
+    assert 'paperclip_update_agent_config "$existing" "$desired_managed"' in text
+    assert 'kind:"agent_config_reconcile"' in text
+    assert 'if [ "$current_managed" = "$desired_managed" ]; then' in text
+    assert 'agent $agent_name managed config already current' in text
+
+
 def test_rendered_assembly_contains_only_full_audit_roles_without_templates():
     resolved = json.loads(RESOLVED.read_text())
     assert resolved["parameters"]["project"]["issuePrefix"] == "FUL"
