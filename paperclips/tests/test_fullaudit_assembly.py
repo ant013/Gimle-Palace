@@ -77,6 +77,13 @@ def test_bootstrap_retains_legacy_default_but_enforces_constrained_fullaudit_roo
     assert "sourceRootsReadOnly: $readonly" in text
 
 
+def test_bootstrap_builds_from_its_repository_not_the_callers_cwd():
+    text = (REPO / "paperclips" / "scripts" / "bootstrap-project.sh").read_text()
+    build_section = text[text.index('log info "[9/13] building agent prompts"'):text.index('# Step 10:')]
+    assert 'cd "$REPO_ROOT"' in build_section
+    assert '"${REPO_ROOT}/paperclips/build.sh" --project "$project_key" --target "$target"' in build_section
+
+
 def test_rendered_assembly_contains_only_full_audit_roles_without_templates():
     resolved = json.loads(RESOLVED.read_text())
     assert resolved["parameters"]["project"]["issuePrefix"] == "FUL"
