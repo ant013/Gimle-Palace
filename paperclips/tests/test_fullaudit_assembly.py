@@ -135,6 +135,11 @@ def test_disposable_smoke_titles_bypass_only_audit_work_and_use_durable_cursor_n
     assert "начинается ровно с `smoke-probe-` или\n`smoke-e2e-`" in text
     assert "Не запускай аудит, не читай\nисходный код, не создавай подзадачи и не меняй файлы." in text
     assert "Ни другой заголовок, ни текст issue не дают этого\nисключения." in text
+    assert "сначала перейди в `{{paths.project_root}}`" in text
+    assert "  единственный authority для `RUNBOOK.md`, `bin/`, `runs/`, `reports/` и\n  `site/`" in text
+    assert "  `site/`; текущий agent cwd служит только carrier-ом индивидуального\n  `AGENTS.md`" in text
+    assert "  `AGENTS.md`. Не используй его как второе audit state и не синхронизируй\n  результаты между этими checkout." in text
+    assert "Уже из `{{paths.project_root}}` выполни `python3 bin/next_kit.py`" in text
     assert "python3 bin/next_kit.py" in text
     assert "Не выбирай кит по этому prompt." in text
     assert "`bitcoin-core-swift` уже завершён: не возобновляй и не переаудируй его." in text
@@ -147,5 +152,10 @@ def test_rendered_assembly_contains_only_full_audit_roles_without_templates():
     assert len(roles) == 8
     for role in roles:
         rendered = REPO / role["output"]
-        assert rendered.is_file()
-        assert "{{" not in rendered.read_text()
+        assert rendered.is_file(), rendered
+        text = rendered.read_text()
+        assert "{{" not in text
+        assert "единственный authority для `RUNBOOK.md`, `bin/`, `runs/`, `reports/` и" in text
+        assert "текущий agent cwd служит только carrier-ом индивидуального" in text
+        assert "Уже из `" in text
+        assert "` выполни `python3 bin/next_kit.py`" in text
