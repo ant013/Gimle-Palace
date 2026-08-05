@@ -117,6 +117,15 @@ stage_4_watchdog() {
 
 stage_5_per_agent_mcp() {
   log info "[5/7] runtime probes — mcp/git/handoff/phase per profile (rev2 SM-1/SM-2)"
+  # MCP tool namespaces are exposed by Codex with underscores (for example
+  # mcp__codebase_memory), while manifests use service identifiers with
+  # hyphens. Each project therefore supplies its own required contract.
+  SMOKE_EXPECTED_MCP_LIST=$(yq -r \
+    '(.mcp.runtime_smoke_required // .mcp.base_required)[]? // ""' "$manifest" | \
+    sed 's/-/_/g' | paste -sd ' ' -)
+  [ -n "$SMOKE_EXPECTED_MCP_LIST" ] || \
+    die "project manifest has no required runtime MCP servers: $project_key"
+  export SMOKE_EXPECTED_MCP_LIST
 
   declare -A picked
   for name in $(yq -r '.agents | keys | .[]' "$bindings"); do

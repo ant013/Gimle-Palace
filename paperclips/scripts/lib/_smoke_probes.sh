@@ -146,7 +146,8 @@ probe_agent_for_profile() {
     log err "  $name: no reply to mcp_list within 90s"
     fail=$((fail + 1))
   else
-    _check_markers "$reply" "$EXPECTED_MCP_LIST" "" "$name/mcp_list" || fail=$((fail + 1))
+    _check_markers "$reply" "${SMOKE_EXPECTED_MCP_LIST:-$EXPECTED_MCP_LIST}" "" \
+      "$name/mcp_list" || fail=$((fail + 1))
   fi
 
   # Probe 2: git capability (per profile)

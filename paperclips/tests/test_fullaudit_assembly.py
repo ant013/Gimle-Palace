@@ -37,6 +37,7 @@ def test_fullaudit_exactly_models_the_eight_role_team_and_writes_are_minimal():
         "agent_cwd_path_key": "agent_source_root",
         "runtime_env": {"PAPERCLIP_API_URL": "paperclip_runtime_api_url"},
     }
+    assert data["mcp"]["runtime_smoke_required"] == ["codebase-memory", "context7"]
 
     expected = {
         "FullAuditCEO": ("ceo", None),

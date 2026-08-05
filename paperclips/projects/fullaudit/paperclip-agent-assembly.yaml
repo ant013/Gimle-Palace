@@ -57,6 +57,9 @@ mcp:
     - serena
     - github
     - sequential-thinking
+  runtime_smoke_required:
+    - codebase-memory
+    - context7
   codebase_memory_projects:
     primary: full-audit
   additions:

@@ -67,7 +67,7 @@
   "project": "fullaudit",
   "schemaVersion": 1,
   "sourceManifest": "paperclips/projects/fullaudit/paperclip-agent-assembly.yaml",
-  "sourceManifestSha256": "6244172739e0203b6c080c50655053c039c62e47398d2fc02b7ef89874c910a2",
+  "sourceManifestSha256": "4b1784d990043045fbc22a50938fdee532ad27ff7c92a974514c65aeb29f4ec3",
   "targets": {
     "codex": {
       "adapterType": "codex_local",
