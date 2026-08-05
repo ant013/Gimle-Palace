@@ -565,7 +565,11 @@ for agent_name in $hire_order; do
         die "constrained PAPERCLIP_API_URL must be loopback HTTP: $runtime_value"
       adapter_env=$(echo "$adapter_env" | jq --arg k "$env_name" --arg v "$runtime_value" '. + {($k): $v}')
     done < <(yq -r '(.sandbox.runtime_env // {}) | keys[]? // ""' "$manifest")
-    sandbox_bypass=false
+    sandbox_bypass=$(yq -r '.sandbox.bypass_approvals_and_sandbox // false' "$manifest")
+    case "$sandbox_bypass" in
+      true|false) ;;
+      *) die "constrained sandbox bypass_approvals_and_sandbox must be true or false" ;;
+    esac
   elif [ "$sandbox_mode" != "legacy" ]; then
     die "unknown sandbox mode '$sandbox_mode'"
   fi
