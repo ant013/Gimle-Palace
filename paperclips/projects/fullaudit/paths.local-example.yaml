@@ -5,3 +5,4 @@ production_checkout: /opt/example/full-audit
 team_workspace_root: /opt/example/full-audit-paperclip-runs
 operator_memory_dir: /opt/example/full-audit-memory
 gimle_skills_root: /opt/example/gimle-skills
+agent_source_root: /opt/example/full-audit-agent-source

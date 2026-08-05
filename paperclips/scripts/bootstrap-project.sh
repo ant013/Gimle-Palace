@@ -490,7 +490,8 @@ for agent_name in $hire_order; do
   fi
 
   team_root=$(yq -r '.team_workspace_root // ""' "$paths_file")
-  cwd="${team_root}/${agent_name}/workspace"
+  workspace_cwd="${team_root}/${agent_name}/workspace"
+  cwd="$workspace_cwd"
 
   # Per-agent role/icon/model. Explicit Paperclip identity wins; profile fallback
   # preserves legacy manifests that predate paperclip_role/paperclip_icon.
@@ -518,8 +519,20 @@ for agent_name in $hire_order; do
   if [ "$sandbox_mode" = "constrained" ]; then
     project_root=$(yq -r '.project_root // ""' "$paths_file")
     [ -n "$project_root" ] && [ "$project_root" != "null" ] || die "constrained sandbox requires project_root"
+    agent_cwd_path_key=$(yq -r '.sandbox.agent_cwd_path_key // ""' "$manifest")
+    if [ -n "$agent_cwd_path_key" ] && [ "$agent_cwd_path_key" != "null" ]; then
+      [[ "$agent_cwd_path_key" =~ ^[a-z][a-z0-9_]*$ ]] || \
+        die "invalid constrained sandbox agent_cwd_path_key: $agent_cwd_path_key"
+      trusted_cwd=$(yq -r ".[\"${agent_cwd_path_key}\"] // \"\"" "$paths_file")
+      [ -n "$trusted_cwd" ] && [ "$trusted_cwd" != "null" ] || \
+        die "constrained sandbox requires host-local $agent_cwd_path_key"
+      [ -d "$trusted_cwd" ] || die "constrained sandbox agent cwd does not exist: $trusted_cwd"
+      git -C "$trusted_cwd" rev-parse --is-inside-work-tree >/dev/null 2>&1 || \
+        die "constrained sandbox agent cwd is not a Git worktree: $trusted_cwd"
+      cwd="$trusted_cwd"
+    fi
     mkdir -p "$scratch_dir"
-    writable_roots=$(jq -n --arg cwd "$cwd" --arg scratch "$scratch_dir" '[$cwd, $scratch]')
+    writable_roots=$(jq -n --arg workspace "$workspace_cwd" --arg scratch "$scratch_dir" '[$workspace, $scratch]')
     while IFS= read -r rel; do
       [ -z "$rel" ] && continue
       case "$rel" in
@@ -534,7 +547,7 @@ for agent_name in $hire_order; do
     done < <(echo "$agent_meta" | jq -r '.sandbox.writable_paths[]?')
     kit_root="${project_root}/workspace/repos"
     [ -d "$kit_root" ] || mkdir -p "$kit_root"
-    read_only_roots=$(jq -n --arg p "$kit_root" '[$p]')
+    read_only_roots=$(jq -n --arg cwd "$cwd" --arg kit "$kit_root" '[$cwd, $kit] | unique')
     sandbox_bypass=false
   elif [ "$sandbox_mode" != "legacy" ]; then
     die "unknown sandbox mode '$sandbox_mode'"
