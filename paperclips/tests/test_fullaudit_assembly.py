@@ -106,6 +106,8 @@ def test_bootstrap_reconciles_existing_agents_in_place_without_configuration_chu
     assert 'kind:"agent_config_reconcile"' in text
     assert 'if [ "$current_managed" = "$desired_managed" ]; then' in text
     assert 'agent $agent_name managed config already current' in text
+    assert '.adapterConfig.env |= with_entries(' in text
+    assert 'then .value = .value.value else . end' in text
 
 
 def test_constrained_runtime_control_plane_url_is_loopback_only_and_host_local():
