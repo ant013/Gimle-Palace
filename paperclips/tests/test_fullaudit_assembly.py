@@ -35,6 +35,7 @@ def test_fullaudit_exactly_models_the_eight_role_team_and_writes_are_minimal():
     assert data["sandbox"] == {
         "mode": "constrained",
         "agent_cwd_path_key": "agent_source_root",
+        "runtime_env": {"PAPERCLIP_API_URL": "paperclip_runtime_api_url"},
     }
 
     expected = {
@@ -105,6 +106,16 @@ def test_bootstrap_reconciles_existing_agents_in_place_without_configuration_chu
     assert 'kind:"agent_config_reconcile"' in text
     assert 'if [ "$current_managed" = "$desired_managed" ]; then' in text
     assert 'agent $agent_name managed config already current' in text
+
+
+def test_constrained_runtime_control_plane_url_is_loopback_only_and_host_local():
+    text = (REPO / "paperclips" / "scripts" / "bootstrap-project.sh").read_text()
+    assert 'PAPERCLIP_API_URL) ;;' in text
+    assert 'unsupported constrained runtime environment variable' in text
+    assert 'constrained PAPERCLIP_API_URL must be loopback HTTP' in text
+    assert 'adapter_env=$(echo "$adapter_env" | jq' in text
+    assert 'env: $env' in text
+    assert "(.sandbox.runtime_env // {}) | keys[]?" in text
 
 
 def test_rendered_assembly_contains_only_full_audit_roles_without_templates():

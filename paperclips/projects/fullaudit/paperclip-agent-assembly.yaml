@@ -44,6 +44,8 @@ host_paths:
 sandbox:
   mode: constrained
   agent_cwd_path_key: agent_source_root
+  runtime_env:
+    PAPERCLIP_API_URL: paperclip_runtime_api_url
 
 mcp:
   service_name: fullaudit

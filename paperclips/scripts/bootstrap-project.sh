@@ -515,6 +515,7 @@ for agent_name in $hire_order; do
   sandbox_bypass=true
   writable_roots='[]'
   read_only_roots='[]'
+  adapter_env='{}'
   scratch_dir="${team_root}/${agent_name}/scratch"
   if [ "$sandbox_mode" = "constrained" ]; then
     project_root=$(yq -r '.project_root // ""' "$paths_file")
@@ -548,6 +549,22 @@ for agent_name in $hire_order; do
     kit_root="${project_root}/workspace/repos"
     [ -d "$kit_root" ] || mkdir -p "$kit_root"
     read_only_roots=$(jq -n --arg cwd "$cwd" --arg kit "$kit_root" '[$cwd, $kit] | unique')
+    while IFS= read -r env_name; do
+      [ -z "$env_name" ] && continue
+      case "$env_name" in
+        PAPERCLIP_API_URL) ;;
+        *) die "unsupported constrained runtime environment variable for $agent_name: $env_name" ;;
+      esac
+      runtime_value_key=$(yq -r ".sandbox.runtime_env[\"${env_name}\"] // \"\"" "$manifest")
+      [[ "$runtime_value_key" =~ ^[a-z][a-z0-9_]*$ ]] || \
+        die "invalid constrained runtime environment host key for $agent_name: $runtime_value_key"
+      runtime_value=$(yq -r ".[\"${runtime_value_key}\"] // \"\"" "$paths_file")
+      [ -n "$runtime_value" ] && [ "$runtime_value" != "null" ] || \
+        die "constrained runtime environment host value is unresolved: $runtime_value_key"
+      [[ "$runtime_value" =~ ^http://127\.0\.0\.1(:[0-9]{2,5})?$ ]] || \
+        die "constrained PAPERCLIP_API_URL must be loopback HTTP: $runtime_value"
+      adapter_env=$(echo "$adapter_env" | jq --arg k "$env_name" --arg v "$runtime_value" '. + {($k): $v}')
+    done < <(yq -r '(.sandbox.runtime_env // {}) | keys[]? // ""' "$manifest")
     sandbox_bypass=false
   elif [ "$sandbox_mode" != "legacy" ]; then
     die "unknown sandbox mode '$sandbox_mode'"
@@ -566,6 +583,7 @@ for agent_name in $hire_order; do
     --argjson bypass "$sandbox_bypass" \
     --argjson writable "$writable_roots" \
     --argjson readonly "$read_only_roots" \
+    --argjson env "$adapter_env" \
     '{
       name: $name, role: $role, title: $title, icon: $icon,
       capabilities: "default",
@@ -576,7 +594,7 @@ for agent_name in $hire_order; do
         instructionsBundleMode: "managed",
         maxTurnsPerRun: 200, timeoutSec: 0, graceSec: 15,
         dangerouslyBypassApprovalsAndSandbox: $bypass,
-        writableRoots: $writable, sourceRootsReadOnly: $readonly, env: {}
+        writableRoots: $writable, sourceRootsReadOnly: $readonly, env: $env
       },
       runtimeConfig: {
         heartbeat: {
