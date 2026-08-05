@@ -4,6 +4,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "paperclips" / "scripts" / "smoke-test.sh"
+PROBES = REPO / "paperclips" / "scripts" / "lib" / "_smoke_probes.sh"
 
 
 def test_script_exists_executable():
@@ -72,3 +73,23 @@ def test_runtime_mcp_markers_are_derived_from_the_project_manifest():
     assert ".mcp.runtime_smoke_required // .mcp.base_required" in text
     assert "sed 's/-/_/g'" in text
     assert "SMOKE_EXPECTED_MCP_LIST" in text
+
+
+def test_git_capabilities_follow_profile_not_workflow_role():
+    text = PROBES.read_text()
+    assert 'local git_policy="$profile"' in text
+    assert "Git capability is defined by the composed profile fragments" in text
+    assert "EXPECTED_GIT_outer_walker" not in text
+    assert "EXPECTED_GIT_inner_orchestrator" not in text
+
+
+def test_git_forbidden_operations_are_checked_only_in_can_section():
+    command = (
+        f'source "{PROBES}"; '
+        'printf "Can:\\n- fetch\\nCannot:\\n- commit push merge\\n" | _git_can_section'
+    )
+    out = subprocess.run(["bash", "-c", command], capture_output=True, text=True, check=True).stdout
+    assert "fetch" in out
+    assert "commit" not in out
+    assert "push" not in out
+    assert "merge" not in out

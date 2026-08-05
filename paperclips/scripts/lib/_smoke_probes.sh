@@ -28,10 +28,6 @@ EXPECTED_GIT_research_must_have=""
 EXPECTED_GIT_research_must_not_have="commit push merge"
 EXPECTED_GIT_qa_must_have="commit push"
 EXPECTED_GIT_qa_must_not_have="release-cut"
-EXPECTED_GIT_outer_walker_must_have="fetch"
-EXPECTED_GIT_outer_walker_must_not_have="commit push merge release-cut"
-EXPECTED_GIT_inner_orchestrator_must_have="commit push merge"
-EXPECTED_GIT_inner_orchestrator_must_not_have=""
 
 EXPECTED_HANDOFF_must_have="POST /comments PATCH /api/issues/ verify STOP"
 EXPECTED_HANDOFF_must_not_have=""
@@ -125,6 +121,13 @@ _check_markers() {
   return 0
 }
 
+# Git probes require separate Can and Cannot lists. Existing profile fragments
+# define the capabilities; this helper keeps an operation named under Cannot
+# from being mistaken for an allowed capability.
+_git_can_section() {
+  awk 'tolower($0) ~ /^[[:space:]]*cannot[[:space:]]*:/ { exit } { print }'
+}
+
 # probe_agent_for_profile <company> <uuid> <name> <profile> <workflow_role>
 probe_agent_for_profile() {
   local company="$1"; local uuid="$2"; local name="$3"; local profile="$4"
@@ -156,19 +159,16 @@ probe_agent_for_profile() {
     log err "  $name: no reply to git_capability"
     fail=$((fail + 1))
   else
-    # Workflow identity overrides the broad prompt profile. This keeps a CEO
-    # on the shared cto profile from inheriting the CTO's merge authority.
-    local git_policy="$workflow_role"
-    case "$git_policy" in
-      outer_walker|inner_orchestrator|implementer|reviewer|qa|writer|research) ;;
-      *) git_policy="$profile" ;;
-    esac
-    # IMP-D fix: bash indirect expansion instead of dynamic shell evaluation.
+    # Git capability is defined by the composed profile fragments. Workflow
+    # identity is intentionally reserved for phase orchestration below.
+    local git_policy="$profile"
     local mh_var="EXPECTED_GIT_${git_policy}_must_have"
     local mn_var="EXPECTED_GIT_${git_policy}_must_not_have"
     must_have="${!mh_var:-}"
     must_not="${!mn_var:-}"
-    _check_markers "$reply" "${must_have:-}" "${must_not:-}" "$name/git_capability($git_policy)" || fail=$((fail + 1))
+    _check_markers "$reply" "${must_have:-}" "" "$name/git_capability($git_policy)" || fail=$((fail + 1))
+    git_can_reply=$(_git_can_section <<<"$reply")
+    _check_markers "$git_can_reply" "" "${must_not:-}" "$name/git_capability($git_policy)" || fail=$((fail + 1))
   fi
 
   # Probe 3: handoff procedure (skip for custom/minimal)
