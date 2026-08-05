@@ -29,8 +29,13 @@ def test_fullaudit_exactly_models_the_eight_role_team_and_writes_are_minimal():
     data = manifest()
     assert data["project"]["key"] == "fullaudit"
     assert data["project"]["issue_prefix"] == "FUL"
-    assert data["sandbox"] == {"mode": "constrained"}
-    assert data["host_paths"]["required_existing"] == ["project_root", "gimle_skills_root"]
+    assert data["host_paths"]["required_existing"] == [
+        "project_root", "gimle_skills_root", "agent_source_root",
+    ]
+    assert data["sandbox"] == {
+        "mode": "constrained",
+        "agent_cwd_path_key": "agent_source_root",
+    }
 
     expected = {
         "FullAuditCEO": ("ceo", None),
@@ -82,6 +87,15 @@ def test_bootstrap_builds_from_its_repository_not_the_callers_cwd():
     build_section = text[text.index('log info "[9/13] building agent prompts"'):text.index('# Step 10:')]
     assert 'cd "$REPO_ROOT"' in build_section
     assert '"${REPO_ROOT}/paperclips/build.sh" --project "$project_key" --target "$target"' in build_section
+
+
+def test_constrained_trusted_cwd_is_git_checked_and_never_becomes_writable_root():
+    text = (REPO / "paperclips" / "scripts" / "bootstrap-project.sh").read_text()
+    assert "agent_cwd_path_key" in text
+    assert "agent cwd is not a Git worktree" in text
+    assert 'cwd="$trusted_cwd"' in text
+    assert 'writable_roots=$(jq -n --arg workspace "$workspace_cwd"' in text
+    assert 'read_only_roots=$(jq -n --arg cwd "$cwd" --arg kit "$kit_root"' in text
 
 
 def test_rendered_assembly_contains_only_full_audit_roles_without_templates():

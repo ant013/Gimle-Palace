@@ -39,9 +39,11 @@ host_paths:
   required_existing:
     - project_root
     - gimle_skills_root
+    - agent_source_root
 
 sandbox:
   mode: constrained
+  agent_cwd_path_key: agent_source_root
 
 mcp:
   service_name: fullaudit
