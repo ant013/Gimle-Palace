@@ -621,7 +621,14 @@ for agent_name in $hire_order; do
         heartbeat: {enabled, intervalSec, wakeOnDemand, maxConcurrentRuns, cooldownSec}
       })
     }'
-    current_managed=$(echo "$existing_agent_config" | jq -cS "$managed_config_filter") || \
+    # The API represents configured adapter environment values as
+    # {type:"plain",value:"..."}; desired config stores the same values as
+    # strings. Normalize that response-only envelope before comparison.
+    current_managed=$(echo "$existing_agent_config" | jq -cS \
+      "$managed_config_filter | .adapterConfig.env |= with_entries(
+        if (.value | type) == \"object\" and (.value.value | type) == \"string\"
+        then .value = .value.value else . end
+      )") || \
       die "cannot read managed config for existing agent $agent_name"
     desired_managed=$(echo "$payload" | jq -cS "$managed_config_filter") || \
       die "cannot build managed config for existing agent $agent_name"
