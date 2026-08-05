@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
-# Light replay: re-run palace extractors against already-built SCIP files.
+# Benchmark/fresh-workspace replay only: re-run palace extractors against
+# already-built SCIP files in the historical `fresh` mount.  This is not the
+# canonical procedure for registered Gimle-Repos copies; use
+# docs/runbooks/gimle-repos-incremental-replay.md there, because it performs
+# source-path, explicit-ref, and SCIP preflight first.
+#
 # Use this AFTER fixes to upstream code, AFTER neo4j wipe, or AFTER any
 # palace-mcp upgrade — fast (~5-10 min), idempotent.
 #

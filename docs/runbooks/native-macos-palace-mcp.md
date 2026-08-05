@@ -97,6 +97,12 @@ because those scripts call `docker compose up -d --force-recreate palace-mcp`.
 Instead, call MCP tools directly. Reference: `/tmp/native-mcp-call.py` helper
 in PR #357 thread, or use any MCP client.
 
+For incremental updates of already registered Gimle-Repos copies, follow
+[the canonical Gimle-Repos replay preflight](gimle-repos-incremental-replay.md).
+Do not treat a nullable `Project.indexed_commit` summary as permission to run a
+full analysis: the extractor response is the authority for its durable
+incremental checkpoint.
+
 ```python
 # Register
 palace.memory.register_project(
