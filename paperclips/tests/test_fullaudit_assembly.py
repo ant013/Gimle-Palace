@@ -108,6 +108,10 @@ def test_bootstrap_reconciles_existing_agents_in_place_without_configuration_chu
     assert 'agent $agent_name managed config already current' in text
     assert '.adapterConfig.env |= with_entries(' in text
     assert 'then .value = .value.value else . end' in text
+    managed_filter = text[text.index("managed_config_filter='"):text.index("current_managed=", text.index("managed_config_filter='"))]
+    assert "instructionsFilePath" not in managed_filter
+    assert "instructionsBundleMode" not in managed_filter
+    assert "runtimeConfig" not in managed_filter
 
 
 def test_constrained_runtime_control_plane_url_is_loopback_only_and_host_local():
