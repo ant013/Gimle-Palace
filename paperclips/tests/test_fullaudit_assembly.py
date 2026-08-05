@@ -97,8 +97,13 @@ def test_bootstrap_builds_from_its_repository_not_the_callers_cwd():
 def test_fullaudit_uses_per_agent_git_cwd_instead_of_a_shared_source_checkout():
     text = (REPO / "paperclips" / "scripts" / "bootstrap-project.sh").read_text()
     assert "workspace_git_source_path_key" in text
+    assignment = 'integration_branch=$(yq -r \'.project.integration_branch // ""\' "$manifest")'
+    assert assignment in text
+    assert 'die "project.integration_branch missing"' in text
+    assert 'git check-ref-format --branch "$integration_branch"' in text
     assert 'runtime_cwd="${workspace_cwd}/repo"' in text
     assert 'git clone --branch "$integration_branch" --single-branch "$workspace_source" "$runtime_cwd"' in text
+    assert text.index(assignment) < text.index('git clone --branch "$integration_branch"')
     assert 'cp "${REPO_ROOT}/${cp_src}" "${ws}/repo/AGENTS.md"' in text
     assert "refusing non-empty unmanaged runtime workspace" in text
     assert 'writable_roots=$(jq -n --arg workspace "$workspace_cwd"' in text

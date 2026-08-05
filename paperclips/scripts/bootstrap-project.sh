@@ -342,9 +342,14 @@ fi
 
 display_name=$(yq -r '.project.display_name' "$manifest")
 issue_prefix=$(yq -r '.project.issue_prefix' "$manifest")
+integration_branch=$(yq -r '.project.integration_branch // ""' "$manifest")
 [ -n "$display_name" ] && [ "$display_name" != "null" ] || die "project.display_name missing"
 [[ "$issue_prefix" =~ ^[A-Z]{3}$ ]] || \
   die "invalid project.issue_prefix for pinned Paperclip runtime (expected exactly three uppercase letters): $issue_prefix"
+[ -n "$integration_branch" ] && [ "$integration_branch" != "null" ] || \
+  die "project.integration_branch missing"
+git check-ref-format --branch "$integration_branch" >/dev/null 2>&1 || \
+  die "invalid project.integration_branch: $integration_branch"
 
 companies_resp=$(paperclip_get "/api/companies")
 prefix_owner=$(printf '%s' "$companies_resp" | jq -r --arg prefix "$issue_prefix" '
