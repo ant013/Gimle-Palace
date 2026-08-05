@@ -520,6 +520,32 @@ for agent_name in $hire_order; do
   if [ "$sandbox_mode" = "constrained" ]; then
     project_root=$(yq -r '.project_root // ""' "$paths_file")
     [ -n "$project_root" ] && [ "$project_root" != "null" ] || die "constrained sandbox requires project_root"
+    workspace_git_source_path_key=$(yq -r '.sandbox.workspace_git_source_path_key // ""' "$manifest")
+    if [ -n "$workspace_git_source_path_key" ] && [ "$workspace_git_source_path_key" != "null" ]; then
+      [[ "$workspace_git_source_path_key" =~ ^[a-z][a-z0-9_]*$ ]] || \
+        die "invalid constrained sandbox workspace_git_source_path_key: $workspace_git_source_path_key"
+      workspace_source=$(yq -r ".[\"${workspace_git_source_path_key}\"] // \"\"" "$paths_file")
+      [ -n "$workspace_source" ] && [ "$workspace_source" != "null" ] || \
+        die "constrained sandbox requires host-local $workspace_git_source_path_key"
+      [ -d "$workspace_source" ] || die "constrained sandbox workspace source does not exist: $workspace_source"
+      git -C "$workspace_source" rev-parse --is-inside-work-tree >/dev/null 2>&1 || \
+        die "constrained sandbox workspace source is not a Git worktree: $workspace_source"
+
+      runtime_cwd="${workspace_cwd}/repo"
+      if [ -e "$runtime_cwd/.git" ]; then
+        git -C "$runtime_cwd" rev-parse --is-inside-work-tree >/dev/null 2>&1 || \
+          die "constrained sandbox runtime cwd is not a Git worktree: $runtime_cwd"
+      else
+        if [ -e "$runtime_cwd" ] && [ -n "$(find "$runtime_cwd" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+          die "refusing non-empty unmanaged runtime workspace: $runtime_cwd"
+        fi
+        mkdir -p "$workspace_cwd"
+        rmdir "$runtime_cwd" 2>/dev/null || true
+        git clone --branch "$integration_branch" --single-branch "$workspace_source" "$runtime_cwd" || \
+          die "failed to create constrained sandbox runtime Git workspace: $runtime_cwd"
+      fi
+      cwd="$runtime_cwd"
+    fi
     agent_cwd_path_key=$(yq -r '.sandbox.agent_cwd_path_key // ""' "$manifest")
     if [ -n "$agent_cwd_path_key" ] && [ "$agent_cwd_path_key" != "null" ]; then
       [[ "$agent_cwd_path_key" =~ ^[a-z][a-z0-9_]*$ ]] || \
@@ -786,7 +812,13 @@ for agent_name in $hire_order; do
       --arg old "$old_workspace_content" \
       '{kind:"workspace_file_snapshot",path:$p,old_content:$old}')"
   fi
-  cp "${REPO_ROOT}/${cp_src}" "${ws}/AGENTS.md"
+  workspace_git_source_path_key=$(yq -r '.sandbox.workspace_git_source_path_key // ""' "$manifest")
+  if [ -n "$workspace_git_source_path_key" ] && [ "$workspace_git_source_path_key" != "null" ]; then
+    [ -d "${ws}/repo/.git" ] || die "runtime Git workspace missing: ${ws}/repo"
+    cp "${REPO_ROOT}/${cp_src}" "${ws}/repo/AGENTS.md"
+  else
+    cp "${REPO_ROOT}/${cp_src}" "${ws}/AGENTS.md"
+  fi
 done
 
 # Step 12: codex subagents deploy

@@ -70,11 +70,11 @@ def test_phase_responsibility_is_keyed_by_workflow_role():
     assert "inner_orchestrator" in text
 
 
-def test_git_capability_policy_separates_outer_walker_from_cto_profile():
+def test_git_capability_policy_follows_profile_not_workflow_role():
     text = LIB.read_text()
-    assert "EXPECTED_GIT_outer_walker_must_not_have" in text
-    assert "EXPECTED_GIT_inner_orchestrator_must_have" in text
-    assert 'git_policy="$workflow_role"' in text
+    assert 'git_policy="$profile"' in text
+    assert "EXPECTED_GIT_outer_walker" not in text
+    assert "EXPECTED_GIT_inner_orchestrator" not in text
 
 
 def test_probe_questions_use_create_issue_description_field():
