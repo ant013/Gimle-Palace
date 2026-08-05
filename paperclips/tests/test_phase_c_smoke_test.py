@@ -65,3 +65,10 @@ def test_runtime_probes_pass_workflow_role_separately_from_profile():
     text = SCRIPT.read_text()
     assert "workflow_role" in text
     assert 'probe_agent_for_profile "$company_id" "$uuid" "$name" "$profile" "$workflow_role"' in text
+
+
+def test_runtime_mcp_markers_are_derived_from_the_project_manifest():
+    text = SCRIPT.read_text()
+    assert ".mcp.runtime_smoke_required // .mcp.base_required" in text
+    assert "sed 's/-/_/g'" in text
+    assert "SMOKE_EXPECTED_MCP_LIST" in text
