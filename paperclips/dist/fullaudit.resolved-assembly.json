@@ -78,128 +78,128 @@
         {
           "agentId": "",
           "agentName": "FullAuditCEO",
-          "bytes": 21824,
+          "bytes": 22279,
           "family": "cto",
-          "lines": 484,
+          "lines": 489,
           "output": "paperclips/dist/fullaudit/codex/FullAuditCEO.md",
           "platform": "",
           "profiles": [
             "cto"
           ],
           "roleId": "codex:fullaudit-ceo",
-          "sha256": "1fecfd135de64ed7a0b033ef511c2a3dc965a002d71278bdfb3724d11985ddc0",
+          "sha256": "ce3ad903cbd766676d121a52690b76db428fd4a8240a0df7ae60fa62fc4bdab2",
           "source": "paperclips/projects/fullaudit/roles-codex/ceo.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "",
           "agentName": "FullAuditCTO",
-          "bytes": 21837,
+          "bytes": 22292,
           "family": "cto",
-          "lines": 484,
+          "lines": 489,
           "output": "paperclips/dist/fullaudit/codex/FullAuditCTO.md",
           "platform": "",
           "profiles": [
             "cto"
           ],
           "roleId": "codex:fullaudit-cto",
-          "sha256": "2860387e20eec71282b638c734797fa3daa9520e1fb8618912d18617b29314e4",
+          "sha256": "50bda4a021b0cfc5e76dfaddd97ce7ca43e3ae891acfbd82cd6d3d948a7a4a6e",
           "source": "paperclips/projects/fullaudit/roles-codex/cto.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "",
           "agentName": "FullAuditSwiftAuditor",
-          "bytes": 16888,
+          "bytes": 17343,
           "family": "reviewer",
-          "lines": 376,
+          "lines": 381,
           "output": "paperclips/dist/fullaudit/codex/FullAuditSwiftAuditor.md",
           "platform": "",
           "profiles": [
             "reviewer"
           ],
           "roleId": "codex:fullaudit-auditor",
-          "sha256": "0f53fcb88f7fe33846a098a98b268aa15956c8f9f09bdc650f3bd37f8b010310",
+          "sha256": "231274e911e05879656db66a5219ed93707c99324e7934ec07d24e5944a4ffd6",
           "source": "paperclips/projects/fullaudit/roles-codex/auditor.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "",
           "agentName": "FullAuditKotlinAuditor",
-          "bytes": 16888,
+          "bytes": 17343,
           "family": "reviewer",
-          "lines": 376,
+          "lines": 381,
           "output": "paperclips/dist/fullaudit/codex/FullAuditKotlinAuditor.md",
           "platform": "",
           "profiles": [
             "reviewer"
           ],
           "roleId": "codex:fullaudit-auditor",
-          "sha256": "0f53fcb88f7fe33846a098a98b268aa15956c8f9f09bdc650f3bd37f8b010310",
+          "sha256": "231274e911e05879656db66a5219ed93707c99324e7934ec07d24e5944a4ffd6",
           "source": "paperclips/projects/fullaudit/roles-codex/auditor.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "",
           "agentName": "FullAuditProtocolAuditor",
-          "bytes": 16888,
+          "bytes": 17343,
           "family": "reviewer",
-          "lines": 376,
+          "lines": 381,
           "output": "paperclips/dist/fullaudit/codex/FullAuditProtocolAuditor.md",
           "platform": "",
           "profiles": [
             "reviewer"
           ],
           "roleId": "codex:fullaudit-auditor",
-          "sha256": "0f53fcb88f7fe33846a098a98b268aa15956c8f9f09bdc650f3bd37f8b010310",
+          "sha256": "231274e911e05879656db66a5219ed93707c99324e7934ec07d24e5944a4ffd6",
           "source": "paperclips/projects/fullaudit/roles-codex/auditor.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "",
           "agentName": "FullAuditEvidenceReviewer",
-          "bytes": 16848,
+          "bytes": 17303,
           "family": "reviewer",
-          "lines": 376,
+          "lines": 381,
           "output": "paperclips/dist/fullaudit/codex/FullAuditEvidenceReviewer.md",
           "platform": "",
           "profiles": [
             "reviewer"
           ],
           "roleId": "codex:fullaudit-verifier",
-          "sha256": "6ee92d7e09186eaf930abfe1c46e1f4588e614bdd05bcbf94c1be7b967902bce",
+          "sha256": "6a9a647e4db703e89940f4dbf74e1127c499e8ecfb70827fd4656674ade390c0",
           "source": "paperclips/projects/fullaudit/roles-codex/verifier.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "",
           "agentName": "FullAuditReportPublisher",
-          "bytes": 12644,
+          "bytes": 13099,
           "family": "writer",
-          "lines": 280,
+          "lines": 285,
           "output": "paperclips/dist/fullaudit/codex/FullAuditReportPublisher.md",
           "platform": "",
           "profiles": [
             "writer"
           ],
           "roleId": "codex:fullaudit-publisher",
-          "sha256": "706867f478f33e6c28969e4c6d4269884a4c18b9cabd3cebda9133f09da76260",
+          "sha256": "25aff9b6b1224178cc6328e14e7cd06f39e8f4f687c993fa2d5f2b7c4741ccb5",
           "source": "paperclips/projects/fullaudit/roles-codex/publisher.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "",
           "agentName": "FullAuditQAEngineer",
-          "bytes": 19447,
+          "bytes": 19902,
           "family": "qa",
-          "lines": 435,
+          "lines": 440,
           "output": "paperclips/dist/fullaudit/codex/FullAuditQAEngineer.md",
           "platform": "",
           "profiles": [
             "qa"
           ],
           "roleId": "codex:fullaudit-qa",
-          "sha256": "cb04e32c911ef8e5f0e48c33c6ddcb0bd54a8249349b002f382bbbd6263ffeb4",
+          "sha256": "35bcf6644bca6e61b04569992b8639cdaa52a7f4b8713fe33ff99e015ab009a6",
           "source": "paperclips/projects/fullaudit/roles-codex/qa.md",
           "workspaceCwd": ""
         }
