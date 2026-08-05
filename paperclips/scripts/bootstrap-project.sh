@@ -612,13 +612,9 @@ for agent_name in $hire_order; do
       adapterType,
       adapterConfig: (.adapterConfig | {
         cwd, model, modelReasoningEffort,
-        instructionsFilePath, instructionsEntryFile, instructionsBundleMode,
         maxTurnsPerRun, timeoutSec, graceSec,
         dangerouslyBypassApprovalsAndSandbox,
         writableRoots, sourceRootsReadOnly, env
-      }),
-      runtimeConfig: (.runtimeConfig | {
-        heartbeat: {enabled, intervalSec, wakeOnDemand, maxConcurrentRuns, cooldownSec}
       })
     }'
     # The API represents configured adapter environment values as
