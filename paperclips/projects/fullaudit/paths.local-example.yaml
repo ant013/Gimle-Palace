@@ -6,3 +6,4 @@ team_workspace_root: /opt/example/full-audit-paperclip-runs
 operator_memory_dir: /opt/example/full-audit-memory
 gimle_skills_root: /opt/example/gimle-skills
 agent_source_root: /opt/example/full-audit-agent-source
+paperclip_runtime_api_url: http://127.0.0.1:3100
