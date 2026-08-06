@@ -110,48 +110,48 @@
         {
           "agentId": "",
           "agentName": "FullAuditSwiftAuditor",
-          "bytes": 17343,
+          "bytes": 17806,
           "family": "reviewer",
-          "lines": 381,
+          "lines": 388,
           "output": "paperclips/dist/fullaudit/codex/FullAuditSwiftAuditor.md",
           "platform": "",
           "profiles": [
             "reviewer"
           ],
           "roleId": "codex:fullaudit-auditor",
-          "sha256": "231274e911e05879656db66a5219ed93707c99324e7934ec07d24e5944a4ffd6",
+          "sha256": "e71a67495bb413ce98d34509afb660fad4b3241973e8a61253468d3196e5b0f8",
           "source": "paperclips/projects/fullaudit/roles-codex/auditor.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "",
           "agentName": "FullAuditKotlinAuditor",
-          "bytes": 17343,
+          "bytes": 17806,
           "family": "reviewer",
-          "lines": 381,
+          "lines": 388,
           "output": "paperclips/dist/fullaudit/codex/FullAuditKotlinAuditor.md",
           "platform": "",
           "profiles": [
             "reviewer"
           ],
           "roleId": "codex:fullaudit-auditor",
-          "sha256": "231274e911e05879656db66a5219ed93707c99324e7934ec07d24e5944a4ffd6",
+          "sha256": "e71a67495bb413ce98d34509afb660fad4b3241973e8a61253468d3196e5b0f8",
           "source": "paperclips/projects/fullaudit/roles-codex/auditor.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "",
           "agentName": "FullAuditProtocolAuditor",
-          "bytes": 17343,
+          "bytes": 17806,
           "family": "reviewer",
-          "lines": 381,
+          "lines": 388,
           "output": "paperclips/dist/fullaudit/codex/FullAuditProtocolAuditor.md",
           "platform": "",
           "profiles": [
             "reviewer"
           ],
           "roleId": "codex:fullaudit-auditor",
-          "sha256": "231274e911e05879656db66a5219ed93707c99324e7934ec07d24e5944a4ffd6",
+          "sha256": "e71a67495bb413ce98d34509afb660fad4b3241973e8a61253468d3196e5b0f8",
           "source": "paperclips/projects/fullaudit/roles-codex/auditor.md",
           "workspaceCwd": ""
         },
