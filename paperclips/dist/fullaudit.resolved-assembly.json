@@ -78,16 +78,16 @@
         {
           "agentId": "",
           "agentName": "FullAuditCEO",
-          "bytes": 22279,
+          "bytes": 22573,
           "family": "cto",
-          "lines": 489,
+          "lines": 494,
           "output": "paperclips/dist/fullaudit/codex/FullAuditCEO.md",
           "platform": "",
           "profiles": [
             "cto"
           ],
           "roleId": "codex:fullaudit-ceo",
-          "sha256": "ce3ad903cbd766676d121a52690b76db428fd4a8240a0df7ae60fa62fc4bdab2",
+          "sha256": "02752e2a93ae38252faf69a7c92339072ef7b3c3250c3e5d06680ca57be055fc",
           "source": "paperclips/projects/fullaudit/roles-codex/ceo.md",
           "workspaceCwd": ""
         },
