@@ -544,7 +544,12 @@ for agent_name in $hire_order; do
   hire_role=$(echo "$agent_meta" | jq -r --arg fallback "$fallback_role" '.paperclip_role // $fallback')
   hire_icon=$(echo "$agent_meta" | jq -r --arg fallback "$fallback_icon" '.paperclip_icon // $fallback')
 
-  agent_model=$(echo "$agent_meta" | jq -r '.model // "auto"')
+  agent_model=$(echo "$agent_meta" | jq -r '
+    if .model then .model
+    elif .target == "codex" then "gpt-5.6-sol"
+    else "auto"
+    end
+  ')
   agent_effort=$(echo "$agent_meta" | jq -r '.modelReasoningEffort // "medium"')
   sandbox_mode=$(yq -r '.sandbox.mode // "legacy"' "$manifest")
   sandbox_bypass=true
