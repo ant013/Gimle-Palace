@@ -253,7 +253,12 @@ validate_uaudit_partial_approvers() {
       length <= 100 and
       . == sort and
       . == unique and
-      all(.[]; type == "string" and length >= 1 and length <= 128 and test("^[^\\u0000-\\u001f\\u007f]+$"))
+      all(.[];
+        type == "string" and
+        length >= 1 and
+        length <= 128 and
+        (explode | all(. >= 32 and . != 127))
+      )
     )
   ' "$approvers" >/dev/null || die "UAudit partial approvers must be a sorted, non-empty allowlist"
   log ok "UAudit partial approvers validated: $approvers"

@@ -213,6 +213,8 @@ def test_uaudit_bootstrap_validates_partial_human_approvers_before_deploy():
     assert "validate_uaudit_partial_approvers" in text
     assert "state/partial-approvers.json" in text
     assert "approver_actor_ids" in text
+    assert "explode | all(. >= 32 and . != 127)" in text
+    assert 'test("^[^\\u0000-\\u001f\\u007f]+$")' not in text
     assert "partial approvers must be a sorted, non-empty allowlist" in text
 
 
