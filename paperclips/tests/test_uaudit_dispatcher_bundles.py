@@ -13,7 +13,9 @@ REPO = Path(__file__).resolve().parents[2]
 SCRIPTS = REPO / "paperclips" / "scripts"
 CONFIG = REPO / "paperclips/projects/uaudit/daily-version-branch-routines.yaml"
 MANIFEST = REPO / "paperclips/projects/uaudit/paperclip-agent-assembly.yaml"
-UUID_RE = re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.I)
+UUID_RE = re.compile(
+    r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.I
+)
 
 sys.path.insert(0, str(SCRIPTS))
 
@@ -39,14 +41,20 @@ def test_daily_routine_config_uses_names_not_uuids_and_resolves_agents():
     assert not UUID_RE.search(raw)
     assert "required_subagents" not in raw
     config = load_config(CONFIG)
-    assert config["limits"] == {"max_commits": 30, "max_files": 300, "max_diff_lines": 3000}
+    assert config["limits"] == {
+        "max_commits": 30,
+        "max_files": 300,
+        "max_diff_lines": 3000,
+    }
     assert {r["platform"] for r in config["routines"]} == {"android", "ios"}
     assert {r["branch"] for r in config["routines"]} == {"version/0.50"}
     assert {r["routine_key"] for r in config["routines"]} == {
         "uaudit-daily-android",
         "uaudit-daily-ios",
     }
-    agents = resolve_agent_ids("uaudit", REPO / "paperclips/projects/uaudit/bindings.local-example.yaml")
+    agents = resolve_agent_ids(
+        "uaudit", REPO / "paperclips/projects/uaudit/bindings.local-example.yaml"
+    )
     validate_config_agents(config, agents)
     assert {
         "AUCEO",
@@ -69,9 +77,15 @@ def test_uaudit_platform_ctos_use_custom_project_dispatcher_roles():
     data = load_manifest()
     by_name = {agent["agent_name"]: agent for agent in data["agents"]}
     assert by_name["UWACTO"]["profile"] == "custom"
-    assert by_name["UWACTO"]["role_source"] == "paperclips/projects/uaudit/roles-codex/uwa-platform-dispatcher.md"
+    assert (
+        by_name["UWACTO"]["role_source"]
+        == "paperclips/projects/uaudit/roles-codex/uwa-platform-dispatcher.md"
+    )
     assert by_name["UWICTO"]["profile"] == "custom"
-    assert by_name["UWICTO"]["role_source"] == "paperclips/projects/uaudit/roles-codex/uwi-platform-dispatcher.md"
+    assert (
+        by_name["UWICTO"]["role_source"]
+        == "paperclips/projects/uaudit/roles-codex/uwi-platform-dispatcher.md"
+    )
     assert by_name["AUCEO"]["profile"] == "cto"
 
 
@@ -89,11 +103,21 @@ def test_generated_dispatcher_bundles_start_staged_daily_chain():
     expected = {
         "UWACTO": (
             "00000000-0000-0000-0000-000000000014",
-            ("UWAKotlinAuditor", "UWASecurityAuditor", "UWACryptoAuditor", "UWAInfraEngineer"),
+            (
+                "UWAKotlinAuditor",
+                "UWASecurityAuditor",
+                "UWACryptoAuditor",
+                "UWAInfraEngineer",
+            ),
         ),
         "UWICTO": (
             "00000000-0000-0000-0000-000000000013",
-            ("UWISwiftAuditor", "UWISecurityAuditor", "UWICryptoAuditor", "UWIInfraEngineer"),
+            (
+                "UWISwiftAuditor",
+                "UWISecurityAuditor",
+                "UWICryptoAuditor",
+                "UWIInfraEngineer",
+            ),
         ),
     }
     for name, (code_auditor_id, chain_names) in expected.items():
@@ -130,8 +154,13 @@ def test_forced_full_range_is_explicit_and_does_not_relax_daily_rules():
         ("android", "UWACTO", "UWAInfraEngineer"),
         ("ios", "UWICTO", "UWIInfraEngineer"),
     ):
-        source = (REPO / f"paperclips/projects/uaudit/roles-codex/{'uwa' if platform == 'android' else 'uwi'}-platform-dispatcher.md").read_text()
-        infra_source = (REPO / f"paperclips/projects/uaudit/overlays/codex/{infra}.md").read_text()
+        source = (
+            REPO
+            / f"paperclips/projects/uaudit/roles-codex/{'uwa' if platform == 'android' else 'uwi'}-platform-dispatcher.md"
+        ).read_text()
+        infra_source = (
+            REPO / f"paperclips/projects/uaudit/overlays/codex/{infra}.md"
+        ).read_text()
         assert "UAudit forced full-range audit" in source
         assert "daily_limits_bypassed: true" in source
         assert "cursor_mutation: forbidden" in source
@@ -157,6 +186,34 @@ def test_generated_dispatchers_pin_canonical_daily_cursors():
         assert "preserve this cursor" in text
         assert legacy in text
         assert "Never read a cursor below" in text
+
+
+def test_daily_dispatchers_fetch_declared_authoritative_refs_before_intake():
+    expected = {
+        "android": "https://github.com/horizontalsystems/unstoppable-wallet-android",
+        "ios": "https://github.com/horizontalsystems/unstoppable-wallet-ios",
+    }
+    for platform, repo_url in expected.items():
+        role = "uwa" if platform == "android" else "uwi"
+        dispatcher = "UWACTO" if platform == "android" else "UWICTO"
+        source = (
+            REPO
+            / f"paperclips/projects/uaudit/roles-codex/{role}-platform-dispatcher.md"
+        ).read_text()
+        rendered = (REPO / f"paperclips/dist/uaudit/codex/{dispatcher}.md").read_text()
+        for text in (source, rendered):
+            assert repo_url in text
+            assert "fetch --no-tags" in text
+            assert "refs/remotes/uaudit-upstream/version/0.50" in text
+            assert "Never resolve TO from origin/version/0.50" in text
+
+
+def test_uaudit_bootstrap_validates_partial_human_approvers_before_deploy():
+    text = (SCRIPTS / "bootstrap-project.sh").read_text()
+    assert "validate_uaudit_partial_approvers" in text
+    assert "state/partial-approvers.json" in text
+    assert "approver_actor_ids" in text
+    assert "partial approvers must be a sorted, non-empty allowlist" in text
 
 
 def test_infra_bundles_use_staged_daily_delivery_not_subagent_fanout():
@@ -185,8 +242,8 @@ def test_infra_bundles_use_staged_daily_delivery_not_subagent_fanout():
         assert "verify-payload --run-dir" in text
         assert "record-delivery --run-dir" in text
         assert "reconcile-daily --run-dir" in text
-        assert "routeSource:\"file_route\"" in text
-        assert "routeName:\"UAudit\"" in text
+        assert 'routeSource:"file_route"' in text
+        assert 'routeName:"UAudit"' in text
         assert "telegram-summary.txt" in text
         assert "status/telegram.done" in text
         assert "status/cursor.done" in text
@@ -201,25 +258,85 @@ def test_infra_bundles_use_staged_daily_delivery_not_subagent_fanout():
         assert "smoke/telegram-report.md" in text
         assert "status/legacy-delivery.done.json" in text
         assert "Never use `status/delivery.done`" in text
-        assert "python3 \"" in text
+        assert 'python3 "' in text
         assert "chatId" not in text
         assert "filePath" not in text
 
 
 def test_audit_stage_bundles_use_bound_structured_v1_sidecars():
     expected = {
-        "UWISwiftAuditor": ("code", "UWISwiftAuditor", "code.findings.json", "code.done.json"),
-        "UWAKotlinAuditor": ("code", "UWAKotlinAuditor", "code.findings.json", "code.done.json"),
-        "UWISecurityAuditor": ("security", "UWISecurityAuditor", "security.findings.json", "security.done.json"),
-        "UWASecurityAuditor": ("security", "UWASecurityAuditor", "security.findings.json", "security.done.json"),
-        "UWICryptoAuditor": ("crypto", "UWICryptoAuditor", "crypto.findings.json", "crypto.done.json"),
-        "UWACryptoAuditor": ("crypto", "UWACryptoAuditor", "crypto.findings.json", "crypto.done.json"),
-        "UWIInfraEngineer": ("infra", "UWIInfraEngineer", "infra.findings.json", "infra.done.json"),
-        "UWAInfraEngineer": ("infra", "UWAInfraEngineer", "infra.findings.json", "infra.done.json"),
-        "UWIResearchAgent": ("research_context", "UWIResearchAgent", "research-context.findings.json", "research_context.done.json"),
-        "UWAResearchAgent": ("research_context", "UWAResearchAgent", "research-context.findings.json", "research_context.done.json"),
-        "UWIQAEngineer": ("qa_verify", "UWIQAEngineer", "qa-verify.findings.json", "qa_verify.done.json"),
-        "UWAQAEngineer": ("qa_verify", "UWAQAEngineer", "qa-verify.findings.json", "qa_verify.done.json"),
+        "UWISwiftAuditor": (
+            "code",
+            "UWISwiftAuditor",
+            "code.findings.json",
+            "code.done.json",
+        ),
+        "UWAKotlinAuditor": (
+            "code",
+            "UWAKotlinAuditor",
+            "code.findings.json",
+            "code.done.json",
+        ),
+        "UWISecurityAuditor": (
+            "security",
+            "UWISecurityAuditor",
+            "security.findings.json",
+            "security.done.json",
+        ),
+        "UWASecurityAuditor": (
+            "security",
+            "UWASecurityAuditor",
+            "security.findings.json",
+            "security.done.json",
+        ),
+        "UWICryptoAuditor": (
+            "crypto",
+            "UWICryptoAuditor",
+            "crypto.findings.json",
+            "crypto.done.json",
+        ),
+        "UWACryptoAuditor": (
+            "crypto",
+            "UWACryptoAuditor",
+            "crypto.findings.json",
+            "crypto.done.json",
+        ),
+        "UWIInfraEngineer": (
+            "infra",
+            "UWIInfraEngineer",
+            "infra.findings.json",
+            "infra.done.json",
+        ),
+        "UWAInfraEngineer": (
+            "infra",
+            "UWAInfraEngineer",
+            "infra.findings.json",
+            "infra.done.json",
+        ),
+        "UWIResearchAgent": (
+            "research_context",
+            "UWIResearchAgent",
+            "research-context.findings.json",
+            "research_context.done.json",
+        ),
+        "UWAResearchAgent": (
+            "research_context",
+            "UWAResearchAgent",
+            "research-context.findings.json",
+            "research_context.done.json",
+        ),
+        "UWIQAEngineer": (
+            "qa_verify",
+            "UWIQAEngineer",
+            "qa-verify.findings.json",
+            "qa_verify.done.json",
+        ),
+        "UWAQAEngineer": (
+            "qa_verify",
+            "UWAQAEngineer",
+            "qa-verify.findings.json",
+            "qa_verify.done.json",
+        ),
     }
     for name, (stage, source, sidecar, marker) in expected.items():
         text = (REPO / f"paperclips/dist/uaudit/codex/{name}.md").read_text()
@@ -230,7 +347,10 @@ def test_audit_stage_bundles_use_bound_structured_v1_sidecars():
         assert f'source_agent="{source}"' in text
         assert "audit_status" in text
         assert "{text,material}" in text
-        assert "severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification" in text
+        assert (
+            "severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification"
+            in text
+        )
         assert "limitation text" in text or "limitation `text`" in text
         assert "validate-stage --run-dir" in text
         assert "Russian" in text
@@ -258,7 +378,7 @@ def test_pr_coordinators_use_helper_owned_russian_delivery_contract():
         assert "aggregate --run-dir" in text
         assert "delivery-summary.json" in text
         assert "delivery-handoff.json" in text
-        assert "delivery_contract:\"uaudit-delivery/v1\"" in text
+        assert 'delivery_contract:"uaudit-delivery/v1"' in text
         assert "complete+0" in text
         assert "partial" in text
         assert "Russian" in text
@@ -283,7 +403,10 @@ def test_pr_subagents_emit_only_the_strict_v1_envelope():
             "needs_runtime_verification",
         ):
             assert field in instructions, f"{path.name} omits v1 field {field}"
-        assert "severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification" in instructions
+        assert (
+            "severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification"
+            in instructions
+        )
         assert "limitation text" in instructions and "in Russian" in instructions
         assert "do not add" in instructions.lower()
         assert "raw diff content" in instructions or "raw-diff" in instructions
@@ -318,7 +441,9 @@ def _legacy_live_routine(config, routine, assignee, *, suffix="1"):
 
 def test_reconcile_plan_matches_legacy_records_and_renders_stable_keys():
     config = load_config(CONFIG)
-    agents = resolve_agent_ids("uaudit", REPO / "paperclips/projects/uaudit/bindings.local-example.yaml")
+    agents = resolve_agent_ids(
+        "uaudit", REPO / "paperclips/projects/uaudit/bindings.local-example.yaml"
+    )
     android, ios = config["routines"]
     current = normalize_current_routines(
         {
@@ -331,17 +456,27 @@ def test_reconcile_plan_matches_legacy_records_and_renders_stable_keys():
     plan = build_plan(config, agents, current, _paths())
     by_id = {item["routine_id"]: item for item in plan}
     assert by_id["daily-android-version-0.50"]["dispatcher"] == "UWACTO"
-    assert by_id["daily-android-version-0.50"]["desired_assigneeAgentId"] == agents["UWACTO"]
+    assert (
+        by_id["daily-android-version-0.50"]["desired_assigneeAgentId"]
+        == agents["UWACTO"]
+    )
     assert by_id["daily-android-version-0.50"]["live_uuid"].endswith("11")
     assert by_id["daily-android-version-0.50"]["needs_update"] is True
     assert by_id["daily-ios-version-0.50"]["needs_update"] is True
-    assert "routine_key: uaudit-daily-android" in by_id["daily-android-version-0.50"]["desired_description"]
-    assert by_id["daily-android-version-0.50"]["patch"]["baseRevisionId"] == "revision-11"
+    assert (
+        "routine_key: uaudit-daily-android"
+        in by_id["daily-android-version-0.50"]["desired_description"]
+    )
+    assert (
+        by_id["daily-android-version-0.50"]["patch"]["baseRevisionId"] == "revision-11"
+    )
 
 
 def test_reconcile_stable_key_survives_next_version_without_new_live_record():
     config = load_config(CONFIG)
-    agents = resolve_agent_ids("uaudit", REPO / "paperclips/projects/uaudit/bindings.local-example.yaml")
+    agents = resolve_agent_ids(
+        "uaudit", REPO / "paperclips/projects/uaudit/bindings.local-example.yaml"
+    )
     paths = _paths()
     current = []
     for index, routine in enumerate(config["routines"], start=21):
@@ -369,7 +504,9 @@ def test_reconcile_stable_key_survives_next_version_without_new_live_record():
 
 def test_reconcile_rejects_ambiguous_legacy_fallback():
     config = load_config(CONFIG)
-    agents = resolve_agent_ids("uaudit", REPO / "paperclips/projects/uaudit/bindings.local-example.yaml")
+    agents = resolve_agent_ids(
+        "uaudit", REPO / "paperclips/projects/uaudit/bindings.local-example.yaml"
+    )
     android = config["routines"][0]
     duplicate_a = _legacy_live_routine(config, android, "old-a", suffix="31")
     duplicate_b = _legacy_live_routine(config, android, "old-b", suffix="32")
@@ -388,7 +525,9 @@ def test_reconcile_rejects_ambiguous_legacy_fallback():
 
 def test_reconcile_rejects_conflicting_stable_identity():
     config = load_config(CONFIG)
-    agents = resolve_agent_ids("uaudit", REPO / "paperclips/projects/uaudit/bindings.local-example.yaml")
+    agents = resolve_agent_ids(
+        "uaudit", REPO / "paperclips/projects/uaudit/bindings.local-example.yaml"
+    )
     android = config["routines"][0]
     live = _legacy_live_routine(config, android, "old-a", suffix="33")
     live["description"] = live["description"].replace(
@@ -428,7 +567,9 @@ def test_explicit_missing_paths_source_does_not_fall_back(tmp_path):
 
 def test_reconcile_partial_apply_reports_409_and_rerun_converges():
     config = load_config(CONFIG)
-    agents = resolve_agent_ids("uaudit", REPO / "paperclips/projects/uaudit/bindings.local-example.yaml")
+    agents = resolve_agent_ids(
+        "uaudit", REPO / "paperclips/projects/uaudit/bindings.local-example.yaml"
+    )
     paths = _paths()
     android, ios = config["routines"]
     states = {
@@ -495,7 +636,9 @@ def test_reconcile_partial_apply_reports_409_and_rerun_converges():
 
 
 def test_validate_uaudit_docs_script_passes():
-    spec = importlib.util.spec_from_file_location("validate_uaudit_docs", SCRIPTS / "validate_uaudit_docs.py")
+    spec = importlib.util.spec_from_file_location(
+        "validate_uaudit_docs", SCRIPTS / "validate_uaudit_docs.py"
+    )
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     spec.loader.exec_module(module)
