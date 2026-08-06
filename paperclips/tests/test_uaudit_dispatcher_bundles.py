@@ -218,6 +218,12 @@ def test_uaudit_bootstrap_validates_partial_human_approvers_before_deploy():
     assert "partial approvers must be a sorted, non-empty allowlist" in text
 
 
+def test_uaudit_codex_agents_get_an_explicit_supported_model_when_unset():
+    text = (SCRIPTS / "bootstrap-project.sh").read_text()
+    assert 'elif .target == "codex" then "gpt-5.6-sol"' in text
+    assert 'else "auto"' in text
+
+
 def test_infra_bundles_use_staged_daily_delivery_not_subagent_fanout():
     forbidden = [
         "If the cursor file is missing, create it",
