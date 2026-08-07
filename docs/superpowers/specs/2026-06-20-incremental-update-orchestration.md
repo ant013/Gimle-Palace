@@ -1,7 +1,8 @@
 # Spec — Incremental update orchestration (detect_changes → selective extractors)
 
-**Status:** draft **rev2** (2026-06-20) — grounded in live develop @ `d9fd544`, the 2026-06-20 full UW re-ingest,
-and a 3-lens voltAgent review (architect / performance / qa). rev1 → rev2 changelog at the bottom.
+**Status:** draft **rev3** (2026-06-20) — grounded in `origin/develop` @
+`236d9c265c3e75c7e8e169f516eab9442440ef74`, the 2026-06-20 full UW re-ingest, and a 3-lens
+voltAgent review (architect / performance / qa). rev1 → rev2 and rev2 → rev3 changelogs at the bottom.
 **Owner:** design = Board; implementation = palace-mcp slice(s).
 **Problem (operator):** a normal commit touches 10–15 files; there are 2–3/day. Today a per-commit
 `project_analyze` re-runs the full extractor suite on the whole project → **~10–15 h** for `uw-ios-app`
@@ -25,7 +26,7 @@ that finishes in **minutes of graph work** (on top of the unavoidable xcodebuild
 | `git_history` | checkpoint `since=last_commit` — only new commits | ✅ live |
 | SCIP re-emit | DerivedData reuse (`scip_emit_uw_ios_app.sh`, commit 222b564c) → incremental xcodebuild | ✅ live (but is the floor, §5) |
 | `prune_swift_symbols` | delta — deprecates stale files/symbols by `last_seen_in_run_id` | ✅ live (but see B1 + threshold bug §1.1) |
-| `detect_changes` MCP tool | `native_detect_changes.py` — git-diff changed/added/removed files for a registered project | ✅ live primitive (but see B4 limits) |
+| `detect_changes` MCP tool | `native_detect_changes.py` — git-diff path set for a registered project | ✅ live primitive (but see B4 status limits) |
 
 ## 0b. What is NOT incremental (full rebuild every run — the 10–15 h)
 
@@ -106,9 +107,18 @@ incremental. `dead_code/graph_loader.py:37` traverses these edges for reachabili
 deleted symbol look **false-live**. This breaks the spec's core "no stale-as-live" promise.
 
 **B6 fix (Phase 1, same tier as B1):** stamp `last_seen_in_run_id` on all four edge types (mirror
-`call_edge_swift.py:31-33`), and add a delete-stale-edges step scoped to changed-source-file symbols
-(`MATCH (a)-[r:REFERENCES|CONFORMS_TO|EXTENDS|EXTENSION_OF]->() WHERE a.file_path IN $changed AND r.last_seen_in_run_id <> $run_id DELETE r`).
-Cover the "edge whose source is unchanged but target moved/renamed" orphan case (same shape as B2).
+`call_edge_swift.py:31-33`), then delete stale edges in two scopes, both `group_id`-isolated:
+
+1. **Changed source scope:** after re-writing changed/added source files, delete old outgoing REFERENCES-family edges
+   from those sources:
+   `MATCH (a:Symbol {group_id:$group_id})-[r:REFERENCES|CONFORMS_TO|EXTENDS|EXTENSION_OF]->() WHERE a.file_path IN $changed_or_added AND r.last_seen_in_run_id <> $run_id DELETE r`.
+2. **Changed/removed target scope:** after file-scoped prune/deprecation, delete incoming REFERENCES-family edges to
+   stale targets even when the source file was unchanged:
+   `MATCH (:Symbol {group_id:$group_id})-[r:REFERENCES|CONFORMS_TO|EXTENDS|EXTENSION_OF]->(b:Symbol {group_id:$group_id}) WHERE b.file_path IN $removed_files OR b.qualified_name IN $stale_target_qnames OR b.deleted_at IS NOT NULL DELETE r`.
+
+`$stale_target_qnames` is the old qualified-name/path set discovered while reconciling moved/renamed symbols. This
+target-side rule is mandatory for the unchanged-source → moved/renamed-target case; a full REFERENCES-family
+reconciliation fallback is acceptable only if it proves the same group-scoped cleanup in real Neo4j.
 
 ---
 
@@ -116,16 +126,25 @@ Cover the "edge whose source is unchanged but target moved/renamed" orphan case 
 
 ### Phase 1 — incremental `symbol_index_swift` Neo4j layer (highest value)
 
-1. **Change-set (see B4):** `changed/added/removed` = **git-diff (`detect_changes`) ∩ SCIP document paths**, against
-   the freshly re-emitted SCIP HEAD. Hard-fall-back to a full run if `detect_changes` returns `truncated=true`.
-2. **Tantivy:** already incremental (#6) — `delete_by_file_paths(changed ∪ removed)` + rewrite changed.
-3. **Neo4j symbols:** `build_symbol_node_rows` scoped to `changed ∪ added`; `write_symbol_nodes` MERGEs just those.
+1. **Change-set (see B4):** status classification is explicit; do not apply one intersection to all statuses.
+   - `git_added_or_modified` and `git_removed` come from git name-status (`native_detect_changes` currently returns
+     paths + `truncated`, so the Phase-1 implementation must either extend it to expose statuses or run the equivalent
+     status classification beside it).
+   - `scip_doc_paths` is the freshly re-emitted SCIP HEAD document set.
+   - `previous_file_paths` is the prior graph/file-hash path set for this `group_id`.
+   - `changed_or_added = git_added_or_modified ∩ scip_doc_paths`.
+   - `removed = git_removed ∪ (previous_file_paths - scip_doc_paths)`.
+   A deleted file is absent from `scip_doc_paths` by definition, so `removed` must never be intersected with current
+   SCIP docs. Hard-fall-back to a full run if `detect_changes` returns `truncated=true`.
+2. **Tantivy:** already incremental (#6) — `delete_by_file_paths(changed_or_added ∪ removed)` + rewrite changed/added.
+3. **Neo4j symbols:** `build_symbol_node_rows` scoped to `changed_or_added`; `write_symbol_nodes` MERGEs just those.
    **Filter the SCIP iteration too** (performance): in incremental mode `_refresh_graph_state` must not iterate all
    248k `iter_scip_symbol_infos` to build `seen_qnames` — scope it, or the 3–6 min Python pass remains.
 4. **Liveness:** B1-a batched bump (§1) so unchanged symbols stay live; prune denominator fix (§1.1).
 5. **Removed files:** replace `soft_delete_symbols`' 248k-`IN`-list with a **file-scoped** delete
    (`MATCH (s:Symbol {group_id}) WHERE s.file_path IN $removed_files SET s.deleted_at = …`) — `symbol_node_writer.py:284`.
-6. **Edges:** B6 — stamp + delete-stale `:REFERENCES`-family for changed-source files; MERGE the new ones.
+6. **Edges:** B6 — stamp + delete-stale `:REFERENCES`-family for changed-source files and changed/removed targets;
+   MERGE the new ones.
 7. **dead_code loader liveness filter** (§1.2) ships here.
 
 **Acceptance:** edit 1 file of uw → graph-update wall-clock **< ~3 min** (excl. xcodebuild); search/semantic/
@@ -168,11 +187,13 @@ findings byte-identical pre/post (assert via query, not prose); per-file SLA sta
 - **dead_code loader liveness filter** (Phase 1 prerequisite). `graph_loader.py:14,37`. Not optional, not Phase 3.
 - **B2 — call_edge cross-file orphan edges** (Phase 2). Delete inbound `:CALLS` to changed-file symbols too.
 - **B3 — `dead_code`/`hotspot`/`cross_module` are global** (Phase 3). Schedule + `stale_since`; needs §1.2 to be correct.
-- **B4 — change-set integrity** (Phase 1). Authoritative = **git ∩ SCIP** paths. Handle: (a) SCIP-only generated/
-  vendored docs (`symbol_index_swift.py:750-759` vendor list) — never silently drop; (b) `detect_changes` 500-file
-  truncation (`native_detect_changes.py:121`) → full fallback; (c) renames — `git diff` runs without `-M`
-  (`native_detect_changes.py:109`) so a rename = old(removed)+new(changed); verify prune deprecates old qn, adds new,
-  no dup; (d) assert SCIP `file_path` and git path are byte-identical repo-relative (don't assume).
+- **B4 — change-set integrity** (Phase 1). Authoritative statuses are explicit: `changed_or_added =
+  git_added_or_modified ∩ scip_doc_paths`; `removed = git_removed ∪ (previous_file_paths - scip_doc_paths)`.
+  Handle: (a) SCIP-only generated/vendored docs (`symbol_index_swift.py:750-759` vendor list) — never silently drop;
+  if a current SCIP doc is outside git status but its prior hash changed, include it or full-fallback; (b)
+  `detect_changes` 500-file truncation (`native_detect_changes.py:121`) → full fallback; (c) renames — `git diff`
+  runs without `-M` (`native_detect_changes.py:109`) so a rename = old(removed)+new(changed); verify prune deprecates
+  old qn, adds new, no dup; (d) assert SCIP `file_path` and git path are byte-identical repo-relative (don't assume).
 - **B5 — embedding already incremental; in-degree counter is a COST not a risk.** Hash-skip handles embeddings.
   The importance/in-degree counter is recomputed over the full occurrence stream every run by construction
   (`importance.py` run-id reset + `symbol_index_swift.py:275-277`) — it is correct, but it is a full-stream-scan cost
@@ -209,16 +230,19 @@ Phase 1 (the assertion will flip to the changed-file count). Required cases befo
 - P1-TC-01 edit 1 file → unchanged symbols not deprecated (existing A1, rewritten for file-scoped path).
 - P1-TC-02 edit → **changed file's Neo4j props actually updated** (positive assertion — guards the B4 silent-noop).
 - P1-TC-03 add file → new symbols appear, zero deprecations.
-- P1-TC-04 delete file → its symbols + `:File` deprecated, others intact.
+- P1-TC-04 delete file → `removed` contains the path even though absent from current SCIP docs; its symbols + `:File`
+  deprecated, others intact.
 - P1-TC-05 git **rename** → old path deprecated, new live, no duplicates.
 - P1-TC-06 symbol **moved** between files (same qn) → `file_path` updated to new location, old file not stale.
 - P1-TC-07 file with **zero symbols** → `:File` liveness bumped (else prune kills it next run).
 - P1-TC-08 **cross-project isolation** — incremental on project A does NOT bump project B's symbols (B1-a `group_id`).
 - P1-TC-09 **idempotency** — same incremental twice → zero net delta.
 - P1-TC-10 **changed_ratio ≥ 0.8** → orchestrator falls back to full.
-- P1-TC-11 **SCIP-only generated/vendored doc** not in git diff (B4) → not silently dropped.
+- P1-TC-11 **SCIP-only generated/vendored doc** not in git status (B4) → hash delta is included or full-fallback; not
+  silently dropped.
 - P1-TC-12 **`detect_changes truncated=true`** (>500 files) → full fallback.
-- P1-TC-13 **B6 edge hygiene** — a removed reference's `:REFERENCES` edge is deleted (no stale → no false-live).
+- P1-TC-13 **B6 edge hygiene** — a removed reference's `:REFERENCES` edge is deleted, including unchanged-source →
+  removed/moved/renamed-target stale edges (no stale → no false-live).
 - P1-TC-14 **Tantivy↔Neo4j consistency** post-prune (removed-file path, not just unchanged).
 
 **Phase 2 — call_edge:** P2-TC-01 changed-caller edges replaced, unchanged intact; P2-TC-02 **qn-change orphan**
@@ -255,9 +279,18 @@ tests (§6) pass on real Neo4j.
 - **Rewrote B1-a:** predicate "all still-live not-just-written" (not `= $prev_run_id`), mandatory `group_id` filter,
   mandatory batching + a new `(group_id, last_seen_in_run_id)` index; acceptance "< 60 s, no read-block".
 - **Added §1.1** prune threshold-denominator bug (counts deprecated → guard erodes).
-- **Tightened B4:** authoritative change-set = git ∩ SCIP; handle SCIP-only generated docs, 500-file truncation,
-  renames (no `-M`), path-normalization assertion.
+- **Tightened B4:** initial git/SCIP change-set integrity rules; rev3 below replaces the shorthand with explicit
+  status algebra for added/modified vs removed paths.
 - **Added §5 performance reality:** xcodebuild is the unaddressed floor; SCIP 7-pass iteration + `soft_delete`
   248k-IN-list are unfiltered costs; softened the SLA from "single-digit minutes" to "xcodebuild + < 10 min".
 - **Added §6 test catalog** (14 Phase-1 + 3 Phase-2 + threshold cases; the existing #6 test must be rewritten).
 - **Corrected B5:** in-degree counter is a full-stream-scan cost, not a consistency risk.
+
+## rev2 → rev3 changelog (from CodexArchitectReviewer REQUEST CHANGES)
+
+- **Fixed B4 set algebra:** `removed` no longer intersects with current SCIP docs; deleted files are classified from
+  git removed paths plus prior graph/file-hash paths missing from the fresh SCIP document set.
+- **Added B4 status-classification constraint:** Phase 1 must expose or derive add/edit/delete statuses because the
+  current `native_detect_changes` surface returns paths plus `truncated`, not statuses.
+- **Completed B6 cleanup:** added mandatory target-side REFERENCES-family deletion for unchanged-source edges pointing
+  to removed, moved, renamed, or deprecated targets, plus test coverage in P1-TC-13.
