@@ -566,7 +566,7 @@ def test_config_rejects_duplicate_stable_keys(tmp_path):
     try:
         load_config(config_path)
     except ValueError as exc:
-        assert "routine routine_key values must be unique" in str(exc)
+        assert "app-scoped routine keys must be unique" in str(exc)
     else:
         raise AssertionError("duplicate routine keys must fail")
 
