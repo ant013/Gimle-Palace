@@ -1,6 +1,7 @@
 # UAudit: непрерывный multi-app аудит release-веток, rebase и liveness
 
-**Статус:** DRAFT — не утверждён, не коммитить до выбора product decisions.
+**Статус:** APPROVED — оператор подтвердил реализацию 2026-08-15 после выбора
+availability-first решений для release/rebase/liveness и multi-app модели.
 **База для реализации:** `origin/develop` `40a8529fb420c634d5971af6114ebaff158e95e8`.
 
 ## Цель
