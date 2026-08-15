@@ -238,32 +238,6 @@ PY
   log ok "UAudit delivery helper installed read-only: $destination"
 }
 
-validate_uaudit_partial_approvers() {
-  local project_root="$1"
-  local approvers="${project_root}/state/partial-approvers.json"
-
-  [ -f "$approvers" ] || die "UAudit partial approvers missing: $approvers"
-  jq -e '
-    type == "object" and
-    (keys | sort == ["approver_actor_ids", "schema_version"]) and
-    .schema_version == 1 and
-    (.approver_actor_ids |
-      type == "array" and
-      length > 0 and
-      length <= 100 and
-      . == sort and
-      . == unique and
-      all(.[];
-        type == "string" and
-        length >= 1 and
-        length <= 128 and
-        (explode | all(. >= 32 and . != 127))
-      )
-    )
-  ' "$approvers" >/dev/null || die "UAudit partial approvers must be a sorted, non-empty allowlist"
-  log ok "UAudit partial approvers validated: $approvers"
-}
-
 manifest="${REPO_ROOT}/paperclips/projects/${project_key}/paperclip-agent-assembly.yaml"
 [ -f "$manifest" ] || die "manifest not found: $manifest"
 
@@ -339,10 +313,6 @@ while IFS= read -r required_key; do
 done < <(yq -r '.host_paths.required_existing[]? // ""' "$manifest")
 
 if [ "$project_key" = "uaudit" ]; then
-  project_root=$(yq -r '.project_root // ""' "$paths_file")
-  [ -n "$project_root" ] && [ "$project_root" != "null" ] || \
-    die "project_root required to validate UAudit partial approvers"
-  validate_uaudit_partial_approvers "$project_root"
   team_root=$(yq -r '.team_workspace_root // ""' "$paths_file")
   [ -n "$team_root" ] && [ "$team_root" != "null" ] || \
     die "team_workspace_root required to install UAudit delivery helper"

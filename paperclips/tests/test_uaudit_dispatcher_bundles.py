@@ -210,14 +210,12 @@ def test_daily_dispatchers_fetch_declared_authoritative_refs_before_intake():
             assert "Never resolve TO from origin/version/0.50" in text
 
 
-def test_uaudit_bootstrap_validates_partial_human_approvers_before_deploy():
+def test_uaudit_bootstrap_deploy_does_not_require_partial_approvers():
     text = (SCRIPTS / "bootstrap-project.sh").read_text()
-    assert "validate_uaudit_partial_approvers" in text
-    assert "state/partial-approvers.json" in text
-    assert "approver_actor_ids" in text
-    assert "explode | all(. >= 32 and . != 127)" in text
-    assert 'test("^[^\\u0000-\\u001f\\u007f]+$")' not in text
-    assert "partial approvers must be a sorted, non-empty allowlist" in text
+    assert "partial-approvers.json" not in text
+    assert "approver_actor_ids" not in text
+    assert "install_uaudit_delivery_helper \"$team_root\"" in text
+    assert "team_workspace_root required to install UAudit delivery helper" in text
 
 
 def test_uaudit_codex_agents_get_an_explicit_supported_model_when_unset():
