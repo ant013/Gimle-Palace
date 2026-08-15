@@ -1,183 +1,218 @@
-# UAudit: lifecycle веток релиза и восстановление ежедневных аудитов
+# UAudit: непрерывный multi-app аудит release-веток, rebase и liveness
 
-**Статус:** draft для review  
-**Основание:** `origin/develop` `40a8529fb420c634d5971af6114ebaff158e95e8`; рабочий worktree `fix/uaudit-version-0.50-migration` содержит несвязанные незакоммиченные изменения и не является базой для реализации без предварительного обновления.
+**Статус:** DRAFT — не утверждён, не коммитить до выбора product decisions.
+**База для реализации:** `origin/develop` `40a8529fb420c634d5971af6114ebaff158e95e8`.
 
 ## Цель
 
-Ежедневный аудит Android и iOS должен непрерывно отслеживать актуальную
-релизную линию: завершать переход из `version/X.Y` через проверенный `master`
-в `version/X.(Y+1)`, а также безопасно переживать пересоздание ветки после
-rebase. Ни один диапазон не должен тихо исчезать, а delivery/cursor остаются
-receipt-bound.
+Не допускать пропуска ежедневных аудитов при release merge, hotfix в `master`,
+delete/recreate/rebase `version/X.Y`, падении агента или stale generation для
+любого подключённого приложения. При неясной истории предпочтительнее повторный
+полный аудит, чем остановка или пропуск изменений. Cursor всегда меняется только
+после валидного delivery receipt.
 
-## Зафиксированные правила продукта
+## Подтверждённый контекст
 
-- Разработка идёт в `version/X.Y`; в конце спринта она merge-ится в `master`.
-- Следующая `version/X.(Y+1)` создаётся от `master` позднее и может отсутствовать
-  несколько дней.
-- После hotfix в `master` активную local `version/X.Y` могут rebase-нуть на
-  `master`, удалить удалённую ветку и опубликовать её заново с новыми SHA.
-- `master` используется только как bridge, а не как постоянная замена release
-  branch.
+- Разработка идёт в `version/X.Y`; в конце спринта ветка merge-ится в `master`;
+  следующая release-ветка может появиться позже.
+- Android `version/0.50` сейчас удалена; последний cursor `f25df34…` является
+  предком `master` `1f50b1…`. iOS `version/0.50` существует.
+- Live schedules были active, но slots 9–13 августа получили `coalesced` из-за
+  незавершённых generations. `skip_missed` не создаёт catch-up.
+- Existing helper гарантирует receipt-before-cursor и strict lock-bound CAS, но
+  не умеет stale-lock lifecycle, history transition или schedule liveness.
+- Existing `forced_full` намеренно не меняет cursor; его нельзя выдавать за
+  transition workflow.
 
-## Scope
+## Инварианты
 
-1. Repository-owned source resolver для обеих платформ.
-2. Immutable evidence о выборе source и контролируемый переход после history
-   rewrite.
-3. Recovery stale iOS daily generation без прямого изменения cursor.
-4. Проверка live liveness routine: active state, future next-run и отсутствие
-   незавершённого generation lock.
-5. Тесты, generated UAudit bundles, документация и безопасный deploy/recovery
-   runbook.
+1. Direct remote refs — единственный источник SHA; `origin/*`, `FETCH_HEAD` и
+   mirror refs не определяют audit range.
+2. Повторный аудит разрешён. Silent cursor move или пропуск диапазона запрещён.
+3. Русский Telegram report/receipt обязателен перед cursor transition.
+4. Никакой recovery не удаляет lock directory напрямую и не крадёт active run.
+5. Каждый automatic retry идемпотентен: один platform/routine recovery на slot.
+6. Daily limits сохраняются; version/rebase recovery использует явный full mode.
+7. Каждый persistent record, schedule, cursor, generation, lock, receipt и
+   report принадлежит явному `app_id`; состояние одного приложения не может
+   блокировать, дедуплицировать или продвигать другое.
 
-Не входит: изменение Telegram destination/формата, увеличение daily limits,
-удаление исторических артефактов или автоматический `git push --force`.
+## Multi-app модель
 
-## Наблюдения и инварианты
+Принципы аудита для всех приложений одинаковы. Отличаются только зарегистрированные
+параметры приложения и его платформ/репозиториев; логика release transition,
+receipt-before-cursor, full recovery, liveness и Russian reporting не имеет
+per-app исключений.
 
-- На 2026-08-15 Android не имеет публичных `version/0.50` или `version/0.51`;
-  iOS имеет `version/0.50` `63379839b9677d1ec77135240f73c37f3ff0326a`.
-- Current `source_ref` содержит только `routine_id, branch, from_sha, to_sha`,
-  а cursor CAS принимает только exact FROM/TO. Это защищает от пропуска,
-  но не описывает rebase transition.
-- `reconcile_uaudit_routines.py` сейчас меняет только assignee и description;
-  schedule liveness не является частью его контракта.
-- Matching receipt, immutable run binding и successful helper reconciliation
-  остаются обязательными перед cursor advance. Повторная доставка допустима,
-  тихий cursor reset — нет.
+Ввести first-class таблицу/реестр `apps`:
 
-## Проектирование
+| Поле | Назначение |
+|---|---|
+| `app_id` | Стабильный machine identifier, не выводится из URL или названия репозитория. |
+| `display_name` | Имя для русских отчётов и Board. |
+| `enabled` | Разрешает/останавливает schedules только этого приложения. |
+| `platforms` | Явная конфигурация platform → repo, local path, release-branch policy и timezone. |
+| `report_route` | Разрешённый delivery route приложения. |
 
-### 1. Разрешение source
+Все рабочие таблицы/records получают обязательный `app_id` и compound identity:
 
-Добавить узкий repository-owned resolver, вызываемый dispatcher до no-op,
-range и lock checks. Он получает refs только через direct remote fetch/ls-remote
-и записывает в intake выбранную точную ветку и SHA.
+| Область | Идентичность |
+|---|---|
+| Routine/schedule | `(app_id, routine_key)` |
+| Platform state/cursor | `(app_id, platform)` |
+| Generation/receipt/quarantine | `(app_id, routine_key, generation_id)` |
+| Lock | `(app_id, stable_routine_key)` |
+| Liveness slot/retry/dedup | `(app_id, routine_key, slot_id)` |
+| Telegram/Board report | `app_id` + issue/generation evidence |
 
-Порядок выбора для каждой платформы:
+Файловые paths также app-scoped, например
+`state/apps/<app_id>/<platform>/...`; migration для текущего UAudit создаёт
+явный `app_id=unstoppable_wallet`. Запрещены global locks, cursors или dedup
+keys без `app_id`.
 
-1. Direct-fetch current `master` и проверить
-   `git merge-base --is-ancestor <cursor-sha> <master-sha>`.
-2. Только если ответ положительный, включить в переход все commits
-   `cursor..master`; это bridge-половина диапазона. Если cursor отсутствует в
-   `master`, **не анализировать master** и зафиксировать этот факт в immutable
-   evidence.
-3. Найти первую следующую по семантической версии публичную
-   `version/<major>.<minor>` выше recorded release line. Если она существует,
-   добавить все commits, которые она добавляет поверх проверенного `master`
-   (`master..version/X.(Y+1)`), без дубликатов. Обе части анализируются одним
-   transition/full-range audit, а cursor после receipt-led delivery ставится на
-   HEAD новой `version/*`.
-4. Если новой `version/*` ещё нет, а cursor есть в `master`, выполнить обычный
-   bridge audit только диапазона `cursor..master` и поставить cursor на master
-   HEAD. Если cursor нет в master и новая version ещё не создана, block с exact
-   evidence; не использовать local `origin/*`, `FETCH_HEAD` или mirror ref.
+## Durable platform state
 
-В нормальном ancestor случае daily range остаётся ограниченным действующими
-30 commits/300 files/3000 lines. Превышение создаёт существующий явный
-full-range путь; daily limits не расширяются.
+Заменить одинокий cursor на один атомарно записываемый versioned platform-state
+document на `(app_id, platform)`; оставить legacy cursor read-only evidence для
+migration. Он хранит:
 
-### 2. Source transition и rebase
+- `cursor_sha`, release line и selected branch/head;
+- `master_anchor_sha` — HEAD master во время последнего verified release state;
+- `master_audited_through_sha`;
+- `release_base_master_sha`, previous release head и branch generation id;
+- immutable manifest старой серии: SHA, parents, normalized patch-id;
+- delivery receipt/summary digest и mode `release|bridge|transition|recovery`.
 
-Ввести отдельный state ledger рядом с cursor, не меняя exact cursor schema.
-Он хранит последний verified source mode/branch/head и immutable receipt/run
-reference. Resolver классифицирует переход как `normal`, `bridge`,
-`version-advance` или `history-rewrite`.
+Subject коммита допустим только как операторская подсказка, не как identity.
+Одна атомарная запись исключает рассинхронизацию ledger и cursor.
 
-- Для `normal` cursor должен быть ancestor выбранного version HEAD. Для
-  `bridge` он обязан быть ancestor `master`. Для `version-advance` в одном
-  immutable manifest фиксируются `cursor..master` и `master..version`;
-  второй диапазон допускается только после положительного первого ancestry
-  check. Обычный receipt-led daily flow остаётся без изменений.
-- Для `history-rewrite` запрещены обычный no-op и cursor CAS. Создаётся
-  отдельная recovery generation с сохранёнными old/new refs, merge-base и
-  range-diff/patch-equivalence evidence. Она повторно аудирует необходимый
-  полный диапазон, а не предполагает совпадение SHA.
-- Новый helper command применяет transition только после валидного full-range
-  delivery receipt, completed workflow и complete evidence manifest. Он
-  атомарно обновляет ledger и cursor; конфликт или неполная equivalence оставляет
-  lock/cursor без изменений и создаёт Board blocker.
+## Source state machine
 
-Таким образом удаление/пересоздание ветки может дать повторный аудит, но не
-может скрыть коммиты или перенести cursor на непроверенную историю.
+Обозначения: `A` — предыдущий audited release SHA, `X` — сохранённый master
+anchor, `Y` — current master HEAD, `B` — current/new release HEAD.
 
-### 3. iOS stale generation
+| Сценарий | Автоматическое действие |
+|---|---|
+| `A` — предок current release `B` | Обычный bounded daily `A..B`; receipt → cursor `B`. |
+| `A == B` | No-change, без cursor mutation и без ложного report. |
+| Release удалена, `A` — предок `Y`, новой version нет | Bridge audit `A..Y`; receipt → cursor `Y`, release line сохраняется. |
+| `A` — предок `Y`, строго следующая version создана от `Y` | Один transition audit: `A..Y` плюс `Y..B`, без дублей; receipt → cursor `B`. |
+| Hotfix `X..Y`, затем rebase current release: old `X..A`, new `Y..B` | Сопоставить series через range-diff/patch-id; аудировать `X..Y` и новые/изменённые патчи `Y..B`; receipt → cursor `B`. |
+| Предыдущее сопоставление неоднозначно | Автоматический full recovery `X..Y` + весь `Y..B`, без daily limits; receipt → cursor `B`. |
+| `A` не в master, но release `B` доступна и старая series отсутствует/непригодна | Автоматический full recovery release delta от доказуемой базы до `B`; receipt → cursor `B`. |
+| Next release не содержит current master `Y` | Не ждать rebase: выполнить два независимых full recovery reports — master hotfix segment и release segment; хранить отдельный master progress, release cursor → `B` только после release receipt. |
+| Remote/refs временно недоступны | Cursor не меняется; supervisor создаёт один retryable recovery с backoff и alert, не вечный lock. |
 
-Добавить recovery command/runbook, который сначала классифицирует старый lock:
-terminal receipt-led generation возобновляется существующим reconciliation;
-незавершённая или противоречивая generation quarantines с неизменным cursor и
-полным evidence. Новый run получает lock только после quarantine marker и
-никакой агент не удаляет lock directory напрямую. Для текущего iOS состояния
-это разблокирует full-range recovery от `d8280fe...` до актуального selected
-HEAD и доставляет русский отчёт по v1 contract.
+### Правила перехода на следующую версию
 
-### 4. Liveness routine
+- Искать **строго следующую** release line (`0.50 → 0.51`), не highest
+  available; пропуск `0.51` в пользу `0.52` требует отдельного recovery.
+- Нельзя объединять master и version ranges, если `Y` не является предком `B`.
+  В таком случае ждём следующей автоматической проверки/rebase либо создаём
+  отдельные recovery generations, выбранные product policy.
+- Если `A` отсутствует в master, master не используется на основании одного
+  cursor. Для hotfix-rebase используется только сохранённая пара `X..Y` при
+  доказанной ancestry `X ⊑ Y ⊑ B`.
 
-Расширить reconciler read-only liveness check для обеих live routines. До
-`--apply` он должен получить и показать: enabled/active state, future next-run,
-последний execution outcome и active generation/lock. API contract будет
-зафиксирован отдельной fixture после безопасного live GET; отсутствие нужных
-полей или невозможность проверить их завершает команду blocker, а не "green".
+### Rebase mapping
 
-После repair оба routine активируются только после одного успешного manual run
-каждый, отсутствующих active locks и будущих next-run timestamps.
+Перед каждым remote ref update resolver сохраняет старый source ref и series
+manifest. Для `X..A` vs `Y..B`:
 
-## Затрагиваемые области
+- one-to-one patch-equivalent commits считаются уже проверенными;
+- новые/изменённые/unmatched patches включаются в audit;
+- merge, empty, reordered или squash commits без доказуемого mapping делают
+  mapping ambiguous и запускают full recovery, а не blocker.
 
-- `paperclips/projects/uaudit/daily-version-branch-routines.yaml`
-- platform dispatcher role sources и rendered `paperclips/dist/uaudit/codex/`
-- `paperclips/projects/uaudit/runtime/uaudit_delivery_contract.py` и новый
-  source-transition/resolution utility
-- `paperclips/scripts/reconcile_uaudit_routines.py`
-- `paperclips/tests/test_uaudit_delivery_contract.py`,
-  `paperclips/tests/test_uaudit_dispatcher_bundles.py`, docs/runbook
+## Transition workflow
 
-## Delta matrix и тесты до кода
+Добавить отдельный `audit_kind=release_transition`, а не перегружать
+`daily_delta` или `forced_full`. Immutable `source_ref` содержит selected
+release, master anchors, mode и список именованных segments. Новый
+`reconcile-transition` проверяет receipt и manifest, затем один раз атомарно
+продвигает platform state/cursor. Daily limits в этом mode не применяются.
 
-| Slice | Базовый аналог | Новый delta | Риск | Проверка |
-|---|---|---|---|---|
-| Source selection | Platform dispatcher + direct remote fetch contract | `cursor..master` только при ancestry; затем `master..next-version` как единый transition audit | Высокий | Fake refs: cursor в master/нет в master, version появляется/отсутствует, remote unavailable |
-| Rewrite transition | `reconcile_daily` receipt/CAS | Ledger + evidence-bound recovery; no SHA reset on non-ancestor | Высокий | ancestor, non-ancestor, incomplete equivalence, receipt conflict, idempotent resume |
-| iOS stale generation | Existing lock/CAS validation | Quarantine/resume protocol, no direct lock deletion | Высокий | valid terminal resume, incomplete run, conflicting artifacts, next run gets lock only after quarantine |
-| Routine liveness | Revision-safe reconciler + partial-apply tests | Validate live schedule/execution state, fail closed on unknown schema | Высокий | active/future run green; inactive/past/missing-field/409 fail; rerun converges |
+## Generation и stale-lock recovery
 
-## Acceptance criteria
+При bind создаётся immutable generation ledger:
 
-1. Каждый run пишет selected branch/mode/SHA в immutable evidence; локальные
-   refs не могут определять HEAD.
-2. При появлении следующей version audit объединяет проверенный
-   `cursor..master` с `master..version` без дублей и ставит cursor на version
-   HEAD только после единого receipt-led delivery. При отсутствии cursor в
-   master master полностью игнорируется.
-3. Rebase/delete/recreate не приводит к silent cursor movement; переход
-   возможен только после полного receipt-bound recovery evidence.
-4. iOS stale `UNS-538` не блокирует новый audit после подтверждённой quarantine
-   или resume, а cursor меняется только helper-ом.
-5. Reconciler выдаёт non-zero/blocker при inactive routine, отсутствии future
-   next run, active stale generation или неизвестном API liveness schema.
-6. Оба platform daily runners проходят manual proof и отправляют русские v1
-   отчёты; schedules затем имеют future next-run.
-7. Узкие unit tests, docs validator, bundle build и relevant full tests зелёные;
-   generated output согласован с source.
+`state/apps/<app_id>/generations/<stable-routine-key>/<generation-id>.json`
 
-## Verification и deploy
+В нём: `app_id`, issue/execution IDs, creation/heartbeat times, run path, source
+manifest, receipt state, retry count и artifact hashes. Lock key становится
+стабильным внутри приложения для платформы (`<app_id>:uaudit-daily-android`), а
+не зависит от `0.50`.
 
-1. Сначала targeted pytest для source resolver, helper transition, reconciler
-   и bundles; затем `python3 paperclips/scripts/validate_uaudit_docs.py` и
-   `paperclips/validate-codex-target.sh`.
-2. Run full relevant Paperclip tests и review diff against this matrix.
-3. После PR approval: deploy rendered agents/source по approved runbook,
-   read-only routine liveness check, repair iOS, manual Android/iOS proof,
-   then enable routines.
-4. На каждом live step сохранить redacted issue/receipt/lock evidence; никаких
-   токенов, raw diffs или manual cursor writes.
+Recovery controller классифицирует run:
 
-## Open execution gates
+| Состояние | Действие |
+|---|---|
+| Matching receipt и cursor marker | Идемпотентно завершить workflow, снять lock. |
+| Receipt есть, cursor отсутствует | Reconcile только cursor/workflow; Telegram не дублировать. |
+| Нет receipt, run завершён/утрачен | Атомарно quarantine ledger+lock evidence, создать новый recovery от unchanged cursor. |
+| Run активен и lease свежий | Не трогать; один queued health retry. |
+| Артефакты противоречат | Quarantine с evidence, автоматический full recovery. |
+| Partial или blocked terminal generation | Cursor не менять; quarantine generation и автоматически запустить full recovery от canonical cursor до current selected HEAD. |
 
-- Перед реализацией нужен read-only live API probe, чтобы зафиксировать точные
-  schedule/next-run/execution поля; текущий iMac недоступен.
-- Базовый worktree надо безопасно обновить до `origin/develop` без включения
-  существующих user-owned dirty файлов.
-- Эта спецификация требует явного approval перед implementation/deploy.
+Quarantine — атомарное перемещение в `state/quarantine/...`, не `rm`.
+
+## Liveness supervisor
+
+Отдельный periodic controller, не config reconciler. Каждые 5 минут он читает
+все enabled routine records каждого приложения и валидирует schema. Green только
+если для каждой `(app_id, routine_key)`:
+
+- routine active, ровно один enabled expected trigger/cron/timezone;
+- future `nextRunAt`, last trigger в допустимом окне;
+- последнему expected slot соответствует terminal run/issue либо живой generation
+  в пределах lease;
+- нет stale Paperclip/filesystem lock и ledger согласован с issue/run.
+
+`failed`/отсутствующий issue создаёт ровно один recovery issue; `coalesced`
+исследует active generation. После первого пропуска — alert, затем capped
+automatic backoff. Unknown API schema — visible retryable degradation, не green.
+
+## Product decisions до реализации
+
+## Выбранная availability-first политика
+
+1. Любой terminal `blocked` или `partial` audit не удерживает платформу.
+   Его cursor не продвигается, generation вместе с lock evidence quarantine-ится,
+   а следующий автоматический запуск выполняет полный audit от canonical cursor
+   до актуального selected HEAD. Human approval не является зависимостью для
+   запуска следующего полного audit.
+2. Если новая release ветка создана от старого master и не содержит current
+   hotfix `Y`, не ждать rebase. Выпускать два независимых receipt-bound reports:
+   master hotfix segment и release segment. `master_audited_through_sha` и
+   release cursor ведутся раздельно, поэтому несвязанные истории не склеиваются.
+3. Health supervisor проверяет состояние каждые 5 минут. Живой generation не
+   трогается, пока обновляется heartbeat; terminal failure quarantine-ится сразу,
+   потерянный generation — после трёх пропусков heartbeat (15 минут).
+4. Если full recovery снова завершается partial/blocked, применяется тот же
+   цикл quarantine + capped backoff + новый полный audit. Это не вечный lock и
+   не ручная операция; cursor остаётся на последнем complete receipt.
+
+## Тесты до кода
+
+1. Normal/no-change/bridge/version-transition source resolver fixtures.
+2. `X..A` vs `Y..B`: exact mapping, changed patch, merge/squash/ambiguous full
+   recovery, missing historical objects.
+3. Receipt-before-transition CAS, crash before cursor, crash after send,
+   idempotent duplicate recovery.
+4. Concurrent recovery: только один process quarantine/create выигрывает.
+5. Active lock, dead lock, contradictory receipt/marker, partial P-1 A/B.
+6. Live routine fixture: disabled/multiple trigger, stale next-run, failed run,
+   coalesced live vs abandoned generation, unknown API schema, backoff.
+7. Generated bundles/direct-fetch contract, helper schema and source/docs build.
+8. Два приложения с одинаковой platform/branch/issue-like identifier: cursors,
+   locks, retries, receipts, schedules и Telegram labels изолированы по `app_id`.
+9. Migration текущего UAudit в `app_id=unstoppable_wallet` сохраняет cursor,
+   receipt и active generation без cross-app default.
+
+## Verification and deployment
+
+Перед кодом: безопасно перенести implementation branch на `origin/develop` без
+user-owned dirty files. После кода: narrow pytest, docs/bundle validators,
+relevant full Paperclip suite, then staged deploy. Live proof: recovery iOS,
+manual run Android+iOS, healthy future schedule slots and Russian receipts.
+No secrets/raw diffs are written to artifacts, comments or reports.
