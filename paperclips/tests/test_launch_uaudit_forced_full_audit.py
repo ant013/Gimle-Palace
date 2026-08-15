@@ -17,6 +17,7 @@ SPEC.loader.exec_module(MODULE)
 def routine(platform: str) -> dict[str, str]:
     return {
         "id": f"daily-{platform}-version-0.50",
+        "app_id": "unstoppable_wallet",
         "platform": platform,
         "branch": "version/0.50",
         "repo_local_path_template": "{{paths.repo}}",
@@ -26,11 +27,12 @@ def routine(platform: str) -> dict[str, str]:
 
 def test_full_range_payload_requires_canonical_refs_and_forbids_cursor_mutation(tmp_path, monkeypatch):
     monkeypatch.setattr(MODULE, "git", lambda *_args: "")
-    config = {"routines": [routine("android"), routine("ios")]}
+    config = {"apps": [{"id": "unstoppable_wallet", "enabled": True}], "routines": [routine("android"), routine("ios")]}
     payloads = MODULE.build_payloads(
         config,
         {"repo": str(tmp_path)},
         {"UWACTO": "android-dispatcher", "UWICTO": "ios-dispatcher"},
+        "unstoppable_wallet",
         "all",
         "a" * 40,
         "b" * 40,
@@ -38,6 +40,7 @@ def test_full_range_payload_requires_canonical_refs_and_forbids_cursor_mutation(
     assert len(payloads) == 2
     assert all("UAudit forced full-range audit" in item["description"] for item in payloads)
     assert all("daily_limits_bypassed: true" in item["description"] for item in payloads)
+    assert all("app_id: unstoppable_wallet" in item["description"] for item in payloads)
     assert all("cursor_mutation: forbidden" in item["description"] for item in payloads)
     assert all("schedule_mutation: forbidden" in item["description"] for item in payloads)
 
@@ -45,9 +48,10 @@ def test_full_range_payload_requires_canonical_refs_and_forbids_cursor_mutation(
 def test_full_range_payload_rejects_non_sha(tmp_path):
     with pytest.raises(ValueError, match="from_sha"):
         MODULE.build_payloads(
-            {"routines": [routine("android")]},
+            {"apps": [{"id": "unstoppable_wallet", "enabled": True}], "routines": [routine("android")]},
             {"repo": str(tmp_path)},
             {"UWACTO": "android-dispatcher"},
+            "unstoppable_wallet",
             "android",
             "not-a-sha",
             "b" * 40,

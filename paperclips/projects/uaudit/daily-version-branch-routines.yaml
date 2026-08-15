@@ -1,6 +1,12 @@
-schemaVersion: 1
+schemaVersion: 2
 project: uaudit
 marker: UAudit daily version-branch delta audit
+
+apps:
+  - id: unstoppable_wallet
+    display_name: Unstoppable Wallet
+    enabled: true
+    report_route: UAudit
 
 limits:
   max_commits: 30
@@ -9,6 +15,7 @@ limits:
 
 routines:
   - id: daily-android-version-0.50
+    app_id: unstoppable_wallet
     routine_key: uaudit-daily-android
     title: UAudit daily Android version delta audit
     platform: android
@@ -33,6 +40,7 @@ routines:
     codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
 
   - id: daily-ios-version-0.50
+    app_id: unstoppable_wallet
     routine_key: uaudit-daily-ios
     title: UAudit daily iOS version delta audit
     platform: ios

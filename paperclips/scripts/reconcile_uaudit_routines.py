@@ -40,6 +40,7 @@ DAILY_CHAIN_KEYS = {
 }
 ROUTINE_REQUIRED_STRINGS = (
     "id",
+    "app_id",
     "routine_key",
     "title",
     "platform",
@@ -50,7 +51,7 @@ ROUTINE_REQUIRED_STRINGS = (
     "infra_executor",
     "pr_audit_coordinator",
 )
-IDENTITY_FIELDS = ("routine_key", "platform")
+IDENTITY_FIELDS = ("app_id", "routine_key", "platform")
 
 
 def _single_line(value: Any, where: str) -> str:
@@ -71,13 +72,26 @@ def load_config(path: Path = DEFAULT_CONFIG) -> dict[str, Any]:
     data = yaml.safe_load(path.read_text())
     if not isinstance(data, dict):
         raise ValueError(f"{path}: root must be mapping")
-    if data.get("schemaVersion") != 1:
-        raise ValueError(f"{path}: schemaVersion must be 1")
+    if data.get("schemaVersion") != 2:
+        raise ValueError(f"{path}: schemaVersion must be 2")
     marker = _single_line(data.get("marker"), f"{path}: marker")
     limits = data.get("limits")
     routines = data.get("routines")
-    if not isinstance(limits, dict) or not isinstance(routines, list) or not routines:
-        raise ValueError(f"{path}: expected limits mapping and non-empty routines list")
+    apps = data.get("apps")
+    if not isinstance(limits, dict) or not isinstance(routines, list) or not routines or not isinstance(apps, list) or not apps:
+        raise ValueError(f"{path}: expected apps, limits, and non-empty routines lists")
+    app_ids: set[str] = set()
+    for index, app in enumerate(apps):
+        if not isinstance(app, dict):
+            raise ValueError(f"{path}: apps[{index}] must be a mapping")
+        app_id = _single_line(app.get("id"), f"{path}: apps[{index}].id")
+        if app_id in app_ids:
+            raise ValueError(f"{path}: app ids must be unique")
+        if not isinstance(app.get("enabled"), bool):
+            raise ValueError(f"{path}: apps[{index}].enabled must be boolean")
+        _single_line(app.get("display_name"), f"{path}: apps[{index}].display_name")
+        _single_line(app.get("report_route"), f"{path}: apps[{index}].report_route")
+        app_ids.add(app_id)
     for key in ("max_commits", "max_files", "max_diff_lines"):
         if not isinstance(limits.get(key), int) or limits[key] <= 0:
             raise ValueError(f"{path}: limits.{key} must be positive integer")
@@ -88,6 +102,8 @@ def load_config(path: Path = DEFAULT_CONFIG) -> dict[str, Any]:
             raise ValueError(f"{path}: routines[{index}] must be a mapping")
         for key in ROUTINE_REQUIRED_STRINGS:
             _single_line(routine.get(key), f"{path}: routines[{index}].{key}")
+        if routine["app_id"] not in app_ids:
+            raise ValueError(f"{path}: routines[{index}].app_id is not registered")
         if routine["platform"] not in {"android", "ios"}:
             raise ValueError(f"{path}: routines[{index}].platform must be android or ios")
         if not routine["branch"].startswith("version/"):
@@ -115,8 +131,10 @@ def load_config(path: Path = DEFAULT_CONFIG) -> dict[str, Any]:
             )
         validated.append(routine)
 
-    for key in ("id", "routine_key", "title", "platform"):
+    for key in ("id", "title"):
         _require_unique([routine[key] for routine in validated], f"{path}: routine {key} values")
+    _require_unique([f"{routine['app_id']}:{routine['routine_key']}" for routine in validated], f"{path}: app-scoped routine keys")
+    _require_unique([f"{routine['app_id']}:{routine['platform']}" for routine in validated], f"{path}: app-scoped platforms")
     data["marker"] = marker
     return data
 
@@ -228,6 +246,7 @@ def render_description(config: dict[str, Any], routine: dict[str, Any], paths: d
     return "\n".join(
         (
             config["marker"],
+            f"app_id: {routine['app_id']}",
             f"routine_key: {routine['routine_key']}",
             f"platform: {routine['platform']}",
             f"branch: {routine['branch']}",
@@ -244,12 +263,12 @@ def _match_live_routine(
 ) -> dict[str, Any]:
     marker = config["marker"]
     identities = [(item, _description_identity(item, marker)) for item in current]
-    by_key = [item for item, identity in identities if identity.get("routine_key") == routine["routine_key"]]
+    by_key = [item for item, identity in identities if identity.get("routine_key") == routine["routine_key"] and identity.get("app_id") in (None, routine["app_id"])]
     if len(by_key) > 1:
         raise ValueError(f"routine key {routine['routine_key']!r} matches multiple live routines")
     if by_key:
         identity = next(identity for item, identity in identities if item is by_key[0])
-        if identity.get("platform") != routine["platform"]:
+        if identity.get("app_id") not in (None, routine["app_id"]) or identity.get("platform") != routine["platform"]:
             raise ValueError(
                 f"routine key {routine['routine_key']!r} has conflicting platform identity"
             )
@@ -309,6 +328,7 @@ def _plan_one(
         patch["baseRevisionId"] = live_revision
     return {
         "routine_id": routine["id"],
+        "app_id": routine["app_id"],
         "routine_key": routine["routine_key"],
         "platform": routine["platform"],
         "dispatcher": dispatcher,
