@@ -238,6 +238,25 @@ PY
   log ok "UAudit delivery helper installed read-only: $destination"
 }
 
+ensure_uaudit_telegram_plugin_binding() {
+  local plugins_file="$1" registry_file="${HOME}/.paperclip/host-plugins.yaml" plugin_id plugin
+  if [ ! -f "$plugins_file" ] && [ -f "$registry_file" ]; then
+    plugin_id=$(yq -r '.telegram.plugin_id // ""' "$registry_file")
+    if [ -n "$plugin_id" ] && [ "$plugin_id" != "null" ]; then
+      YQ_UAUDIT_PLUGIN_ID="$plugin_id" yq -n '.schemaVersion = 2 | .telegram.plugin_id = strenv(YQ_UAUDIT_PLUGIN_ID)' > "$plugins_file"
+      chmod 600 "$plugins_file"
+      log ok "restored UAudit Telegram plugin binding from host registry"
+    fi
+  fi
+  [ -f "$plugins_file" ] || die "UAudit Telegram plugin binding is missing; install/register the Telegram plugin first"
+  plugin_id=$(yq -r '.telegram.plugin_id // ""' "$plugins_file")
+  [[ "$plugin_id" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] || die "UAudit Telegram plugin_id must be a UUID"
+  [ "$plugin_id" != "00000000-0000-0000-0000-000000000000" ] || die "UAudit Telegram plugin_id is the CI placeholder"
+  plugin=$(paperclip_get "/api/plugins/${plugin_id}") || die "UAudit Telegram plugin ${plugin_id} is not registered or unavailable"
+  [ "$(printf '%s' "$plugin" | jq -r '.pluginKey // ""')" = "paperclip-plugin-telegram" ] || die "UAudit plugin_id does not identify the Telegram plugin"
+  [ "$(printf '%s' "$plugin" | jq -r '.status // ""')" = "ready" ] || die "UAudit Telegram plugin is not ready"
+}
+
 manifest="${REPO_ROOT}/paperclips/projects/${project_key}/paperclip-agent-assembly.yaml"
 [ -f "$manifest" ] || die "manifest not found: $manifest"
 
@@ -317,6 +336,7 @@ if [ "$project_key" = "uaudit" ]; then
   [ -n "$team_root" ] && [ "$team_root" != "null" ] || \
     die "team_workspace_root required to install UAudit delivery helper"
   install_uaudit_delivery_helper "$team_root"
+  ensure_uaudit_telegram_plugin_binding "$plugins_file"
 fi
 
 # Step 5: company create-or-reuse
