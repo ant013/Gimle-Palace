@@ -41,17 +41,22 @@ def git(repo: Path, *args: str) -> str:
     return result.stdout.strip()
 
 
-def selected(config: dict[str, Any], platform: str) -> list[dict[str, Any]]:
-    choices = config["routines"] if platform == "all" else [r for r in config["routines"] if r["platform"] == platform]
+def selected(config: dict[str, Any], app_id: str, platform: str) -> list[dict[str, Any]]:
+    apps = {app["id"]: app for app in config["apps"]}
+    if app_id not in apps:
+        raise ValueError(f"unknown app_id: {app_id}")
+    if not apps[app_id]["enabled"]:
+        raise ValueError(f"app_id is disabled: {app_id}")
+    choices = [r for r in config["routines"] if r["app_id"] == app_id and (platform == "all" or r["platform"] == platform)]
     if not choices or len(choices) != (2 if platform == "all" else 1):
         raise ValueError(f"missing routine for platform {platform}")
     return choices
 
 
-def build_payloads(config: dict[str, Any], paths: dict[str, Any], agents: dict[str, str], platform: str, from_sha: str, to_sha: str) -> list[dict[str, Any]]:
+def build_payloads(config: dict[str, Any], paths: dict[str, Any], agents: dict[str, str], app_id: str, platform: str, from_sha: str, to_sha: str) -> list[dict[str, Any]]:
     from_sha, to_sha = sha(from_sha, "from_sha"), sha(to_sha, "to_sha")
     payloads: list[dict[str, Any]] = []
-    for routine in selected(config, platform):
+    for routine in selected(config, app_id, platform):
         repo = Path(resolve(routine["repo_local_path_template"], {"paths": paths}))
         if not repo.is_dir():
             raise ValueError(f"declared checkout does not exist: {repo}")
@@ -64,6 +69,7 @@ def build_payloads(config: dict[str, Any], paths: dict[str, Any], agents: dict[s
             "mode: forced_full_range",
             "audit_kind: forced_full",
             "daily_limits_bypassed: true",
+            f"app_id: {routine['app_id']}",
             f"platform: {routine['platform']}",
             f"routine_id: {routine['id']}",
             f"branch: {routine['branch']}",
@@ -85,6 +91,7 @@ def build_payloads(config: dict[str, Any], paths: dict[str, Any], agents: dict[s
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--app-id", default="unstoppable_wallet")
     parser.add_argument("--platform", choices=("android", "ios", "all"), default="all")
     parser.add_argument("--from-sha", required=True)
     parser.add_argument("--to-sha", required=True)
@@ -101,7 +108,7 @@ def main() -> int:
         if not args.confirm_unbounded:
             raise ValueError("--confirm-unbounded is required")
         config, paths = load_config(args.config), load_paths("uaudit", args.paths)
-        payloads = build_payloads(config, paths, resolve_agent_ids("uaudit", args.bindings), args.platform, args.from_sha, args.to_sha)
+        payloads = build_payloads(config, paths, resolve_agent_ids("uaudit", args.bindings), args.app_id, args.platform, args.from_sha, args.to_sha)
         result: dict[str, Any] = {"mode": "apply" if args.apply else "dry-run", "issues": payloads}
         if args.apply:
             if not args.company_id:

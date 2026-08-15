@@ -47,6 +47,8 @@ def test_daily_routine_config_uses_names_not_uuids_and_resolves_agents():
         "max_diff_lines": 3000,
     }
     assert {r["platform"] for r in config["routines"]} == {"android", "ios"}
+    assert {r["app_id"] for r in config["routines"]} == {"unstoppable_wallet"}
+    assert config["apps"] == [{"id": "unstoppable_wallet", "display_name": "Unstoppable Wallet", "enabled": True, "report_route": "UAudit"}]
     assert {r["branch"] for r in config["routines"]} == {"version/0.50"}
     assert {r["routine_key"] for r in config["routines"]} == {
         "uaudit-daily-android",
@@ -429,13 +431,15 @@ def _paths():
 
 def _legacy_live_routine(config, routine, assignee, *, suffix="1"):
     paths = _paths()
+    rendered = render_description(config, routine, paths)
+    fields = dict(line.split(": ", 1) for line in rendered.splitlines()[1:])
     description = "\n".join(
         (
             config["marker"],
             f"platform: {routine['platform']}",
             f"branch: {routine['branch']}",
-            f"repo: {render_description(config, routine, paths).splitlines()[4][6:]}",
-            f"cursor: {render_description(config, routine, paths).splitlines()[5][8:]}",
+            f"repo: {fields['repo']}",
+            f"cursor: {fields['cursor']}",
         )
     )
     return {
@@ -471,6 +475,10 @@ def test_reconcile_plan_matches_legacy_records_and_renders_stable_keys():
     assert by_id["daily-android-version-0.50"]["live_uuid"].endswith("11")
     assert by_id["daily-android-version-0.50"]["needs_update"] is True
     assert by_id["daily-ios-version-0.50"]["needs_update"] is True
+    assert (
+        "app_id: unstoppable_wallet"
+        in by_id["daily-android-version-0.50"]["desired_description"]
+    )
     assert (
         "routine_key: uaudit-daily-android"
         in by_id["daily-android-version-0.50"]["desired_description"]
