@@ -10,8 +10,8 @@
 # Probe questions per spec §12.C table.
 PROBE_Q_MCP_LIST="List the MCP server namespaces you can call. Reply with comma-separated names only, no commentary."
 PROBE_Q_GIT_CAPABILITY="What git operations CAN you do, and what CANNOT you do? Be precise. Reply with two short lists."
-PROBE_Q_HANDOFF_PROCEDURE="Describe step-by-step how you handoff a task to another agent in this team. Include the exact API endpoints you call."
-PROBE_Q_PHASE_ORCHESTRATION="List the phase numbers you orchestrate (e.g. 1.1, 1.2, ...), comma-separated. If you do not orchestrate phases, reply: NONE."
+PROBE_Q_HANDOFF_PROCEDURE="Describe the exact handoff order: POST the evidence comment to /api/issues/{id}/comments and require 2xx; only then PATCH /api/issues/{id} with assignee/status; verify exactly once with a read-only request; then STOP."
+PROBE_Q_PHASE_ORCHESTRATION="State the workflow responsibility you own. outer_walker owns roadmap selection only; inner_orchestrator owns child phases 1-7; all other workflow roles reply exactly: NONE."
 
 # Per-profile expected markers.
 EXPECTED_MCP_LIST="codebase-memory serena context7 github sequential-thinking"
@@ -29,22 +29,56 @@ EXPECTED_GIT_research_must_not_have="commit push merge"
 EXPECTED_GIT_qa_must_have="commit push"
 EXPECTED_GIT_qa_must_not_have="release-cut"
 
-EXPECTED_HANDOFF_must_have="PATCH @"
+EXPECTED_HANDOFF_must_have="POST /comments PATCH /api/issues/ verify STOP"
 EXPECTED_HANDOFF_must_not_have=""
 
-EXPECTED_PHASES_cto_must_have="1.1 1.2 2 3.1 3.2 4.1 4.2"
+EXPECTED_PHASES_outer_walker_must_have="outer_walker roadmap"
+EXPECTED_PHASES_inner_orchestrator_must_have="inner_orchestrator 1 2 3 4 5 6 7"
+
+_record_smoke_issue() {
+  local issue_id="$1"
+  [ -n "${SMOKE_ISSUE_LOG:-}" ] || return 0
+  [[ "$issue_id" =~ ^[0-9a-fA-F-]{36}$ ]] || {
+    log err "invalid smoke issue id: $issue_id"
+    return 1
+  }
+  printf '%s\n' "$issue_id" >> "$SMOKE_ISSUE_LOG"
+}
+
+cleanup_smoke_issues() {
+  local issue_log="$1"
+  [ -f "$issue_log" ] || return 0
+  local failed=0 issue_id
+  while IFS= read -r issue_id; do
+    [ -n "$issue_id" ] || continue
+    if [[ ! "$issue_id" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+      log err "refusing invalid smoke issue id in cleanup log: $issue_id"
+      failed=$((failed + 1))
+      continue
+    fi
+    if paperclip_delete_issue "$issue_id" >/dev/null; then
+      log ok "deleted disposable smoke issue $issue_id"
+    else
+      log err "failed to delete disposable smoke issue $issue_id"
+      failed=$((failed + 1))
+    fi
+  done < "$issue_log"
+  return "$failed"
+}
 
 # post_question_wait_reply <company_id> <agent_uuid> <question_text> <timeout_s>
 # Returns reply text on stdout; empty if timeout.
 post_question_wait_reply() {
   local company="$1"; local uuid="$2"; local question="$3"; local timeout_s="${4:-90}"
-  local title="smoke-probe-$(date -u +%Y%m%dT%H%M%SZ)-$RANDOM"
+  local title
+  title="smoke-probe-$(date -u +%Y%m%dT%H%M%SZ)-$RANDOM"
   local body
   body=$(jq -n --arg c "$company" --arg a "$uuid" --arg t "$title" --arg q "$question" \
-    '{companyId: $c, title: $t, body: $q, status: "todo", assigneeAgentId: $a}')
+    '{companyId: $c, title: $t, description: $q, status: "todo", assigneeAgentId: $a}')
   local issue_id
   issue_id=$(paperclip_post "/api/companies/${company}/issues" "$body" | jq -r .id)
   [ -n "$issue_id" ] && [ "$issue_id" != "null" ] || { log warn "issue create failed"; echo ""; return 1; }
+  _record_smoke_issue "$issue_id" || return 1
 
   local elapsed=0
   while [ "$elapsed" -lt "$timeout_s" ]; do
@@ -87,10 +121,26 @@ _check_markers() {
   return 0
 }
 
-# probe_agent_for_profile <company> <uuid> <name> <profile>
+# Git probes require separate Can and Cannot lists. Existing profile fragments
+# define the capabilities; this helper keeps an operation named under Cannot
+# from being mistaken for an allowed capability.
+_git_can_section() {
+  awk 'tolower($0) ~ /^[[:space:]]*cannot[[:space:]]*:/ { exit } { print }'
+}
+
+# probe_agent_for_profile <company> <uuid> <name> <profile> <workflow_role>
 probe_agent_for_profile() {
   local company="$1"; local uuid="$2"; local name="$3"; local profile="$4"
+  local workflow_role="${5:-}"
   local fail=0
+
+  if [ -z "$workflow_role" ] || [ "$workflow_role" = "null" ]; then
+    if [ "$profile" = "cto" ]; then
+      workflow_role="inner_orchestrator"
+    else
+      workflow_role="$profile"
+    fi
+  fi
 
   # Probe 1: MCP list (all profiles)
   local reply
@@ -99,7 +149,8 @@ probe_agent_for_profile() {
     log err "  $name: no reply to mcp_list within 90s"
     fail=$((fail + 1))
   else
-    _check_markers "$reply" "$EXPECTED_MCP_LIST" "" "$name/mcp_list" || fail=$((fail + 1))
+    _check_markers "$reply" "${SMOKE_EXPECTED_MCP_LIST:-$EXPECTED_MCP_LIST}" "" \
+      "$name/mcp_list" || fail=$((fail + 1))
   fi
 
   # Probe 2: git capability (per profile)
@@ -108,12 +159,16 @@ probe_agent_for_profile() {
     log err "  $name: no reply to git_capability"
     fail=$((fail + 1))
   else
-    # IMP-D fix: bash indirect expansion instead of dynamic shell evaluation.
-    local mh_var="EXPECTED_GIT_${profile}_must_have"
-    local mn_var="EXPECTED_GIT_${profile}_must_not_have"
+    # Git capability is defined by the composed profile fragments. Workflow
+    # identity is intentionally reserved for phase orchestration below.
+    local git_policy="$profile"
+    local mh_var="EXPECTED_GIT_${git_policy}_must_have"
+    local mn_var="EXPECTED_GIT_${git_policy}_must_not_have"
     must_have="${!mh_var:-}"
     must_not="${!mn_var:-}"
-    _check_markers "$reply" "${must_have:-}" "${must_not:-}" "$name/git_capability($profile)" || fail=$((fail + 1))
+    _check_markers "$reply" "${must_have:-}" "" "$name/git_capability($git_policy)" || fail=$((fail + 1))
+    git_can_reply=$(_git_can_section <<<"$reply")
+    _check_markers "$git_can_reply" "" "${must_not:-}" "$name/git_capability($git_policy)" || fail=$((fail + 1))
   fi
 
   # Probe 3: handoff procedure (skip for custom/minimal)
@@ -130,17 +185,23 @@ probe_agent_for_profile() {
       ;;
   esac
 
-  # Probe 4: phase orchestration (cto vs others)
+  # Probe 4: phase responsibility follows workflow identity, not prompt profile.
   reply=$(post_question_wait_reply "$company" "$uuid" "$PROBE_Q_PHASE_ORCHESTRATION" 90)
   if [ -z "$reply" ]; then
     log err "  $name: no reply to phase_orchestration"
     fail=$((fail + 1))
   else
-    if [ "$profile" = "cto" ]; then
-      _check_markers "$reply" "$EXPECTED_PHASES_cto_must_have" "" "$name/phases(cto)" || fail=$((fail + 1))
-    else
-      _check_markers "$reply" "" "1.1 4.2 release-cut" "$name/phases(non-cto)" || fail=$((fail + 1))
-    fi
+    case "$workflow_role" in
+      outer_walker)
+        _check_markers "$reply" "$EXPECTED_PHASES_outer_walker_must_have" "1 2 3 4 5 6 7" "$name/phases($workflow_role)" || fail=$((fail + 1))
+        ;;
+      inner_orchestrator)
+        _check_markers "$reply" "$EXPECTED_PHASES_inner_orchestrator_must_have" "outer_walker" "$name/phases($workflow_role)" || fail=$((fail + 1))
+        ;;
+      *)
+        _check_markers "$reply" "NONE" "outer_walker inner_orchestrator release-cut" "$name/phases($workflow_role)" || fail=$((fail + 1))
+        ;;
+    esac
   fi
 
   if [ "$fail" -eq 0 ]; then
@@ -152,14 +213,17 @@ probe_agent_for_profile() {
 # probe_e2e_handoff <company> <cto_uuid> <cto_name> <next_uuid> <next_name>
 probe_e2e_handoff() {
   local company="$1"; local cto_uuid="$2"; local cto_name="$3"; local next_uuid="$4"; local next_name="$5"
-  local question="Reassign this issue to agent ${next_name} (uuid ${next_uuid}) and ask them to reply with exactly: 'cross-target ack'. Then STOP."
+  local question="POST an evidence comment to /api/issues/{id}/comments ending with @${next_name}; require 2xx. Then PATCH /api/issues/{id} to assign ${next_name} (uuid ${next_uuid}) and keep status todo. Perform exactly one read-only verification of assignee/status, ask them to reply exactly 'cross-target ack', then STOP."
 
-  local title="smoke-e2e-$(date -u +%Y%m%dT%H%M%SZ)"
+  local title
+  title="smoke-e2e-$(date -u +%Y%m%dT%H%M%SZ)"
   local body
   body=$(jq -n --arg c "$company" --arg a "$cto_uuid" --arg t "$title" --arg q "$question" \
-    '{companyId: $c, title: $t, body: $q, status: "todo", assigneeAgentId: $a}')
+    '{companyId: $c, title: $t, description: $q, status: "todo", assigneeAgentId: $a}')
   local issue_id
   issue_id=$(paperclip_post "/api/companies/${company}/issues" "$body" | jq -r .id)
+  [ -n "$issue_id" ] && [ "$issue_id" != "null" ] || { log err "e2e issue create failed"; return 1; }
+  _record_smoke_issue "$issue_id" || return 1
 
   local timeout=180; local elapsed=0
   while [ "$elapsed" -lt "$timeout" ]; do
@@ -169,6 +233,15 @@ probe_e2e_handoff() {
     local current_assignee
     current_assignee=$(echo "$issue" | jq -r '.assigneeAgentId // ""')
     if [ "$current_assignee" = "$next_uuid" ]; then
+      local handoff_comments handoff_comment
+      handoff_comments=$(paperclip_get "/api/issues/${issue_id}/comments" 2>/dev/null || echo "[]")
+      handoff_comment=$(echo "$handoff_comments" | jq -r --arg a "$cto_uuid" --arg n "$next_name" \
+        '[.[] | select(.authorAgentId == $a and (.body | contains("@" + $n)))] | last.body // ""')
+      if [ -z "$handoff_comment" ]; then
+        log err "  ${cto_name} reassigned without the required prior evidence comment"
+        paperclip_patch "/api/issues/${issue_id}" '{"status": "done"}' >/dev/null 2>&1 || true
+        return 1
+      fi
       log ok "  CTO reassigned to ${next_name}; waiting for ack reply"
       while [ "$elapsed" -lt "$timeout" ]; do
         sleep 10; elapsed=$((elapsed + 10))

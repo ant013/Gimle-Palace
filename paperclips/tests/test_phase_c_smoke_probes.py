@@ -47,3 +47,38 @@ def test_sources_without_error():
     )
     assert out.returncode == 0, out.stderr
     assert "ok" in out.stdout
+
+
+def test_handoff_contract_requires_comment_then_patch_verify_and_stop():
+    text = LIB.read_text()
+    for marker in ["POST", "/comments", "PATCH", "/api/issues/", "verify", "STOP"]:
+        assert marker in text, f"missing handoff marker: {marker}"
+    assert text.index("POST") < text.index("PATCH")
+
+
+def test_disposable_issues_are_recorded_and_deleted_by_exact_id():
+    text = LIB.read_text()
+    assert "_record_smoke_issue" in text
+    assert "cleanup_smoke_issues" in text
+    assert "paperclip_delete_issue" in text
+
+
+def test_phase_responsibility_is_keyed_by_workflow_role():
+    text = LIB.read_text()
+    assert "workflow_role" in text
+    assert "outer_walker" in text
+    assert "inner_orchestrator" in text
+
+
+def test_git_capability_policy_follows_profile_not_workflow_role():
+    text = LIB.read_text()
+    assert 'git_policy="$profile"' in text
+    assert "EXPECTED_GIT_outer_walker" not in text
+    assert "EXPECTED_GIT_inner_orchestrator" not in text
+
+
+def test_probe_questions_use_create_issue_description_field():
+    """Paperclip create-issue accepts task text as description, not body."""
+    text = LIB.read_text()
+    assert text.count("description: $q") == 2
+    assert "body: $q" not in text

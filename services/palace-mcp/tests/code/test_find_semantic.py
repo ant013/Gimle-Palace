@@ -745,6 +745,18 @@ async def test_deleted_post_snapshot_hit_is_marked_stale(
     async def _resolve_repo_path(_: str) -> Path:
         return repo_path
 
+    # Freshness now derives from the authoritative :Project.indexed_commit, not
+    # the per-hit commit_sha — so the project node carries repo_path + the
+    # 1-behind indexed_commit that the freshness compare must see.
+    project_node = {
+        "slug": "wallet-core",
+        "repo_path": str(repo_path),
+        "indexed_commit": indexed_commit,
+    }
+
+    async def _fetch_node(_: str) -> dict[str, Any]:
+        return project_node
+
     with (
         patch(
             "palace_mcp.code.find_semantic.get_embedding_dispatcher",
@@ -757,6 +769,10 @@ async def test_deleted_post_snapshot_hit_is_marked_stale(
         patch(
             "palace_mcp.code.find_semantic._resolve_registered_repo_path",
             _resolve_repo_path,
+        ),
+        patch(
+            "palace_mcp.code.find_semantic._fetch_project_node",
+            _fetch_node,
         ),
     ):
         result = await semantic_search(
@@ -1337,3 +1353,240 @@ async def test_multi_project_issues_per_project_hnsw_queries() -> None:
     # All three projects represented — per-project budget ensures fairness
     result_projects = {r["project"] for r in result["result"]}
     assert result_projects == {"alpha", "beta", "gamma"}
+
+
+@pytest.mark.asyncio
+async def test_row_freshness_uses_project_indexed_commit_not_per_hit_sha(
+    tmp_path: Path,
+) -> None:
+    """Regression (SEMANTIC-ROW-FRESHNESS): embedded rows carry a null/stale
+    per-occurrence commit_sha, so freshness must derive from the authoritative
+    :Project.indexed_commit. Previously every row reported
+    indexed_commit=null / stale=null regardless of the project's real state."""
+    from palace_mcp.code.find_semantic import semantic_search
+
+    repo_path = tmp_path / "wallet-core"
+    repo_path.mkdir()
+    _run(["git", "init", "-q", "-b", "main"], cwd=repo_path)
+    _run(["git", "config", "user.email", "t@t"], cwd=repo_path)
+    _run(["git", "config", "user.name", "T"], cwd=repo_path)
+    (repo_path / "Sources").mkdir()
+    (repo_path / "Sources" / "A.swift").write_text("func verify() {}\n")
+    _run(["git", "add", "."], cwd=repo_path)
+    _run(["git", "commit", "-m", "initial", "-q"], cwd=repo_path)
+    head = _run_text(["git", "rev-parse", "HEAD"], cwd=repo_path)
+
+    backend = _FakeBackend()
+    dispatcher = EmbeddingBackendDispatcher({"qodo": backend}, default_backend="qodo")
+
+    def run_fn(query: str, _params: dict[str, Any]) -> _FakeResult:
+        if "collect(p.slug)" in query:
+            return _FakeResult(single_value={"found_projects": ["wallet-core"]})
+        if "embedded_cnt" in query:
+            return _FakeResult(
+                data_value=[{"source_scope": "project", "total": 1, "embedded_cnt": 1}]
+            )
+        if _is_vector_query(query):
+            return _FakeResult(
+                data_value=[
+                    {
+                        "group_id": "project/wallet-core",
+                        "qualified_name": "Crypto.verify",
+                        "kind": "function",
+                        "file_path": "Sources/A.swift",
+                        "module_name": "WalletCore",
+                        "source_scope": "project",
+                        "embedding_input_hash": "hash-a",
+                        # Per-hit commit is NULL — the exact condition that used
+                        # to zero out freshness for the whole result set.
+                        "commit_sha": None,
+                        "score": 0.91,
+                    }
+                ]
+            )
+        raise AssertionError(f"unexpected query: {query}")
+
+    driver = _FakeDriver(run_fn)
+
+    project_node = {
+        "slug": "wallet-core",
+        "repo_path": str(repo_path),
+        "indexed_commit": head,
+    }
+
+    async def _fetch_node(_: str) -> dict[str, Any]:
+        return project_node
+
+    with (
+        patch(
+            "palace_mcp.code.find_semantic.get_embedding_dispatcher",
+            return_value=dispatcher,
+        ),
+        patch(
+            "palace_mcp.code.find_semantic.code_router.get_cm_session",
+            return_value=None,
+        ),
+        patch(
+            "palace_mcp.code.find_semantic._fetch_project_node",
+            _fetch_node,
+        ),
+    ):
+        result = await semantic_search(
+            driver=driver,
+            query="signature verification",
+            project="wallet-core",
+            include_context=False,
+        )
+
+    hit = result["result"][0]
+    # Freshness is surfaced from the authoritative indexed_commit even though the
+    # per-hit commit_sha was null: indexed == HEAD ⇒ current, not-stale.
+    assert hit["indexed_commit"] == head
+    assert hit["commits_behind_head"] == 0
+    assert hit["stale"] is False
+
+
+@pytest.mark.asyncio
+async def test_empty_scoped_result_has_clean_pagination_envelope() -> None:
+    """Regression (SEMANTIC-UNDERFILL): when every retrieved candidate is
+    scope-excluded and retrieval was NOT saturated, the envelope must be
+    self-consistent — total reflects the paginable ranked set (0), has_more is
+    false, and no scope_filter_underfilled warning fires. Previously total was
+    the in-scope embedded-symbol population, yielding has_more=true with
+    returned=0 and no next_offset."""
+    from palace_mcp.code.find_semantic import semantic_search
+
+    backend = _FakeBackend()
+    dispatcher = EmbeddingBackendDispatcher({"qodo": backend}, default_backend="qodo")
+
+    def run_fn(query: str, params: dict[str, Any]) -> _FakeResult:
+        if "collect(p.slug)" in query:
+            return _FakeResult(
+                single_value={"found_projects": ["wallet-a", "wallet-b"]}
+            )
+        if "embedded_cnt" in query:
+            return _FakeResult(
+                data_value=[
+                    {"source_scope": "project", "total": 10378, "embedded_cnt": 10378}
+                ]
+            )
+        if _is_vector_query(query):
+            gid = params.get("group_ids", ["project/wallet-a"])[0]
+            # A single out-of-scope (dependency) hit per project — all excluded
+            # by the default first-party scope, and far below candidate_limit.
+            return _FakeResult(
+                data_value=[
+                    {
+                        "group_id": gid,
+                        "qualified_name": "Vendor.helper",
+                        "kind": "function",
+                        "file_path": "Deps/V.swift",
+                        "module_name": "Vendor",
+                        "source_scope": "dependency",
+                        "embedding_input_hash": "hash-x",
+                        "commit_sha": None,
+                        "score": 0.42,
+                    }
+                ]
+            )
+        raise AssertionError(f"unexpected query: {query}")
+
+    driver = _FakeDriver(run_fn)
+    with (
+        patch(
+            "palace_mcp.code.find_semantic.get_embedding_dispatcher",
+            return_value=dispatcher,
+        ),
+        patch(
+            "palace_mcp.code.find_semantic.code_router.get_cm_session",
+            return_value=None,
+        ),
+    ):
+        result = await semantic_search(
+            driver=driver,
+            query="signature verification",
+            projects=["wallet-a", "wallet-b"],
+            limit=5,
+            include_context=False,
+        )
+
+    assert result["returned_count"] == 0
+    assert result["scope_excluded_count"] == 2
+    # Pagination reflects the paginable ranked set, not the population.
+    assert result["total"] == 0
+    assert result["has_more"] is False
+    assert "next_offset" not in result
+    assert result["retrieval_saturated"] is False
+    # Population is still surfaced, just not as the pagination total.
+    assert result["scope_candidate_population"] == 10378
+    assert result["warnings"] == []
+
+
+@pytest.mark.asyncio
+async def test_saturated_retrieval_flags_and_warns() -> None:
+    """When the vector retrieval fills its candidate cap and scope filtering
+    leaves fewer than requested, in-scope matches may exist beyond the ranked
+    window: retrieval_saturated must be true and scope_filter_underfilled must
+    warn (honest bound, not a silent cap)."""
+    from palace_mcp.code.find_semantic import semantic_search
+
+    backend = _FakeBackend()
+    dispatcher = EmbeddingBackendDispatcher({"qodo": backend}, default_backend="qodo")
+
+    # per_project_k for limit=2, single-project budget = 50; return that many
+    # out-of-scope rows per project so the merged retrieval saturates the cap.
+    def _dep_rows(gid: str, n: int) -> list[dict[str, Any]]:
+        return [
+            {
+                "group_id": gid,
+                "qualified_name": f"Vendor.helper{i}",
+                "kind": "function",
+                "file_path": f"Deps/V{i}.swift",
+                "module_name": "Vendor",
+                "source_scope": "dependency",
+                "embedding_input_hash": f"hash-{i}",
+                "commit_sha": None,
+                "score": 0.9 - i * 0.001,
+            }
+            for i in range(n)
+        ]
+
+    def run_fn(query: str, params: dict[str, Any]) -> _FakeResult:
+        if "collect(p.slug)" in query:
+            return _FakeResult(
+                single_value={"found_projects": ["wallet-a", "wallet-b"]}
+            )
+        if "embedded_cnt" in query:
+            return _FakeResult(
+                data_value=[
+                    {"source_scope": "project", "total": 10378, "embedded_cnt": 100}
+                ]
+            )
+        if _is_vector_query(query):
+            gid = params.get("group_ids", ["project/wallet-a"])[0]
+            return _FakeResult(data_value=_dep_rows(gid, params["query_k"]))
+        raise AssertionError(f"unexpected query: {query}")
+
+    driver = _FakeDriver(run_fn)
+    with (
+        patch(
+            "palace_mcp.code.find_semantic.get_embedding_dispatcher",
+            return_value=dispatcher,
+        ),
+        patch(
+            "palace_mcp.code.find_semantic.code_router.get_cm_session",
+            return_value=None,
+        ),
+    ):
+        result = await semantic_search(
+            driver=driver,
+            query="signature verification",
+            projects=["wallet-a", "wallet-b"],
+            limit=2,
+            include_context=False,
+        )
+
+    assert result["returned_count"] == 0
+    assert result["retrieval_saturated"] is True
+    warning_codes = {w["code"] for w in result["warnings"]}
+    assert "scope_filter_underfilled" in warning_codes

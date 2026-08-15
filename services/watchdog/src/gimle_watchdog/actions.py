@@ -49,11 +49,16 @@ async def _sleep(seconds: float) -> None:
     await asyncio.sleep(seconds)
 
 
-async def _wait_for_respawn(client: PaperclipClient, issue_id: str) -> str | None:
+async def _wait_for_respawn(
+    client: PaperclipClient, issue_id: str, exclude: str | None = None
+) -> str | None:
     for _ in range(RESPAWN_POLL_ATTEMPTS):
         await _sleep(RESPAWN_POLL_INTERVAL_S)
         issue = await client.get_issue(issue_id)
-        if issue.execution_run_id is not None:
+        # A fresh run gets a NEW executionRunId. `exclude` is the pre-recovery
+        # (possibly ghost) run id — ignore it so we don't false-positive on a
+        # stale lock that has not yet been cleared and replaced.
+        if issue.execution_run_id is not None and issue.execution_run_id != exclude:
             return issue.execution_run_id
     return None
 
@@ -65,11 +70,18 @@ async def trigger_respawn(client: PaperclipClient, issue: Issue, assignee_id: st
     POST /release resets status to "todo" server-side. Without restoration,
     in_review issues silently regress to todo after recovery.
     """
-    # Primary — assignee-only PATCH; status was not modified, don't pollute the diff.
-    await client.patch_issue(issue.id, {"assigneeAgentId": assignee_id})
-    run_id = await _wait_for_respawn(client, issue.id)
-    if run_id is not None:
-        return RespawnResult(via="patch", success=True, run_id=run_id)
+    # GIM-1704 (2026-06-22): a ghost lock (executionRunId set but no active run)
+    # blocks a fresh run, and the primary assignee-only PATCH cannot clear it —
+    # worse, _wait_for_respawn would see the stale executionRunId and falsely
+    # report success. For ghost-locked issues skip the primary and go straight to
+    # the release path, which clears the stale lock before re-triggering.
+    ghost_locked = issue.execution_run_id is not None and issue.active_run_id is None
+    if not ghost_locked:
+        # Primary — assignee-only PATCH; status was not modified, don't pollute the diff.
+        await client.patch_issue(issue.id, {"assigneeAgentId": assignee_id})
+        run_id = await _wait_for_respawn(client, issue.id)
+        if run_id is not None:
+            return RespawnResult(via="patch", success=True, run_id=run_id)
 
     # Fallback — release wipes status; restore it in the same PATCH that re-triggers wake.
     log.info(
@@ -86,7 +98,7 @@ async def trigger_respawn(client: PaperclipClient, issue: Issue, assignee_id: st
         # Skip when empty — sending status="" may be rejected; let server keep current.
         fallback_body["status"] = issue.status
     await client.patch_issue(issue.id, fallback_body)
-    run_id = await _wait_for_respawn(client, issue.id)
+    run_id = await _wait_for_respawn(client, issue.id, exclude=issue.execution_run_id)
     if run_id is not None:
         return RespawnResult(via="release_patch", success=True, run_id=run_id)
 

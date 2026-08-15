@@ -11,13 +11,28 @@ Route `https://github.com/horizontalsystems/unstoppable-wallet-ios/pull/<N>` to 
 Handle only `UAudit daily version-branch delta audit`, `platform: ios`, from `paperclips/projects/uaudit/daily-version-branch-routines.yaml`. Use routine `daily-ios-version-0.50`, authoritative `version/0.50`, and limits `max_commits=30`, `max_files=300`, `max_diff_lines=3000`.
 
 - FROM is only `/opt/uaa-example/uaudit/state/ios-version-audit.json`; preserve this cursor in every handoff. Never read a cursor below `/opt/uaa-example/uaudit/artifacts/`.
-- Cursor=head: comment `No new commits for iOS version/0.50`, mark done, create no run/artifacts/message, and do not change cursor.
-- Missing cursor with initialization disabled, rewritten/backward history, or exceeded limit: block to `00000000-0000-0000-0000-000000000010` with evidence.
-- Explicit initialization: assign `00000000-0000-0000-0000-00000000001b` with `mode=initialize_cursor`, exact head and routine; no audit/message.
-- Before v1 intake run `python3 "$HELPER" verify-install --manifest "/opt/uaa-example/uaudit/runs/.uaudit-tools/uaudit_delivery_contract.manifest.json"`; failure blocks.
-- Valid bounded ancestor: set `$RUN=/opt/uaa-example/uaudit/runs/UNS-<issueNumber>-audit`; `mkdir LOCK=/opt/uaa-example/uaudit/state/locks/daily-ios-version-0.50.lock` (existing generation blocks; never steal). Atomically write lock metadata (`schema_version:1`, `issue_identifier,routine_id,from_sha,to_sha`, `run_binding_sha256:null`), four prepared inputs and strict daily iOS intake. Run `python3 "$HELPER" bind-context --run-dir "$RUN" --intake "$RUN/intake.json" --lock-dir "$LOCK"`; on success assign `00000000-0000-0000-0000-000000000013` with `mode=daily_code_audit`, FROM/TO/routine/RUN.
+- Run `git -C "$REPO" fetch --no-tags https://github.com/horizontalsystems/unstoppable-wallet-ios refs/heads/version/0.50:refs/remotes/uaudit-upstream/version/0.50`, then `TO=$(git -C "$REPO" rev-parse refs/remotes/uaudit-upstream/version/0.50^{commit})`, before cursor/no-op/range checks; failure blocks. Never resolve TO from origin/version/0.50, a local mirror ref, or stale FETCH_HEAD.
+- Cursor=head: comment `No new commits for iOS version/0.50`, mark done, do not mutate cursor.
+- Missing/rewritten/backward history or exceeded limit: block to `00000000-0000-0000-0000-000000000010` with evidence.
+- Explicit initialization: assign `00000000-0000-0000-0000-00000000001b` `mode=initialize_cursor` with head/routine; no run/message.
+- Run `python3 "$HELPER" verify-install --manifest "/opt/uaa-example/uaudit/runs/.uaudit-tools/uaudit_delivery_contract.manifest.json"` before v1 intake.
+- Valid bounded ancestor: set `$RUN=/opt/uaa-example/uaudit/runs/UNS-<issueNumber>-audit`, `LOCK=/opt/uaa-example/uaudit/state/locks/daily-ios-version-0.50.lock`; `mkdir "$LOCK"` (existing blocks; never steal). Atomically write metadata and four strict daily inputs; run `python3 "$HELPER" bind-context --run-dir "$RUN" --intake "$RUN/intake.json" --lock-dir "$LOCK"`, then assign `00000000-0000-0000-0000-000000000013` `mode=daily_code_audit` with FROM/TO/routine/RUN.
 
 Chain: `UWISwiftAuditor -> UWISecurityAuditor -> UWICryptoAuditor -> UWIInfraEngineer -> optional UWIResearchAgent -> UWIQAEngineer -> UWICTO -> UWIInfraEngineer`. Use Paperclip assignment only; do not use `uaudit-*` subagents for daily real-delta audits.
+
+## Explicit forced full-range intake
+
+Handle `UAudit forced full-range audit` only when `mode: forced_full_range`,
+`daily_limits_bypassed: true`, `cursor_mutation: forbidden`, and
+`schedule_mutation: forbidden` are all present. Require the declared iOS
+checkout plus lowercase 40-hex `from_sha` and `to_sha`; verify both objects and
+that FROM is an ancestor of TO in that exact checkout. Do not use an undeclared
+remote, daily cursor, or daily limits. Create a distinct
+`forced-full-ios-<issue>` lock and staged run context with
+`audit_kind=forced_full`, then start the normal code/security/crypto/infra/QA
+chain. Any malformed ref, mismatch, or existing forced lock blocks. The final
+delivery is receipt-led but must not run `reconcile-daily` or write a daily
+cursor.
 
 ## Daily aggregation
 

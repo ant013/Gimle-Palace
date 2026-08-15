@@ -301,3 +301,53 @@ async def test_search_graph_pagination_boundaries(
     assert result["returned"] == expected_returned
     assert len(result["results"]) == expected_returned
     assert result["truncated"] is expected_truncated
+
+
+@pytest.mark.asyncio
+async def test_search_graph_coerces_string_int_limit_and_offset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The open-schema passthrough delivers integer args as strings ("3"); the
+    handler must coerce them instead of rejecting with 'must be an integer'."""
+    driver = _mock_driver(
+        [{"total": 1}],
+        [
+            {
+                "name": "Foo",
+                "qualified_name": "pkg.Foo",
+                "label": "Class",
+                "file_path": "src/foo.py",
+                "short_name": "Foo",
+                "kind": "class",
+            }
+        ],
+    )
+    monkeypatch.setattr("palace_mcp.mcp_server.get_driver", lambda: driver)
+
+    result = await native_search_graph(
+        project="gimle",
+        name_pattern="Foo",
+        limit="3",
+        offset="0",
+    )
+
+    assert result["returned"] == 1
+    assert result["results"][0]["name"] == "Foo"
+
+
+@pytest.mark.asyncio
+async def test_search_graph_rejects_non_numeric_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    driver = _mock_driver([{"total": 0}], [])
+    monkeypatch.setattr("palace_mcp.mcp_server.get_driver", lambda: driver)
+
+    result = await native_search_graph(
+        project="gimle",
+        name_pattern="Foo",
+        limit="abc",
+    )
+
+    assert result["ok"] is False
+    assert result["error_code"] == "validation_error"
+    assert "limit must be an integer" in result["message"]

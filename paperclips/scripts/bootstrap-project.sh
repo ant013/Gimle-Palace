@@ -238,6 +238,32 @@ PY
   log ok "UAudit delivery helper installed read-only: $destination"
 }
 
+validate_uaudit_partial_approvers() {
+  local project_root="$1"
+  local approvers="${project_root}/state/partial-approvers.json"
+
+  [ -f "$approvers" ] || die "UAudit partial approvers missing: $approvers"
+  jq -e '
+    type == "object" and
+    (keys | sort == ["approver_actor_ids", "schema_version"]) and
+    .schema_version == 1 and
+    (.approver_actor_ids |
+      type == "array" and
+      length > 0 and
+      length <= 100 and
+      . == sort and
+      . == unique and
+      all(.[];
+        type == "string" and
+        length >= 1 and
+        length <= 128 and
+        (explode | all(. >= 32 and . != 127))
+      )
+    )
+  ' "$approvers" >/dev/null || die "UAudit partial approvers must be a sorted, non-empty allowlist"
+  log ok "UAudit partial approvers validated: $approvers"
+}
+
 manifest="${REPO_ROOT}/paperclips/projects/${project_key}/paperclip-agent-assembly.yaml"
 [ -f "$manifest" ] || die "manifest not found: $manifest"
 
@@ -313,6 +339,10 @@ while IFS= read -r required_key; do
 done < <(yq -r '.host_paths.required_existing[]? // ""' "$manifest")
 
 if [ "$project_key" = "uaudit" ]; then
+  project_root=$(yq -r '.project_root // ""' "$paths_file")
+  [ -n "$project_root" ] && [ "$project_root" != "null" ] || \
+    die "project_root required to validate UAudit partial approvers"
+  validate_uaudit_partial_approvers "$project_root"
   team_root=$(yq -r '.team_workspace_root // ""' "$paths_file")
   [ -n "$team_root" ] && [ "$team_root" != "null" ] || \
     die "team_workspace_root required to install UAudit delivery helper"
@@ -342,9 +372,14 @@ fi
 
 display_name=$(yq -r '.project.display_name' "$manifest")
 issue_prefix=$(yq -r '.project.issue_prefix' "$manifest")
+integration_branch=$(yq -r '.project.integration_branch // ""' "$manifest")
 [ -n "$display_name" ] && [ "$display_name" != "null" ] || die "project.display_name missing"
 [[ "$issue_prefix" =~ ^[A-Z]{3}$ ]] || \
   die "invalid project.issue_prefix for pinned Paperclip runtime (expected exactly three uppercase letters): $issue_prefix"
+[ -n "$integration_branch" ] && [ "$integration_branch" != "null" ] || \
+  die "project.integration_branch missing"
+git check-ref-format --branch "$integration_branch" >/dev/null 2>&1 || \
+  die "invalid project.integration_branch: $integration_branch"
 
 companies_resp=$(paperclip_get "/api/companies")
 prefix_owner=$(printf '%s' "$companies_resp" | jq -r --arg prefix "$issue_prefix" '
@@ -466,10 +501,10 @@ for agent_name in $hire_order; do
   validate_agent_name "$agent_name"
   # Bracket-syntax: kebab agent_names (e.g., `cx-cto`) — yq dot-path would treat `-` as subtraction.
   existing=$(yq -r ".agents[\"${agent_name}\"] // \"\"" "$bindings")
+  existing_agent_config=""
   if [ -n "$existing" ] && [ "$existing" != "null" ]; then
-    if paperclip_get_agent_config "$existing" >/dev/null 2>&1; then
-      log info "agent $agent_name already hired: $existing"
-      continue
+    if existing_agent_config=$(paperclip_get_agent_config "$existing" 2>/dev/null); then
+      log info "agent $agent_name already hired: $existing; reconciling managed config"
     else
       log warn "agent $agent_name UUID $existing not found in API — will re-hire"
     fi
@@ -490,7 +525,8 @@ for agent_name in $hire_order; do
   fi
 
   team_root=$(yq -r '.team_workspace_root // ""' "$paths_file")
-  cwd="${team_root}/${agent_name}/workspace"
+  workspace_cwd="${team_root}/${agent_name}/workspace"
+  cwd="$workspace_cwd"
 
   # Per-agent role/icon/model. Explicit Paperclip identity wins; profile fallback
   # preserves legacy manifests that predate paperclip_role/paperclip_icon.
@@ -508,8 +544,101 @@ for agent_name in $hire_order; do
   hire_role=$(echo "$agent_meta" | jq -r --arg fallback "$fallback_role" '.paperclip_role // $fallback')
   hire_icon=$(echo "$agent_meta" | jq -r --arg fallback "$fallback_icon" '.paperclip_icon // $fallback')
 
-  agent_model=$(echo "$agent_meta" | jq -r '.model // "auto"')
+  agent_model=$(echo "$agent_meta" | jq -r '
+    if .model then .model
+    elif .target == "codex" then "gpt-5.6-sol"
+    else "auto"
+    end
+  ')
   agent_effort=$(echo "$agent_meta" | jq -r '.modelReasoningEffort // "medium"')
+  sandbox_mode=$(yq -r '.sandbox.mode // "legacy"' "$manifest")
+  sandbox_bypass=true
+  writable_roots='[]'
+  read_only_roots='[]'
+  adapter_env='{}'
+  scratch_dir="${team_root}/${agent_name}/scratch"
+  if [ "$sandbox_mode" = "constrained" ]; then
+    project_root=$(yq -r '.project_root // ""' "$paths_file")
+    [ -n "$project_root" ] && [ "$project_root" != "null" ] || die "constrained sandbox requires project_root"
+    workspace_git_source_path_key=$(yq -r '.sandbox.workspace_git_source_path_key // ""' "$manifest")
+    if [ -n "$workspace_git_source_path_key" ] && [ "$workspace_git_source_path_key" != "null" ]; then
+      [[ "$workspace_git_source_path_key" =~ ^[a-z][a-z0-9_]*$ ]] || \
+        die "invalid constrained sandbox workspace_git_source_path_key: $workspace_git_source_path_key"
+      workspace_source=$(yq -r ".[\"${workspace_git_source_path_key}\"] // \"\"" "$paths_file")
+      [ -n "$workspace_source" ] && [ "$workspace_source" != "null" ] || \
+        die "constrained sandbox requires host-local $workspace_git_source_path_key"
+      [ -d "$workspace_source" ] || die "constrained sandbox workspace source does not exist: $workspace_source"
+      git -C "$workspace_source" rev-parse --is-inside-work-tree >/dev/null 2>&1 || \
+        die "constrained sandbox workspace source is not a Git worktree: $workspace_source"
+
+      runtime_cwd="${workspace_cwd}/repo"
+      if [ -e "$runtime_cwd/.git" ]; then
+        git -C "$runtime_cwd" rev-parse --is-inside-work-tree >/dev/null 2>&1 || \
+          die "constrained sandbox runtime cwd is not a Git worktree: $runtime_cwd"
+      else
+        if [ -e "$runtime_cwd" ] && [ -n "$(find "$runtime_cwd" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+          die "refusing non-empty unmanaged runtime workspace: $runtime_cwd"
+        fi
+        mkdir -p "$workspace_cwd"
+        rmdir "$runtime_cwd" 2>/dev/null || true
+        git clone --branch "$integration_branch" --single-branch "$workspace_source" "$runtime_cwd" || \
+          die "failed to create constrained sandbox runtime Git workspace: $runtime_cwd"
+      fi
+      cwd="$runtime_cwd"
+    fi
+    agent_cwd_path_key=$(yq -r '.sandbox.agent_cwd_path_key // ""' "$manifest")
+    if [ -n "$agent_cwd_path_key" ] && [ "$agent_cwd_path_key" != "null" ]; then
+      [[ "$agent_cwd_path_key" =~ ^[a-z][a-z0-9_]*$ ]] || \
+        die "invalid constrained sandbox agent_cwd_path_key: $agent_cwd_path_key"
+      trusted_cwd=$(yq -r ".[\"${agent_cwd_path_key}\"] // \"\"" "$paths_file")
+      [ -n "$trusted_cwd" ] && [ "$trusted_cwd" != "null" ] || \
+        die "constrained sandbox requires host-local $agent_cwd_path_key"
+      [ -d "$trusted_cwd" ] || die "constrained sandbox agent cwd does not exist: $trusted_cwd"
+      git -C "$trusted_cwd" rev-parse --is-inside-work-tree >/dev/null 2>&1 || \
+        die "constrained sandbox agent cwd is not a Git worktree: $trusted_cwd"
+      cwd="$trusted_cwd"
+    fi
+    mkdir -p "$scratch_dir"
+    writable_roots=$(jq -n --arg workspace "$workspace_cwd" --arg scratch "$scratch_dir" '[$workspace, $scratch]')
+    while IFS= read -r rel; do
+      [ -z "$rel" ] && continue
+      case "$rel" in
+        /*|*..*|*'//'*) die "unsafe sandbox writable path for $agent_name: $rel" ;;
+        .git|.git/*|*/.git|*/.git/*|.env|.env/*|*/.env|*/.env/*)
+          die "sandbox writable path for $agent_name may not target Git metadata or environment files: $rel"
+          ;;
+      esac
+      candidate="${project_root}/${rel}"
+      mkdir -p "$candidate"
+      writable_roots=$(echo "$writable_roots" | jq --arg p "$candidate" '. + [$p]')
+    done < <(echo "$agent_meta" | jq -r '.sandbox.writable_paths[]?')
+    kit_root="${project_root}/workspace/repos"
+    [ -d "$kit_root" ] || mkdir -p "$kit_root"
+    read_only_roots=$(jq -n --arg cwd "$cwd" --arg kit "$kit_root" '[$cwd, $kit] | unique')
+    while IFS= read -r env_name; do
+      [ -z "$env_name" ] && continue
+      case "$env_name" in
+        PAPERCLIP_API_URL) ;;
+        *) die "unsupported constrained runtime environment variable for $agent_name: $env_name" ;;
+      esac
+      runtime_value_key=$(yq -r ".sandbox.runtime_env[\"${env_name}\"] // \"\"" "$manifest")
+      [[ "$runtime_value_key" =~ ^[a-z][a-z0-9_]*$ ]] || \
+        die "invalid constrained runtime environment host key for $agent_name: $runtime_value_key"
+      runtime_value=$(yq -r ".[\"${runtime_value_key}\"] // \"\"" "$paths_file")
+      [ -n "$runtime_value" ] && [ "$runtime_value" != "null" ] || \
+        die "constrained runtime environment host value is unresolved: $runtime_value_key"
+      [[ "$runtime_value" =~ ^http://127\.0\.0\.1(:[0-9]{2,5})?$ ]] || \
+        die "constrained PAPERCLIP_API_URL must be loopback HTTP: $runtime_value"
+      adapter_env=$(echo "$adapter_env" | jq --arg k "$env_name" --arg v "$runtime_value" '. + {($k): $v}')
+    done < <(yq -r '(.sandbox.runtime_env // {}) | keys[]? // ""' "$manifest")
+    sandbox_bypass=$(yq -r '.sandbox.bypass_approvals_and_sandbox // false' "$manifest")
+    case "$sandbox_bypass" in
+      true|false) ;;
+      *) die "constrained sandbox bypass_approvals_and_sandbox must be true or false" ;;
+    esac
+  elif [ "$sandbox_mode" != "legacy" ]; then
+    die "unknown sandbox mode '$sandbox_mode'"
+  fi
 
   payload=$(jq -n \
     --arg name "$agent_name" \
@@ -521,6 +650,10 @@ for agent_name in $hire_order; do
     --arg adapter "${target}_local" \
     --arg model "$agent_model" \
     --arg effort "$agent_effort" \
+    --argjson bypass "$sandbox_bypass" \
+    --argjson writable "$writable_roots" \
+    --argjson readonly "$read_only_roots" \
+    --argjson env "$adapter_env" \
     '{
       name: $name, role: $role, title: $title, icon: $icon,
       capabilities: "default",
@@ -530,7 +663,8 @@ for agent_name in $hire_order; do
         instructionsFilePath: "AGENTS.md", instructionsEntryFile: "AGENTS.md",
         instructionsBundleMode: "managed",
         maxTurnsPerRun: 200, timeoutSec: 0, graceSec: 15,
-        dangerouslyBypassApprovalsAndSandbox: true, env: {}
+        dangerouslyBypassApprovalsAndSandbox: $bypass,
+        writableRoots: $writable, sourceRootsReadOnly: $readonly, env: $env
       },
       runtimeConfig: {
         heartbeat: {
@@ -540,6 +674,42 @@ for agent_name in $hire_order; do
       },
       budgetMonthlyCents: 0
     } + (if $reportsTo == "" then {} else {reportsTo: $reportsTo} end)')
+
+  if [ -n "$existing_agent_config" ]; then
+    # Compare only fields controlled by this bootstrap. Paperclip may add
+    # unrelated adapter defaults, which must not turn every run into a PATCH.
+    managed_config_filter='{
+      adapterType,
+      adapterConfig: (.adapterConfig | {
+        cwd, model, modelReasoningEffort,
+        maxTurnsPerRun, timeoutSec, graceSec,
+        dangerouslyBypassApprovalsAndSandbox,
+        writableRoots, sourceRootsReadOnly, env
+      })
+    }'
+    # The API represents configured adapter environment values as
+    # {type:"plain",value:"..."}; desired config stores the same values as
+    # strings. Normalize that response-only envelope before comparison.
+    current_managed=$(echo "$existing_agent_config" | jq -cS \
+      "$managed_config_filter | .adapterConfig.env |= with_entries(
+        if (.value | type) == \"object\" and (.value.value | type) == \"string\"
+        then .value = .value.value else . end
+      )") || \
+      die "cannot read managed config for existing agent $agent_name"
+    desired_managed=$(echo "$payload" | jq -cS "$managed_config_filter") || \
+      die "cannot build managed config for existing agent $agent_name"
+    if [ "$current_managed" = "$desired_managed" ]; then
+      log info "agent $agent_name managed config already current"
+    else
+      paperclip_update_agent_config "$existing" "$desired_managed" >/dev/null || \
+        die "failed to reconcile managed config for existing agent $agent_name ($existing)"
+      journal_record "$journal" "$(jq -n \
+        --arg n "$agent_name" --arg id "$existing" \
+        '{kind:"agent_config_reconcile",name:$n,id:$id}')"
+      log ok "reconciled managed config for $agent_name"
+    fi
+    continue
+  fi
 
   log info "hiring $agent_name (profile=$profile_name target=$target)"
   resp=$(paperclip_hire_agent "$company_id" "$payload")
@@ -583,7 +753,10 @@ log info "[9/13] building agent prompts"
 targets_used=$(yq -r '.agents[].target' "$manifest" | sort -u)
 for target in $targets_used; do
   log info "  building target=$target"
-  "${REPO_ROOT}/paperclips/build.sh" --project "$project_key" --target "$target" || \
+  (
+    cd "$REPO_ROOT"
+    "${REPO_ROOT}/paperclips/build.sh" --project "$project_key" --target "$target"
+  ) || \
     die "build failed for project=$project_key target=$target"
 done
 
@@ -679,7 +852,13 @@ for agent_name in $hire_order; do
       --arg old "$old_workspace_content" \
       '{kind:"workspace_file_snapshot",path:$p,old_content:$old}')"
   fi
-  cp "${REPO_ROOT}/${cp_src}" "${ws}/AGENTS.md"
+  workspace_git_source_path_key=$(yq -r '.sandbox.workspace_git_source_path_key // ""' "$manifest")
+  if [ -n "$workspace_git_source_path_key" ] && [ "$workspace_git_source_path_key" != "null" ]; then
+    [ -d "${ws}/repo/.git" ] || die "runtime Git workspace missing: ${ws}/repo"
+    cp "${REPO_ROOT}/${cp_src}" "${ws}/repo/AGENTS.md"
+  else
+    cp "${REPO_ROOT}/${cp_src}" "${ws}/AGENTS.md"
+  fi
 done
 
 # Step 12: codex subagents deploy

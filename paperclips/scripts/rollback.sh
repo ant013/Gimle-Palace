@@ -81,6 +81,32 @@ fi
 require_command jq
 log info "replaying journal: $journal_path"
 
+quarantine_root="${HOME}/.paperclip/rollback-quarantine/$(basename "$journal_path" .json)"
+
+validate_exact_rollback_path() {
+  local path="$1"
+  case "$path" in
+    ""|/|"$HOME") die "refusing broad rollback path: ${path:-<empty>}" ;;
+    /*) ;;
+    *) die "rollback path must be absolute: $path" ;;
+  esac
+  case "$path" in
+    *$'\n'*|*$'\r'*) die "rollback path contains a line break" ;;
+  esac
+}
+
+quarantine_exact_path() {
+  local path="$1"; local label="$2"
+  validate_exact_rollback_path "$path"
+  [ -e "$path" ] || return 0
+  mkdir -p "$quarantine_root"
+  chmod 700 "$quarantine_root"
+  local destination="${quarantine_root}/${label}"
+  [ ! -e "$destination" ] || die "quarantine target already exists: $destination"
+  mv "$path" "$destination"
+  log ok "quarantined $path -> $destination"
+}
+
 entries=$(jq '.entries | length' "$journal_path")
 log info "found $entries snapshots to replay (reverse order)"
 
@@ -130,6 +156,134 @@ for i in $(seq $((entries - 1)) -1 0); do
       else
         paperclip_delete_agent "$agent_id" >/dev/null
         log ok "deleted agent $agent_name"
+      fi
+      ;;
+    workspace_file_snapshot)
+      path=$(printf '%s' "$entry" | jq -r '.path')
+      old_content=$(printf '%s' "$entry" | jq -r '.old_content')
+      validate_exact_rollback_path "$path"
+      log info "rolling back managed workspace file $path"
+      if [ "$DRY_RUN" -eq 1 ]; then
+        log info "DRY RUN — would restore workspace file $path"
+      else
+        atomic_write "$path" "$old_content"
+        log ok "restored workspace file $path"
+      fi
+      ;;
+    managed_workspace_create)
+      path=$(printf '%s' "$entry" | jq -r '.path')
+      managed_file=$(printf '%s' "$entry" | jq -r '.managed_file // "AGENTS.md"')
+      validate_exact_rollback_path "$path"
+      case "$path" in
+        */workspace) ;;
+        *) die "refusing non-workspace managed path: $path" ;;
+      esac
+      log info "rolling back managed workspace $path"
+      if [ "$DRY_RUN" -eq 1 ]; then
+        log info "DRY RUN — would remove the exact managed workspace or quarantine unknown nonempty content"
+      elif [ -d "$path" ]; then
+        unknown_count=$(find "$path" -mindepth 1 -maxdepth 1 ! -name "$managed_file" -print | wc -l | tr -d ' ')
+        if [ "$unknown_count" -gt 0 ]; then
+          quarantine_exact_path "$path" "${i}-workspace-unknown"
+        else
+          [ ! -e "${path}/${managed_file}" ] || \
+            quarantine_exact_path "${path}/${managed_file}" "${i}-${managed_file}"
+          rmdir "$path" 2>/dev/null || \
+            quarantine_exact_path "$path" "${i}-workspace-residual"
+        fi
+      fi
+      ;;
+    host_file_create)
+      path=$(printf '%s' "$entry" | jq -r '.path')
+      validate_exact_rollback_path "$path"
+      case "$path" in
+        "${HOME}/.paperclip/projects/"*) ;;
+        *) die "refusing non-managed host file path: $path" ;;
+      esac
+      log info "rolling back created host file $path"
+      if [ "$DRY_RUN" -eq 1 ]; then
+        log info "DRY RUN — would quarantine exact created host file $path"
+      else
+        quarantine_exact_path "$path" "${i}-host-$(basename "$path")"
+      fi
+      ;;
+    host_directory_create)
+      path=$(printf '%s' "$entry" | jq -r '.path')
+      validate_exact_rollback_path "$path"
+      case "$path" in
+        "${HOME}/.paperclip/projects/"*) ;;
+        *) die "refusing non-managed host directory path: $path" ;;
+      esac
+      log info "rolling back created host directory $path"
+      if [ "$DRY_RUN" -eq 1 ]; then
+        log info "DRY RUN — would remove empty directory or quarantine exact residual directory"
+      elif [ -d "$path" ]; then
+        rmdir "$path" 2>/dev/null || quarantine_exact_path "$path" "${i}-host-directory"
+      fi
+      ;;
+    watchdog_snapshot)
+      project_key=$(printf '%s' "$entry" | jq -r '.project_key')
+      config_path=$(printf '%s' "$entry" | jq -r '.config_path')
+      plist_path=$(printf '%s' "$entry" | jq -r '.plist_path')
+      config_existed=$(printf '%s' "$entry" | jq -r '.config_existed')
+      plist_existed=$(printf '%s' "$entry" | jq -r '.plist_existed')
+      config_content=$(printf '%s' "$entry" | jq -r '.config_content')
+      plist_content=$(printf '%s' "$entry" | jq -r '.plist_content')
+      [ "$config_path" = "${HOME}/.paperclip/watchdog-config.yaml" ] || \
+        die "unexpected watchdog config path: $config_path"
+      [ "$plist_path" = "${HOME}/Library/LaunchAgents/work.ant013.gimle-watchdog.plist" ] || \
+        die "unexpected watchdog plist path: $plist_path"
+      log info "rolling back watchdog state for $project_key"
+      if [ "$DRY_RUN" -eq 1 ]; then
+        log info "DRY RUN — would restore exact watchdog config/plist snapshot"
+      else
+        if [ "$config_existed" = "true" ]; then
+          atomic_write "$config_path" "$config_content"
+        else
+          quarantine_exact_path "$config_path" "${i}-watchdog-config"
+        fi
+        if [ "$plist_existed" = "true" ]; then
+          atomic_write "$plist_path" "$plist_content"
+        else
+          if [ -e "$plist_path" ] && command -v launchctl >/dev/null 2>&1; then
+            launchctl bootout "gui/$(id -u)/work.ant013.gimle-watchdog" >/dev/null 2>&1 || true
+          fi
+          quarantine_exact_path "$plist_path" "${i}-watchdog-plist"
+        fi
+        log ok "restored watchdog snapshot"
+      fi
+      ;;
+    company_create)
+      company_id=$(printf '%s' "$entry" | jq -r '.id')
+      company_name=$(printf '%s' "$entry" | jq -r '.name')
+      creation_name=$(printf '%s' "$entry" | jq -r '.creation_name // ""')
+      issue_prefix=$(printf '%s' "$entry" | jq -r '.issue_prefix // ""')
+      log info "rolling back created company $company_name ($company_id)"
+      if [ "$DRY_RUN" -eq 1 ]; then
+        log info "DRY RUN — would delete exact company $company_id"
+      else
+        live_company=$(paperclip_get_company_if_exists "$company_id") || \
+          die "created company $company_id is no longer readable"
+        if [ -z "$live_company" ]; then
+          log ok "created company $company_id is already absent"
+          continue
+        fi
+        live_name=$(printf '%s' "$live_company" | jq -r '.name // ""')
+        live_prefix=$(printf '%s' "$live_company" | jq -r '.issuePrefix // .issue_prefix // ""')
+        if [ -n "$creation_name" ]; then
+          [ "$live_name" = "$company_name" ] || [ "$live_name" = "$creation_name" ] || \
+            die "created company identity mismatch: expected $creation_name or $company_name, got $live_name"
+          if [ -n "$issue_prefix" ] && [ "$live_prefix" != "$issue_prefix" ]; then
+            log warn "created company prefix mismatch ($live_prefix); deleting exact journaled id after verified create/final name"
+          fi
+        else
+          [ "$live_name" = "$company_name" ] || \
+            die "created company identity mismatch: expected $company_name, got $live_name"
+          [ -z "$issue_prefix" ] || [ "$live_prefix" = "$issue_prefix" ] || \
+            die "created company prefix mismatch: expected $issue_prefix, got $live_prefix"
+        fi
+        paperclip_delete_company "$company_id" >/dev/null
+        log ok "deleted exact created company $company_id"
       fi
       ;;
     *)

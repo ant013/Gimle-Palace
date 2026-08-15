@@ -720,6 +720,32 @@ async def _find_missing_hits(
     ]
 
 
+async def _fetch_project_node(project: str) -> Any | None:
+    """Fetch the raw :Project node for a slug, or None if unavailable."""
+    from palace_mcp.mcp_server import get_driver
+    from palace_mcp.memory.cypher import GET_PROJECT
+
+    driver = get_driver()
+    if driver is None:
+        return None
+    async with driver.session() as session:
+        result = await session.run(GET_PROJECT, slug=project)
+        row = await result.single()
+    return row["p"] if row is not None else None
+
+
+def _repo_path_from_node(project: str, node: Any | None) -> Path | None:
+    from palace_mcp.git.path_resolver import (
+        ProjectNotRegistered,
+        resolve_registered_project,
+    )
+
+    try:
+        return resolve_registered_project(project, project_node=node)
+    except (ProjectNotRegistered, ValueError):
+        return None
+
+
 async def _resolve_registered_repo_path(project: str) -> Path | None:
     """Look up :Project.repo_path so snippet provider can use it.
 
@@ -729,37 +755,34 @@ async def _resolve_registered_repo_path(project: str) -> Path | None:
     no resolvable on-disk path; callers fall back to the legacy
     REPOS_ROOT/<slug> layout via resolve_project.
     """
-    from palace_mcp.git.path_resolver import (
-        ProjectNotRegistered,
-        resolve_registered_project,
-    )
-    from palace_mcp.mcp_server import get_driver
-    from palace_mcp.memory.cypher import GET_PROJECT
-
-    driver = get_driver()
-    if driver is None:
-        return None
-
-    async with driver.session() as session:
-        result = await session.run(GET_PROJECT, slug=project)
-        row = await result.single()
-
-    try:
-        return resolve_registered_project(
-            project,
-            project_node=row["p"] if row is not None else None,
-        )
-    except (ProjectNotRegistered, ValueError):
-        return None
+    node = await _fetch_project_node(project)
+    return _repo_path_from_node(project, node)
 
 
 async def _load_freshness(project: str, commit_sha: str | None) -> dict[str, Any]:
-    repo_path = await _resolve_registered_repo_path(project)
-    freshness = await asyncio.to_thread(inspect_freshness, repo_path, commit_sha)
+    """Freshness of a semantic hit's project against its repo HEAD.
+
+    Compares the authoritative ``:Project.indexed_commit`` — the same commit
+    get_project_overview reports — against the repo HEAD, NOT the per-hit
+    ``commit_sha`` argument. Embedded :Symbol rows frequently carry a null or
+    stale per-occurrence commit, which made every row report
+    ``indexed_commit=null`` / ``stale=null`` (GIM SEMANTIC-ROW-FRESHNESS). The
+    argument is retained for signature stability but no longer consulted.
+    """
+    node = await _fetch_project_node(project)
+    repo_path = _repo_path_from_node(project, node)
+    indexed_commit = (
+        str(node.get("indexed_commit"))
+        if node is not None and node.get("indexed_commit")
+        else None
+    )
+    freshness = await asyncio.to_thread(inspect_freshness, repo_path, indexed_commit)
     return {
         "indexed_commit": freshness.indexed_commit,
         "commits_behind_head": freshness.commits_behind_head,
         "stale": freshness.stale,
+        "freshness_state": freshness.freshness_state,
+        "freshness_reason": freshness.freshness_reason,
     }
 
 
@@ -792,9 +815,15 @@ async def _load_snippet_context(
             "start_line": snippet.start_line,
             "end_line": snippet.end_line,
             "source": snippet.source,
+            "freshness_state": snippet.freshness_state,
+            "freshness_reason": snippet.freshness_reason,
         }
-        if snippet.stale:
+        # Tri-state: only POSITIVE staleness marks stale_source; unknown
+        # freshness is surfaced explicitly, never silently treated as fresh.
+        if snippet.stale is True:
             result["status"] = "stale_source"
+        elif snippet.stale is None:
+            result["status"] = "freshness_unknown"
         return result, None, None
 
     # Fallback: codebase-memory MCP session (e.g. when project not mounted).
@@ -1119,6 +1148,13 @@ async def semantic_search(
     )
 
     _apply_ranking(normalized_query, candidate_rows)
+    # available_count is the ranked, scope-passing set actually retrieved — the
+    # only thing pagination can honestly page through. total_candidates (the
+    # in-scope embedded-symbol population) is NOT paginable: vector retrieval is
+    # capped at candidate_limit, so using it as the pagination total produced
+    # has_more=true / next_offset=null with returned=0 (SEMANTIC-UNDERFILL).
+    available_count = len(candidate_rows)
+    retrieval_saturated = len(rows) >= candidate_limit
     result_rows = candidate_rows[offset : offset + limit]
 
     context_available_count = 0
@@ -1176,16 +1212,24 @@ async def semantic_search(
                     total_byte_count += bc
                     snippets_with_size += 1
 
-    expected_rows = min(limit, max(total_candidates - offset, 0))
-    if len(result_rows) < expected_rows:
+    # Underfill is real only when the retrieval hit its cap (candidate_limit)
+    # AND scope filtering left fewer than requested — then in-scope matches may
+    # exist beyond the ranked window. When retrieval was NOT saturated we have
+    # seen every vector match, so fewer-than-limit is the complete honest answer,
+    # not an underfill. (The old check compared against the total_candidates
+    # population, so it fired on every legitimately small/empty result.)
+    if retrieval_saturated and len(result_rows) < limit:
         warnings.append(
             _warning(
                 "scope_filter_underfilled",
-                "vector search returned fewer scoped hits than requested",
+                "retrieval hit the candidate cap and scope filtering left "
+                "fewer scoped hits than requested; in-scope matches may exist "
+                "beyond the ranked window",
                 requested_limit=limit,
                 requested_offset=offset,
                 returned_count=len(result_rows),
                 candidate_limit=candidate_limit,
+                scope_excluded_count=scope_excluded_count,
             )
         )
 
@@ -1216,13 +1260,19 @@ async def semantic_search(
         "embedded_symbol_count": embedded_symbol_count,
         "returned_count": len(result_rows),
         "scope_excluded_count": scope_excluded_count,
+        # In-scope embedded-symbol population — informational, NOT the pagination
+        # total (retrieval is capped, so most of it is never ranked/returned).
+        "scope_candidate_population": total_candidates,
+        # True when the ranked window was capped at candidate_limit: more in-scope
+        # matches may exist beyond it (honest bound, not a silent truncation).
+        "retrieval_saturated": retrieval_saturated,
         "warnings": warnings,
         "embedding_coverage": coverage,
         "ranking_spec_version": "1",
         "context_metrics": context_metrics,
         "result": result_rows,
         **pagination_envelope(
-            total=total_candidates,
+            total=available_count,
             returned=len(result_rows),
             offset=offset,
         ),

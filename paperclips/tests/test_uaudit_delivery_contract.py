@@ -46,6 +46,20 @@ PAIRS = {
         ("infra", "UWAInfraEngineer", "infra.findings.json"),
         ("qa_verify", "UWAQAEngineer", "qa-verify.findings.json"),
     ),
+    ("forced_full", "ios"): (
+        ("code", "UWISwiftAuditor", "code.findings.json"),
+        ("security", "UWISecurityAuditor", "security.findings.json"),
+        ("crypto", "UWICryptoAuditor", "crypto.findings.json"),
+        ("infra", "UWIInfraEngineer", "infra.findings.json"),
+        ("qa_verify", "UWIQAEngineer", "qa-verify.findings.json"),
+    ),
+    ("forced_full", "android"): (
+        ("code", "UWAKotlinAuditor", "code.findings.json"),
+        ("security", "UWASecurityAuditor", "security.findings.json"),
+        ("crypto", "UWACryptoAuditor", "crypto.findings.json"),
+        ("infra", "UWAInfraEngineer", "infra.findings.json"),
+        ("qa_verify", "UWAQAEngineer", "qa-verify.findings.json"),
+    ),
 }
 
 
@@ -141,6 +155,7 @@ def prepare_run(
     platform: str = "ios",
     statuses: dict[str, str] | None = None,
     findings: dict[str, list[dict]] | None = None,
+    diff_patch: bytes | None = None,
     validate: bool = True,
 ) -> dict:
     helper = install_helper(root)
@@ -171,7 +186,9 @@ def prepare_run(
         write_json(run / "profile.json", {"branch": ref["branch"]})
         (run / "commits.tsv").write_text(f"{HEAD_SHA}\tИзменение\n")
         (run / "files.tsv").write_text("Sources/Wallet/Auth.swift\n")
-        (run / "diff.patch").write_text("diff --git a/A b/A\n--- a/A\n+++ b/A\n@@\n-old\n+new\n")
+        (run / "diff.patch").write_bytes(
+            diff_patch or b"diff --git a/A b/A\n--- a/A\n+++ b/A\n@@\n-old\n+new\n"
+        )
         lock = root / "state" / "locks" / f"{ref['routine_id']}.lock"
         lock.mkdir(parents=True)
         write_json(
@@ -394,6 +411,54 @@ def test_complete_zero_removes_stale_reports_and_uses_message_receipt(tmp_path: 
     stored = read_json(fixture["run"] / "delivery-result.json")
     assert stored["report_sha256"] is None
     assert stored["route_source"] == "file_route"
+
+
+def test_daily_aggregate_streams_diff_larger_than_generic_file_limit(tmp_path: Path):
+    diff = b"diff --git a/A b/A\n--- a/A\n+++ b/A\n" + (b"+new\n" * (17 * 1024 * 1024 // 5))
+    fixture = prepare_run(
+        tmp_path,
+        kind="daily_delta",
+        platform="android",
+        statuses={"qa_verify": "partial"},
+        diff_patch=diff,
+    )
+
+    result = aggregate(fixture)
+
+    assert result["mode"] == "document"
+    report = (fixture["run"] / "audit-final.md").read_text()
+    assert "добавлений — 3565158" in report
+
+
+@pytest.mark.parametrize("platform", ("android", "ios"))
+def test_forced_full_uses_russian_v1_delivery_without_daily_cursor(tmp_path: Path, platform: str):
+    fixture = prepare_run(
+        tmp_path,
+        kind="forced_full",
+        platform=platform,
+        statuses={"qa_verify": "partial"},
+        findings={"code": [finding(title="Проверка полного диапазона")]},
+    )
+
+    result = aggregate(fixture)
+
+    assert result["mode"] == "document"
+    summary = read_json(fixture["run"] / "delivery-summary.json")
+    assert summary["audit_kind"] == "forced_full"
+    report = (fixture["run"] / "audit-final.md").read_text()
+    assert "# Аудит изменений" in report
+    assert "Проверка полного диапазона" in report
+    assert "Аудит " in (fixture["run"] / "telegram-summary.txt").read_text()
+    failure = call(
+        fixture["helper"],
+        "reconcile-daily",
+        "--run-dir", fixture["run"],
+        "--cursor", tmp_path / f"{platform}-version-audit.json",
+        "--lock-dir", fixture["lock"],
+        "--reconciled-at", RECONCILED_AT,
+        ok=False,
+    )
+    assert "requires a daily summary" in failure["error"]
 
 
 def test_partial_zero_requires_document_and_allowlisted_human_approval(tmp_path: Path):

@@ -158,6 +158,44 @@ async def test_trigger_respawn_primary_patch_omits_status_field():
 
 
 @pytest.mark.asyncio
+async def test_trigger_respawn_ghost_lock_skips_primary_and_releases():
+    """GIM-1704: a ghost lock (executionRunId set, no active run) must skip the
+    primary assignee-PATCH (it cannot clear the stale lock and would false-succeed
+    on _wait_for_respawn) and go straight to the release path, which clears it."""
+    client = MagicMock(spec=PaperclipClient)
+    client.patch_issue = AsyncMock()
+    client.post_release = AsyncMock()
+    # First polls still surface the STALE ghost id (must be excluded), then a
+    # fresh run id appears after release+patch.
+    responses = [_issue(run_id="ghost-run")] * 3 + [_issue(run_id="run-fresh")] * 9
+    client.get_issue = AsyncMock(side_effect=responses)
+
+    # execution_run_id set + active_run_id None == ghost lock
+    ghost = Issue(
+        id="issue-1",
+        assignee_agent_id="agent-1",
+        execution_run_id="ghost-run",
+        active_run_id=None,
+        status="in_progress",
+        updated_at=datetime(2026, 6, 22, 4, 0, tzinfo=timezone.utc),
+    )
+
+    with patch.object(act, "_sleep", new=AsyncMock()):
+        result = await act.trigger_respawn(client, ghost, "agent-1")
+
+    assert result.via == "release_patch"
+    assert result.success is True
+    assert result.run_id == "run-fresh"  # NOT the stale ghost id
+    client.post_release.assert_awaited_once_with("issue-1")
+    # Primary PATCH skipped — only the fallback (release) PATCH ran.
+    assert client.patch_issue.await_count == 1
+    assert client.patch_issue.await_args_list[0].args == (
+        "issue-1",
+        {"assigneeAgentId": "agent-1", "status": "in_progress"},
+    )
+
+
+@pytest.mark.asyncio
 async def test_trigger_respawn_total_failure():
     client = MagicMock(spec=PaperclipClient)
     client.patch_issue = AsyncMock()

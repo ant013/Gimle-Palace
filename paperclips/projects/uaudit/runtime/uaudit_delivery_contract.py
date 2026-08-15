@@ -45,6 +45,7 @@ SEVERITY_RU = {
 INPUT_NAMES = {
     "pr": ("pr.json", "pr.diff"),
     "daily_delta": ("profile.json", "commits.tsv", "files.tsv", "diff.patch"),
+    "forced_full": ("profile.json", "commits.tsv", "files.tsv", "diff.patch"),
 }
 BASE_STAGES = {
     ("pr", "ios"): (
@@ -67,6 +68,20 @@ BASE_STAGES = {
         ("qa_verify", "UWIQAEngineer", "qa-verify.findings.json"),
     ),
     ("daily_delta", "android"): (
+        ("code", "UWAKotlinAuditor", "code.findings.json"),
+        ("security", "UWASecurityAuditor", "security.findings.json"),
+        ("crypto", "UWACryptoAuditor", "crypto.findings.json"),
+        ("infra", "UWAInfraEngineer", "infra.findings.json"),
+        ("qa_verify", "UWAQAEngineer", "qa-verify.findings.json"),
+    ),
+    ("forced_full", "ios"): (
+        ("code", "UWISwiftAuditor", "code.findings.json"),
+        ("security", "UWISecurityAuditor", "security.findings.json"),
+        ("crypto", "UWICryptoAuditor", "crypto.findings.json"),
+        ("infra", "UWIInfraEngineer", "infra.findings.json"),
+        ("qa_verify", "UWIQAEngineer", "qa-verify.findings.json"),
+    ),
+    ("forced_full", "android"): (
         ("code", "UWAKotlinAuditor", "code.findings.json"),
         ("security", "UWASecurityAuditor", "security.findings.json"),
         ("crypto", "UWACryptoAuditor", "crypto.findings.json"),
@@ -289,8 +304,8 @@ def _validate_platform(value: Any) -> str:
 
 
 def _validate_kind(value: Any) -> str:
-    if value not in ("pr", "daily_delta"):
-        _fail("audit_kind must be pr or daily_delta")
+    if value not in ("pr", "daily_delta", "forced_full"):
+        _fail("audit_kind must be pr, daily_delta, or forced_full")
     return value
 
 
@@ -318,7 +333,7 @@ def _validate_source_ref(value: Any, audit_kind: str, where: str = "source_ref")
     from_sha = _sha(ref["from_sha"], f"{where}.from_sha", git=True)
     to_sha = _sha(ref["to_sha"], f"{where}.to_sha", git=True)
     if from_sha == to_sha:
-        _fail(f"{where} daily range must be non-empty")
+        _fail(f"{where} delta range must be non-empty")
     return {"routine_id": routine, "branch": branch, "from_sha": from_sha, "to_sha": to_sha}
 
 
@@ -429,8 +444,8 @@ def bind_context(args: argparse.Namespace) -> dict[str, Any]:
     if intake_path.parent != run_dir:
         _fail("intake must be inside run directory")
     intake = _validate_intake(_load_json(intake_path))
-    if intake["audit_kind"] == "daily_delta" and args.lock_dir is None:
-        _fail("daily bind-context requires --lock-dir")
+    if intake["audit_kind"] in ("daily_delta", "forced_full") and args.lock_dir is None:
+        _fail("delta bind-context requires --lock-dir")
     if intake["audit_kind"] == "pr" and args.lock_dir is not None:
         _fail("PR bind-context forbids --lock-dir")
     digests = {name: _sha256_path(run_dir / name) for name in INPUT_NAMES[intake["audit_kind"]]}
@@ -464,7 +479,7 @@ def bind_context(args: argparse.Namespace) -> dict[str, Any]:
         raw = _canonical_bytes(context)
         existing = context
         binding_sha = _sha256_bytes(raw)
-        if existing["audit_kind"] == "daily_delta":
+        if existing["audit_kind"] in ("daily_delta", "forced_full"):
             lock_dir = args.lock_dir.resolve()
             if not lock_dir.is_dir():
                 _fail("daily routine lock is not held")
@@ -477,7 +492,7 @@ def bind_context(args: argparse.Namespace) -> dict[str, Any]:
             )
             pending_lock_metadata = (metadata_path, metadata)
         _atomic_write(context_path, raw)
-    if existing["audit_kind"] == "daily_delta":
+    if existing["audit_kind"] in ("daily_delta", "forced_full"):
         lock_dir = args.lock_dir.resolve()
         if not lock_dir.is_dir():
             _fail("daily routine lock is not held")
@@ -872,11 +887,20 @@ def _render_telegram(binding: Mapping[str, Any], status: str, counts: Mapping[st
 
 
 def _diff_counts(path: Path) -> tuple[int, int, int]:
-    raw = _read_bytes(path)
-    text = raw.decode("utf-8", errors="replace")
-    files = sum(1 for line in text.splitlines() if line.startswith("diff --git "))
-    additions = sum(1 for line in text.splitlines() if line.startswith("+") and not line.startswith("+++"))
-    deletions = sum(1 for line in text.splitlines() if line.startswith("-") and not line.startswith("---"))
+    if path.is_symlink() or not path.is_file():
+        _fail(f"invalid diff file: {path}")
+    files = additions = deletions = 0
+    try:
+        with path.open("rb") as stream:
+            for line in stream:
+                if line.startswith(b"diff --git "):
+                    files += 1
+                elif line.startswith(b"+") and not line.startswith(b"+++"):
+                    additions += 1
+                elif line.startswith(b"-") and not line.startswith(b"---"):
+                    deletions += 1
+    except OSError as exc:
+        raise ContractError(f"cannot read diff file: {path}") from exc
     return files, additions, deletions
 
 

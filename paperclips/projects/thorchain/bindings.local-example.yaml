@@ -1,0 +1,9 @@
+# CI-only fallback. Real UUIDs live in ~/.paperclip/projects/thorchain/bindings.yaml.
+schemaVersion: 2
+company_id: "00000000-0000-0000-0000-000000000003"
+agents:
+  ThorChainCEO: "00000000-0000-0000-0000-000000000210"
+  ThorChainCTO: "00000000-0000-0000-0000-000000000211"
+  ThorChainCodeReviewer: "00000000-0000-0000-0000-000000000212"
+  ThorChainSwiftEngineer: "00000000-0000-0000-0000-000000000213"
+  ThorChainQAEngineer: "00000000-0000-0000-0000-000000000214"

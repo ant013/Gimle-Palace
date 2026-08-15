@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from neo4j import AsyncDriver
@@ -18,6 +19,12 @@ from palace_mcp.memory.cypher import (
     PROJECT_INDEXED_COMMIT,
     PROJECT_LAST_INGEST,
     UPSERT_PROJECT,
+)
+from palace_mcp.code.snippet_provider import FreshnessResult, inspect_freshness
+from palace_mcp.git.path_resolver import (
+    ProjectNotRegistered,
+    registration_identity_check,
+    resolve_registered_project,
 )
 from palace_mcp.memory.schema import ProjectInfo
 
@@ -57,12 +64,16 @@ def _project_info_from_row(
         repo_url=p.get("repo_url"),
         parent_mount=p.get("parent_mount"),
         relative_path=p.get("relative_path"),
+        repo_path=p.get("repo_path"),
         language_profile=p.get("language_profile"),
         expected_profile=bool(p.get("expected_profile") or False),
         source_created_at=p["source_created_at"],
         source_updated_at=p["source_updated_at"],
         entity_counts=entity_counts or {},
         code_index_stats=code_index_stats or {},
+        indexed_commit=p.get("indexed_commit"),
+        indexed_commit_status=p.get("indexed_commit_status"),
+        indexed_commit_source="project" if p.get("indexed_commit") else None,
     )
 
 
@@ -87,6 +98,7 @@ async def register_project(
     repo_url: str | None = None,
     parent_mount: str | None = None,
     relative_path: str | None = None,
+    repo_path: str | None = None,
     language_profile: str | None = None,
     expected_profile: bool = False,
 ) -> ProjectInfo:
@@ -106,6 +118,38 @@ async def register_project(
         validate_parent_mount(parent_mount)
     if relative_path is not None:
         validate_relative_path(relative_path)
+
+    # F3 (Sprint-1 reliability): repo_path must be a real git repo, and when a
+    # mount layout is also given, both must resolve to the SAME directory
+    # (symlink-normalized — this host mounts through symlink aliases). The
+    # hd-wallet-kit defect was repo_path and relative_path pointing at two
+    # different valid repos, silently.
+    if repo_path is not None:
+        rp = Path(repo_path)
+        if not rp.is_absolute():
+            raise ValueError(f"repo_path must be absolute: {repo_path!r}")
+        if not rp.is_dir():
+            raise ValueError(f"repo_path does not exist: {repo_path!r}")
+        if not (rp / ".git").exists():
+            raise ValueError(f"repo_path is not a git repo: {repo_path!r}")
+        if parent_mount and relative_path:
+            mount_resolved: Path | None = None
+            try:
+                mount_resolved = resolve_registered_project(
+                    slug,
+                    project_node={
+                        "parent_mount": parent_mount,
+                        "relative_path": relative_path,
+                    },
+                )
+            except (ProjectNotRegistered, ValueError):
+                mount_resolved = None
+            if mount_resolved is not None and mount_resolved.resolve() != rp.resolve():
+                raise ValueError(
+                    "repo_path and parent_mount/relative_path resolve to "
+                    f"different directories: {rp.resolve()} != "
+                    f"{mount_resolved.resolve()}"
+                )
 
     now = datetime.now(timezone.utc).isoformat()
     cm_project_name = derive_cm_project_name(
@@ -145,6 +189,7 @@ async def register_project(
             repo_url=repo_url,
             parent_mount=parent_mount,
             relative_path=relative_path,
+            repo_path=repo_path,
             language_profile=language_profile,
             expected_profile=expected_profile,
             now=now,
@@ -184,6 +229,33 @@ async def list_projects(driver: AsyncDriver) -> list[ProjectInfo]:
         ]
 
 
+async def project_integrity_warnings(driver: AsyncDriver) -> list[str]:
+    """F3: live registry-identity sweep, surfaced via health payloads.
+
+    Warns only on positive inconsistency (path_mismatch, repo_path_missing) —
+    "unresolved" is normal for memory-only projects and would be noise.
+    """
+    warnings: list[str] = []
+    async with driver.session() as session:
+        result = await session.run(LIST_PROJECTS)
+        rows = [row async for row in result]
+    for row in rows:
+        node = row["p"]
+        slug = str(node["slug"])
+        try:
+            check = registration_identity_check(slug, project_node=node)
+        except Exception as exc:  # noqa: BLE001 — one bad row must not kill the sweep
+            warnings.append(f"{slug}: identity_check_failed ({str(exc)[:80]})")
+            continue
+        if check in ("path_mismatch", "repo_path_missing"):
+            warnings.append(
+                f"{slug}: {check} (repo_path={node.get('repo_path')!r}, "
+                f"parent_mount={node.get('parent_mount')!r}, "
+                f"relative_path={node.get('relative_path')!r})"
+            )
+    return warnings
+
+
 async def get_project_overview(
     driver: AsyncDriver,
     *,
@@ -191,11 +263,6 @@ async def get_project_overview(
     source: str = "paperclip",
 ) -> ProjectInfo:
     """Return a :Project with memory counts, code index stats, and ingest metadata."""
-    from palace_mcp.code.snippet_provider import inspect_freshness
-    from palace_mcp.git.path_resolver import (
-        ProjectNotRegistered,
-        resolve_registered_project,
-    )
     from palace_mcp.memory.projects import UnknownProjectError
 
     group_id = f"project/{slug}"
@@ -238,17 +305,51 @@ async def get_project_overview(
         )
         indexed_commit_row = await indexed_commit_result.single()
 
-    indexed_commit = (
+    # Dominant per-symbol vote: DIAGNOSTIC ONLY (dominant_symbol_commit).
+    # After any incremental ingest the vote is a previous run's sha; feeding
+    # it into lag math is how "EvmKit 3 behind" was reported while current.
+    dominant_symbol_commit = (
         str(indexed_commit_row["commit_sha"])
         if indexed_commit_row is not None
         and indexed_commit_row["commit_sha"] is not None
         else None
     )
+    authoritative_commit = (
+        str(project_node.get("indexed_commit"))
+        if project_node.get("indexed_commit")
+        else None
+    )
+    indexed_commit_status = (
+        str(project_node.get("indexed_commit_status"))
+        if project_node.get("indexed_commit_status")
+        else None
+    )
+
+    identity_check = registration_identity_check(slug, project_node=project_node)
     try:
         repo_path = resolve_registered_project(slug, project_node=project_node)
     except (ProjectNotRegistered, ValueError):
         repo_path = None
-    freshness = inspect_freshness(repo_path, indexed_commit)
+
+    if identity_check not in ("ok", "unchecked"):
+        # Never a confident number against a possibly-wrong tree.
+        freshness = FreshnessResult(
+            indexed_commit=authoritative_commit,
+            commits_behind_head=None,
+            stale=None,
+            freshness_state="unknown",
+            freshness_reason="registry_mismatch",
+        )
+    elif authoritative_commit is not None:
+        freshness = inspect_freshness(repo_path, authoritative_commit)
+    else:
+        freshness = FreshnessResult(
+            indexed_commit=None,
+            commits_behind_head=None,
+            stale=None,
+            freshness_state="unknown",
+            freshness_reason="indexed_commit_unpopulated_reingest_required",
+        )
 
     return base.model_copy(
         update={
@@ -261,6 +362,17 @@ async def get_project_overview(
             if last_ingest
             else None,
             "indexed_commit": freshness.indexed_commit,
+            "indexed_commit_source": "project" if authoritative_commit else None,
+            "indexed_commit_status": indexed_commit_status,
+            "dominant_symbol_commit": dominant_symbol_commit,
             "commits_behind_head": freshness.commits_behind_head,
+            "commits_behind_local_tree": freshness.commits_behind_head,
+            "tree_head": freshness.tree_head,
+            "stale": freshness.stale,
+            "freshness_state": freshness.freshness_state,
+            "freshness_reason": freshness.freshness_reason,
+            "origin_checked": False,
+            "commits_behind_origin": None,
+            "identity_check": identity_check,
         }
     )

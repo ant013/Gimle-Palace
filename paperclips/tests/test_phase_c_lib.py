@@ -58,13 +58,50 @@ def test_paperclip_api_defines_required_functions():
     fns = [
         "paperclip_get", "paperclip_post", "paperclip_put", "paperclip_patch",
         "paperclip_hire_agent", "paperclip_deploy_agents_md",
-        "paperclip_get_agent_config",
+        "paperclip_get_agent_config", "paperclip_update_agent_config",
+        "paperclip_get_company_if_exists",
         "paperclip_plugin_get_config", "paperclip_plugin_set_config",
     ]
     cmd = f"source {LIB}/_common.sh && source {LIB}/_paperclip_api.sh"
     for fn in fns:
         out = _run_bash(f"{cmd} && type {fn}")
         assert out.returncode == 0, f"function {fn} not defined: {out.stderr}"
+
+
+def test_paperclip_agent_config_reconcile_uses_agent_patch_endpoint():
+    source = f"source {LIB}/_common.sh && source {LIB}/_paperclip_api.sh"
+    out = _run_bash(
+        f"{source} && export PAPERCLIP_API_URL=http://paperclip.test "
+        "PAPERCLIP_API_KEY=test-token && "
+        "curl() { printf '%s\\n' \"$@\"; } && "
+        "paperclip_update_agent_config agent-1 '{\"adapterType\":\"codex_local\"}'"
+    )
+    assert out.returncode == 0, out.stderr
+    assert "PATCH" in out.stdout
+    assert "/api/agents/agent-1" in out.stdout
+
+
+def test_company_lookup_treats_only_404_as_already_absent():
+    source = f"source {LIB}/_common.sh && source {LIB}/_paperclip_api.sh"
+    environment = (
+        "export PAPERCLIP_API_URL=http://paperclip.test "
+        "PAPERCLIP_API_KEY=test-token"
+    )
+
+    missing = _run_bash(
+        f"{source} && {environment} && "
+        "curl() { printf '\\n404'; } && "
+        "paperclip_get_company_if_exists company-1"
+    )
+    assert missing.returncode == 0
+    assert missing.stdout == ""
+
+    forbidden = _run_bash(
+        f"{source} && {environment} && "
+        "curl() { printf '{\"error\":\"forbidden\"}\\n403'; } && "
+        "paperclip_get_company_if_exists company-1"
+    )
+    assert forbidden.returncode != 0
 
 
 def test_journal_open_creates_file_under_journal_dir(tmp_path, monkeypatch):
