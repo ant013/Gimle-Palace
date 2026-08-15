@@ -6,10 +6,10 @@
 ## Цель
 
 Ежедневный аудит Android и iOS должен непрерывно отслеживать актуальную
-релизную линию: существующую `version/X.Y`, временно `master` между удалением
-закрытой линии и созданием следующей, а также безопасно переживать пересоздание
-ветки после rebase. Ни один диапазон не должен тихо исчезать, а delivery/cursor
-остаются receipt-bound.
+релизную линию: завершать переход из `version/X.Y` через проверенный `master`
+в `version/X.(Y+1)`, а также безопасно переживать пересоздание ветки после
+rebase. Ни один диапазон не должен тихо исчезать, а delivery/cursor остаются
+receipt-bound.
 
 ## Зафиксированные правила продукта
 
@@ -58,14 +58,22 @@ range и lock checks. Он получает refs только через direct 
 
 Порядок выбора для каждой платформы:
 
-1. Найти все публичные `version/<major>.<minor>` refs; выбрать наибольшую
-   семантическую версию, не ниже настроенной release line.
-2. Если подходящей `version/*` нет, использовать `master` как `bridge` и
-   включить это в immutable source evidence и операторский комментарий.
-3. Если `master` также недоступен, block с exact remote evidence; не брать
-   локальный `origin/*`, `FETCH_HEAD` или старый mirror ref.
-4. Если version ref появляется после bridge, перейти на неё только после
-   проверки ancestry/transition ниже.
+1. Direct-fetch current `master` и проверить
+   `git merge-base --is-ancestor <cursor-sha> <master-sha>`.
+2. Только если ответ положительный, включить в переход все commits
+   `cursor..master`; это bridge-половина диапазона. Если cursor отсутствует в
+   `master`, **не анализировать master** и зафиксировать этот факт в immutable
+   evidence.
+3. Найти первую следующую по семантической версии публичную
+   `version/<major>.<minor>` выше recorded release line. Если она существует,
+   добавить все commits, которые она добавляет поверх проверенного `master`
+   (`master..version/X.(Y+1)`), без дубликатов. Обе части анализируются одним
+   transition/full-range audit, а cursor после receipt-led delivery ставится на
+   HEAD новой `version/*`.
+4. Если новой `version/*` ещё нет, а cursor есть в `master`, выполнить обычный
+   bridge audit только диапазона `cursor..master` и поставить cursor на master
+   HEAD. Если cursor нет в master и новая version ещё не создана, block с exact
+   evidence; не использовать local `origin/*`, `FETCH_HEAD` или mirror ref.
 
 В нормальном ancestor случае daily range остаётся ограниченным действующими
 30 commits/300 files/3000 lines. Превышение создаёт существующий явный
@@ -78,8 +86,11 @@ full-range путь; daily limits не расширяются.
 reference. Resolver классифицирует переход как `normal`, `bridge`,
 `version-advance` или `history-rewrite`.
 
-- Для `normal`, `bridge` и `version-advance` cursor должен быть ancestor
-  выбранного HEAD; обычный receipt-led daily flow остаётся без изменений.
+- Для `normal` cursor должен быть ancestor выбранного version HEAD. Для
+  `bridge` он обязан быть ancestor `master`. Для `version-advance` в одном
+  immutable manifest фиксируются `cursor..master` и `master..version`;
+  второй диапазон допускается только после положительного первого ancestry
+  check. Обычный receipt-led daily flow остаётся без изменений.
 - Для `history-rewrite` запрещены обычный no-op и cursor CAS. Создаётся
   отдельная recovery generation с сохранёнными old/new refs, merge-base и
   range-diff/patch-equivalence evidence. Она повторно аудирует необходимый
@@ -127,7 +138,7 @@ HEAD и доставляет русский отчёт по v1 contract.
 
 | Slice | Базовый аналог | Новый delta | Риск | Проверка |
 |---|---|---|---|---|
-| Source selection | Platform dispatcher + direct remote fetch contract | Semver version discovery, temporary master bridge и recorded source mode | Высокий | Fake `ls-remote`: version exists, no version, new version appears, remote unavailable |
+| Source selection | Platform dispatcher + direct remote fetch contract | `cursor..master` только при ancestry; затем `master..next-version` как единый transition audit | Высокий | Fake refs: cursor в master/нет в master, version появляется/отсутствует, remote unavailable |
 | Rewrite transition | `reconcile_daily` receipt/CAS | Ledger + evidence-bound recovery; no SHA reset on non-ancestor | Высокий | ancestor, non-ancestor, incomplete equivalence, receipt conflict, idempotent resume |
 | iOS stale generation | Existing lock/CAS validation | Quarantine/resume protocol, no direct lock deletion | Высокий | valid terminal resume, incomplete run, conflicting artifacts, next run gets lock only after quarantine |
 | Routine liveness | Revision-safe reconciler + partial-apply tests | Validate live schedule/execution state, fail closed on unknown schema | Высокий | active/future run green; inactive/past/missing-field/409 fail; rerun converges |
@@ -136,8 +147,10 @@ HEAD и доставляет русский отчёт по v1 contract.
 
 1. Каждый run пишет selected branch/mode/SHA в immutable evidence; локальные
    refs не могут определять HEAD.
-2. Между version branches Android/iOS audit использует `master` только как
-   explicitly labelled bridge и возвращается на newest `version/*`.
+2. При появлении следующей version audit объединяет проверенный
+   `cursor..master` с `master..version` без дублей и ставит cursor на version
+   HEAD только после единого receipt-led delivery. При отсутствии cursor в
+   master master полностью игнорируется.
 3. Rebase/delete/recreate не приводит к silent cursor movement; переход
    возможен только после полного receipt-bound recovery evidence.
 4. iOS stale `UNS-538` не блокирует новый audit после подтверждённой quarantine
