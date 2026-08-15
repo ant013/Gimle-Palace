@@ -360,6 +360,8 @@ def test_audit_stage_bundles_use_bound_structured_v1_sidecars():
             in text
         )
         assert "limitation text" in text or "limitation `text`" in text
+        if "QAEngineer" in name:
+            assert "1 to 240 characters inclusive" in text
         assert "validate-stage --run-dir" in text
         assert "Russian" in text
         if "InfraEngineer" not in name:
