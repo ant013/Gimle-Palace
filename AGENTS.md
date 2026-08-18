@@ -181,6 +181,17 @@ auth headers, wake-up rules, issue blocking, and known Paperclip gotchas. Do
 not rediscover endpoints by grepping old specs unless `API.md` is missing the
 needed contract.
 
+## UAudit Live Operations
+
+The local `Gimle-Palace` checkout is development-only. For every request about
+current UAudit logs, state, runs, or data, connect first to the iMac through
+`ssh imac-ssh.ant013.work`; do not search the local checkout or present its
+contents as live evidence. Read
+[`docs/paperclip-operations/uaudit-imac-operations.md`](docs/paperclip-operations/uaudit-imac-operations.md)
+before the first command: it defines the iMac preflight, canonical runtime
+paths, period semantics, and secret-safe authentication fallback. Never copy,
+print, or pre-load credentials unless the SSH preflight has actually failed.
+
 ## Docs And References
 
 - Specs: `docs/superpowers/specs/YYYY-MM-DD-<slug>.md`
