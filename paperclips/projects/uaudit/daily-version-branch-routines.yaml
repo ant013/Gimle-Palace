@@ -8,11 +8,6 @@ apps:
     enabled: true
     report_route: UAudit
 
-limits:
-  max_commits: 30
-  max_files: 300
-  max_diff_lines: 3000
-
 routines:
   - id: daily-android-version-0.50
     app_id: unstoppable_wallet

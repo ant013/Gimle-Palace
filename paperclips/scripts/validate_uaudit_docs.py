@@ -79,9 +79,8 @@ def validate_config(errors: list[str]) -> None:
         errors.append("daily-version-branch-routines.yaml must use agent names, not UUIDs")
     if "required_subagents" in raw:
         errors.append("daily version-branch routines must use Paperclip agents, not Codex subagent rosters")
-    limits = config.get("limits", {})
-    if limits.get("max_files") != 300:
-        errors.append("daily routine max_files must be 300")
+    if "limits" in config:
+        errors.append("daily routines must not impose commit, file, or diff-size limits")
     dispatchers = {r.get("platform"): r.get("dispatcher") for r in config.get("routines", [])}
     if dispatchers.get("android") != "UWACTO" or dispatchers.get("ios") != "UWICTO":
         errors.append(f"daily routines must point to platform CTO dispatchers, got {dispatchers}")
