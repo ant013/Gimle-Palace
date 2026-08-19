@@ -75,11 +75,10 @@ def load_config(path: Path = DEFAULT_CONFIG) -> dict[str, Any]:
     if data.get("schemaVersion") != 2:
         raise ValueError(f"{path}: schemaVersion must be 2")
     marker = _single_line(data.get("marker"), f"{path}: marker")
-    limits = data.get("limits")
     routines = data.get("routines")
     apps = data.get("apps")
-    if not isinstance(limits, dict) or not isinstance(routines, list) or not routines or not isinstance(apps, list) or not apps:
-        raise ValueError(f"{path}: expected apps, limits, and non-empty routines lists")
+    if not isinstance(routines, list) or not routines or not isinstance(apps, list) or not apps:
+        raise ValueError(f"{path}: expected apps and non-empty routines lists")
     app_ids: set[str] = set()
     for index, app in enumerate(apps):
         if not isinstance(app, dict):
@@ -92,10 +91,6 @@ def load_config(path: Path = DEFAULT_CONFIG) -> dict[str, Any]:
         _single_line(app.get("display_name"), f"{path}: apps[{index}].display_name")
         _single_line(app.get("report_route"), f"{path}: apps[{index}].report_route")
         app_ids.add(app_id)
-    for key in ("max_commits", "max_files", "max_diff_lines"):
-        if not isinstance(limits.get(key), int) or limits[key] <= 0:
-            raise ValueError(f"{path}: limits.{key} must be positive integer")
-
     validated: list[dict[str, Any]] = []
     for index, routine in enumerate(routines):
         if not isinstance(routine, dict):

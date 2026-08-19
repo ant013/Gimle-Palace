@@ -15,15 +15,14 @@ Route `https://github.com/horizontalsystems/unstoppable-wallet-ios/pull/<N>` to 
 
 ## Daily intake
 
-Handle only `UAudit daily version-branch delta audit`, `platform: ios`, from `paperclips/projects/uaudit/daily-version-branch-routines.yaml`. Use routine `daily-ios-version-0.50`, authoritative `version/0.50`, and limits `max_commits=30`, `max_files=300`, `max_diff_lines=3000`.
+Handle only iOS daily version-branch audits from `daily-version-branch-routines.yaml`. Read routine id and `BASE=version/X.Y` from the routine description; keep its cursor/lock identity across release lines.
 
-- FROM is only `{{paths.project_root}}/state/ios-version-audit.json`; preserve this cursor in every handoff. Never read a cursor below `{{paths.project_root}}/artifacts/`.
-- Run `git -C "$REPO" fetch --no-tags https://github.com/horizontalsystems/unstoppable-wallet-ios refs/heads/version/0.50:refs/remotes/uaudit-upstream/version/0.50`, then `TO=$(git -C "$REPO" rev-parse refs/remotes/uaudit-upstream/version/0.50^{commit})`, before cursor/no-op/range checks; failure blocks. Never resolve TO from origin/version/0.50, a local mirror ref, or stale FETCH_HEAD.
-- Cursor=head: comment `No new commits for iOS version/0.50`, mark done, do not mutate cursor.
-- Missing/rewritten/backward history or exceeded limit: block to `{{bindings.agents.AUCEO}}` with evidence.
+- FROM is only `{{paths.project_root}}/state/ios-version-audit.json`; preserve it; never read below `{{paths.project_root}}/artifacts/`.
+- `git fetch --no-tags` direct `master` and `$BASE` to `uaudit-upstream`; never use `origin/*`, mirrors, or `FETCH_HEAD`. If BASE exists require `FROM ⊑ BASE` and select it. If absent, fetch only strict next `version/X.(Y+1)`; require `FROM ⊑ master ⊑ next`, select next, and record `FROM..master`, `master..next` in hashed `profile.json`. With no next but `FROM ⊑ master`, select labeled master bridge; else block to `{{bindings.agents.AUCEO}}`. Never block a proven range by size.
+- Selected head=cursor: no-change comment/done, no mutation. Missing, rewrite, backward, skipped next, or unproven ancestry blocks with evidence.
 - Explicit initialization: assign `{{bindings.agents.UWIInfraEngineer}}` `mode=initialize_cursor` with head/routine; no run/message.
 - Run `python3 "$HELPER" verify-install --manifest "{{paths.team_workspace_root}}/.uaudit-tools/uaudit_delivery_contract.manifest.json"` before v1 intake.
-- Valid bounded ancestor: set `$RUN={{paths.team_workspace_root}}/UNS-<issueNumber>-audit`, `LOCK={{paths.project_root}}/state/locks/daily-ios-version-0.50.lock`; `mkdir "$LOCK"` (existing blocks; never steal). Atomically write metadata and four strict daily inputs; run `python3 "$HELPER" bind-context --run-dir "$RUN" --intake "$RUN/intake.json" --lock-dir "$LOCK"`, then assign `{{bindings.agents.UWISwiftAuditor}}` `mode=daily_code_audit` with FROM/TO/routine/RUN.
+- Valid range: set `$RUN={{paths.team_workspace_root}}/UNS-<issueNumber>-audit`, `LOCK={{paths.project_root}}/state/locks/daily-ios-version-0.50.lock`; `mkdir "$LOCK"` (existing blocks; never steal). Atomically write metadata/four inputs with selected branch/FROM/TO; run `bind-context --run-dir`, then assign `{{bindings.agents.UWISwiftAuditor}}` `mode=daily_code_audit`.
 
 Chain: `UWISwiftAuditor -> UWISecurityAuditor -> UWICryptoAuditor -> UWIInfraEngineer -> optional UWIResearchAgent -> UWIQAEngineer -> UWICTO -> UWIInfraEngineer`. Use Paperclip assignment only; do not use `uaudit-*` subagents for daily real-delta audits.
 
