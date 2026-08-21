@@ -23,7 +23,7 @@ from palace_mcp.extractors.foundation.errors import (
     ExtractorErrorCode,
 )
 from palace_mcp.extractors.embedding_symbol import (
-    EmbeddingSymbolExtractor,
+    EmbeddingBackfillExtractor,
     _embedding_text,
 )
 from palace_mcp.extractors.runner import run_extractor
@@ -503,11 +503,13 @@ async def test_run_extractor_rejects_traversal_scip_path(
 
 
 @pytest.mark.asyncio
-async def test_embedding_symbol_run_extractor_wiring(
+async def test_embedding_backfill_run_extractor_wiring(
     mock_driver: MagicMock, tmp_path: Path, mock_graphiti: MagicMock
 ) -> None:
     backend = _EmbeddingBackend()
-    registry.EXTRACTORS["embedding_symbol"] = EmbeddingSymbolExtractor(backend=backend)
+    registry.EXTRACTORS["embedding_backfill"] = EmbeddingBackfillExtractor(
+        backend=backend
+    )
     mock_graphiti.driver = mock_driver
     load_rows = [
         {
@@ -532,7 +534,7 @@ async def test_embedding_symbol_run_extractor_wiring(
         ) as write_embeddings,
     ):
         res = await run_extractor(
-            name="embedding_symbol",
+            name="embedding_backfill",
             project="testproj",
             driver=mock_driver,
             graphiti=mock_graphiti,
@@ -540,7 +542,7 @@ async def test_embedding_symbol_run_extractor_wiring(
 
     assert res["ok"] is True
     assert res["success"] is True
-    assert res["extractor"] == "embedding_symbol"
+    assert res["extractor"] == "embedding_backfill"
     assert res["nodes_written"] == 1
     assert backend.calls == [[_embedding_text(load_rows[0])]]
     write_embeddings.assert_awaited_once()

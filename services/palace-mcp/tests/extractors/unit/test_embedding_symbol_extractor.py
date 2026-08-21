@@ -17,6 +17,7 @@ from palace_mcp.extractors.embedding_symbol import (
     _LOAD_SYMBOL_ROWS,
     _LOAD_DELTA_SYMBOL_ROWS,
     _WRITE_EMBEDDINGS,
+    EmbeddingBackfillExtractor,
     EmbeddingSymbolExtractor,
     _embedding_text,
     _embedding_text_hash,
@@ -104,7 +105,7 @@ async def test_run_batches_symbols_and_writes_embeddings() -> None:
     graphiti, run_mock, writes = _make_graphiti(rows)
     backend = _FakeBackend()
 
-    stats = await EmbeddingSymbolExtractor(backend=backend).run(
+    stats = await EmbeddingBackfillExtractor(backend=backend).run(
         graphiti=graphiti,
         ctx=_make_ctx(),
     )
@@ -143,7 +144,7 @@ async def test_run_skips_symbols_with_matching_hash() -> None:
     graphiti, _, writes = _make_graphiti([unchanged_row, stale_row])
     backend = _FakeBackend()
 
-    stats = await EmbeddingSymbolExtractor(backend=backend).run(
+    stats = await EmbeddingBackfillExtractor(backend=backend).run(
         graphiti=graphiti,
         ctx=_make_ctx(),
     )
@@ -182,7 +183,7 @@ async def test_run_with_all_unchanged_symbols_skips_backend_resolution() -> None
         _UnexpectedBackend,
     )
     try:
-        stats = await EmbeddingSymbolExtractor().run(
+        stats = await EmbeddingBackfillExtractor().run(
             graphiti=graphiti,
             ctx=_make_ctx(),
         )
@@ -259,6 +260,18 @@ async def test_incremental_run_with_empty_delta_skips_without_backend() -> None:
     assert writes == []
 
 
+@pytest.mark.asyncio
+async def test_project_embedding_refuses_an_implicit_global_backfill() -> None:
+    graphiti, run_mock, writes = _make_graphiti([])
+
+    stats = await EmbeddingSymbolExtractor().run(graphiti=graphiti, ctx=_make_ctx())
+
+    assert stats.outcome.value == "missing_input"
+    assert "embedding_backfill" in (stats.message or "")
+    run_mock.assert_not_awaited()
+    assert writes == []
+
+
 # ---------------------------------------------------------------------------
 # _read_max_symbols
 # ---------------------------------------------------------------------------
@@ -313,7 +326,7 @@ async def test_run_respects_max_symbols_and_prefers_project_over_sdk(
     graphiti, _, writes = _make_graphiti(rows)
     backend = _FakeBackend()
 
-    stats = await EmbeddingSymbolExtractor(backend=backend).run(
+    stats = await EmbeddingBackfillExtractor(backend=backend).run(
         graphiti=graphiti,
         ctx=_make_ctx(),
     )
@@ -363,7 +376,7 @@ async def test_run_respects_max_symbols_and_prefers_project_over_generated_and_d
     graphiti, _, writes = _make_graphiti(rows)
     backend = _FakeBackend()
 
-    stats = await EmbeddingSymbolExtractor(backend=backend).run(
+    stats = await EmbeddingBackfillExtractor(backend=backend).run(
         graphiti=graphiti,
         ctx=_make_ctx(),
     )
@@ -403,7 +416,7 @@ async def test_run_without_max_symbols_embeds_all_pending(
     graphiti, _, writes = _make_graphiti(rows)
     backend = _FakeBackend()
 
-    stats = await EmbeddingSymbolExtractor(backend=backend).run(
+    stats = await EmbeddingBackfillExtractor(backend=backend).run(
         graphiti=graphiti,
         ctx=_make_ctx(),
     )

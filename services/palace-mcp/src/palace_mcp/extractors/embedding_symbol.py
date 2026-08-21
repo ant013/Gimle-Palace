@@ -157,6 +157,7 @@ class EmbeddingSymbolExtractor(BaseExtractor):
     timeout_s: ClassVar[float] = float(
         os.environ.get("PALACE_EMBEDDING_TIMEOUT_S", "36000")
     )
+    allow_global_backfill: ClassVar[bool] = False
 
     def __init__(self, backend: EmbeddingBackend | None = None) -> None:
         self._backend = backend
@@ -195,6 +196,16 @@ class EmbeddingSymbolExtractor(BaseExtractor):
                 changed_paths=delta.changed_paths,
             )
         else:
+            if not self.allow_global_backfill:
+                return ExtractorStats(
+                    outcome=ExtractorOutcome.MISSING_INPUT,
+                    message=(
+                        "embedding_symbol does not perform a global scan; "
+                        "run embedding_backfill explicitly."
+                    ),
+                    next_action="Run extractor embedding_backfill for historical embeddings.",
+                    mode=ExtractorExecutionMode.SKIPPED,
+                )
             loaded_rows = await _load_symbol_rows(driver, ctx.group_id)
         pending_rows: list[_PendingSymbolRow] = []
         for row in loaded_rows:
@@ -269,3 +280,12 @@ class EmbeddingSymbolExtractor(BaseExtractor):
                 else None
             ),
         )
+
+
+class EmbeddingBackfillExtractor(EmbeddingSymbolExtractor):
+    """Explicit, globally-scoped historical embedding operation."""
+
+    name = "embedding_backfill"
+    description = "Backfill embeddings for every stale or missing project Symbol."
+    incremental_capability = ExtractorIncrementalCapability.FULL_ONLY
+    allow_global_backfill = True
