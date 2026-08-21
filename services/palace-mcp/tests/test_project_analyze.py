@@ -24,6 +24,7 @@ from palace_mcp.project_analyze import (
     ExtractorAttemptResult,
     ExtractorExecutionMode,
     ProjectAnalysisService,
+    _build_analysis_delta,
     _resolve_run_mode_plan,
 )
 from palace_mcp.memory.models import Tier
@@ -543,6 +544,38 @@ async def test_resolve_run_mode_plan_falls_back_to_full_for_large_committed_delt
         9,
         0.9,
     )
+
+
+@pytest.mark.asyncio
+async def test_build_analysis_delta_uses_the_planner_worktree_scope(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "palace_mcp.project_analyze._read_project_indexed_commit",
+        AsyncMock(return_value="base-commit"),
+    )
+    detect_changes = AsyncMock(
+        return_value={
+            "ok": True,
+            "files": ["Sources/Dirty.swift"],
+            "changed_paths": ["Sources/Dirty.swift"],
+            "removed_paths": ["Sources/Removed.swift"],
+            "truncated": False,
+        }
+    )
+    monkeypatch.setattr(
+        "palace_mcp.project_analyze.native_detect_changes", detect_changes
+    )
+
+    delta = await _build_analysis_delta(
+        object(), slug="tron-kit", target_commit="planned-head"
+    )
+
+    assert delta is not None
+    assert delta.target_commit == "planned-head"
+    assert delta.changed_paths == ("Sources/Dirty.swift",)
+    assert delta.removed_paths == ("Sources/Removed.swift",)
+    detect_changes.assert_awaited_once_with(project="tron-kit", since="base-commit")
 
 
 @pytest.mark.asyncio

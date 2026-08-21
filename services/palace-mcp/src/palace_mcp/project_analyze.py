@@ -589,11 +589,11 @@ async def _build_analysis_delta(
         )
     if base_commit is None:
         return None
-    result = await native_detect_changes(
-        project=slug,
-        since=base_commit,
-        until=target_commit,
-    )
+    # Match the planner's baseline-to-worktree semantics exactly. ``target``
+    # records the HEAD observed at planning time, while this path list also
+    # preserves a dirty worktree delta instead of silently dropping it by
+    # comparing base..HEAD a second time.
+    result = await native_detect_changes(project=slug, since=base_commit)
     if (
         result is FALLBACK_TO_CM
         or not isinstance(result, dict)
