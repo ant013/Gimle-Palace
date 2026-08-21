@@ -24,7 +24,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from palace_mcp.audit.run import run_audit
 from palace_mcp.code.native_detect_changes import FALLBACK_TO_CM, native_detect_changes
-from palace_mcp.extractors.base import ExtractorExecutionMode
+from palace_mcp.extractors.base import (
+    AnalysisDelta,
+    ExtractorExecutionMode,
+    ExtractorIncrementalCapability,
+)
 from palace_mcp.extractors.foundation.profiles import get_ordered_extractors
 from palace_mcp.extractors.runner import run_extractor
 from palace_mcp.git.command import GitError, GitTimeout, run_git
@@ -69,9 +73,6 @@ _INCREMENTAL_FULL_REPROCESS_THRESHOLD = 0.8
 # on a full uw embed) is the LAST step and is recovered via analyze_resume, so it need not
 # fit the lease.
 _DEFAULT_LEASE_SECONDS = 3900
-_INCREMENTAL_GLOBAL_EXTRACTORS = frozenset(
-    {"dead_code", "hotspot", "cross_module_contract"}
-)
 
 
 class AnalysisRunMode(StrEnum):
@@ -165,6 +166,7 @@ class AnalysisRun(BaseModel):
     stale_since_commit: str | None = None
     changed_file_count: int | None = None
     changed_file_ratio: float | None = None
+    analysis_delta: AnalysisDelta | None = None
     continue_on_failure: bool = True
     idempotency_key: str
     status: AnalysisRunStatus
@@ -512,6 +514,51 @@ async def _resolve_run_mode_plan(
     )
 
 
+async def _build_analysis_delta(
+    driver: AsyncDriver,
+    *,
+    slug: str,
+    target_commit: str | None,
+) -> AnalysisDelta | None:
+    """Freeze the source delta once before checkpoints are created.
+
+    The established mode planner already verifies this diff is usable. A second
+    bounded read is intentionally defensive: an unavailable payload produces no
+    delta rather than allowing an extractor to substitute a project-wide scan.
+    """
+    try:
+        base_commit = await _read_project_indexed_commit(driver, slug)
+    except AttributeError:
+        # Lightweight unit stores intentionally do not expose a Neo4j session.
+        # They still need a deterministic no-symbol delta to exercise scheduling.
+        return AnalysisDelta(
+            delta_id=str(uuid4()),
+            base_commit=None,
+            target_commit=target_commit,
+            reason="indexed_commit_unavailable",
+        )
+    if base_commit is None:
+        return None
+    result = await native_detect_changes(project=slug, since=base_commit)
+    if (
+        result is FALLBACK_TO_CM
+        or not isinstance(result, dict)
+        or result.get("ok") is not True
+    ):
+        return None
+    raw_files = result.get("files")
+    if not isinstance(raw_files, list) or not all(
+        isinstance(path, str) for path in raw_files
+    ):
+        return None
+    return AnalysisDelta(
+        delta_id=str(uuid4()),
+        base_commit=base_commit,
+        target_commit=target_commit,
+        changed_paths=tuple(sorted({path for path in raw_files if path})),
+    )
+
+
 async def ensure_project_analyze_schema(driver: AsyncDriver) -> None:
     """Apply only DDL required for project-analyze runtime state."""
     async with driver.session() as session:
@@ -646,6 +693,7 @@ def _run_from_node(
     overview = _deserialize_json_object(node.get("overview_json")) or {}
     audit = _deserialize_json_object(node.get("audit_json"))
     next_actions = _deserialize_json_string_list(node.get("next_actions_json"))
+    delta_payload = _deserialize_json_object(node.get("analysis_delta_json"))
     return AnalysisRun(
         run_id=str(node["run_id"]),
         slug=str(node["slug"]),
@@ -668,6 +716,11 @@ def _run_from_node(
         changed_file_ratio=(
             float(node["changed_file_ratio"])
             if node.get("changed_file_ratio") is not None
+            else None
+        ),
+        analysis_delta=(
+            AnalysisDelta.from_dict(delta_payload)
+            if delta_payload is not None
             else None
         ),
         continue_on_failure=bool(node.get("continue_on_failure", True)),
@@ -699,7 +752,6 @@ def _stale_extractors(run: AnalysisRun) -> list[str]:
         checkpoint.extractor
         for checkpoint in run.checkpoints
         if checkpoint.mode == ExtractorExecutionMode.SKIPPED
-        and checkpoint.extractor in _INCREMENTAL_GLOBAL_EXTRACTORS
     ]
 
 
@@ -758,6 +810,9 @@ class Neo4jAnalysisRunStore:
             stale_since_commit=run.stale_since_commit,
             changed_file_count=run.changed_file_count,
             changed_file_ratio=run.changed_file_ratio,
+            analysis_delta_json=_serialize_json(
+                run.analysis_delta.as_dict() if run.analysis_delta is not None else None
+            ),
             continue_on_failure=run.continue_on_failure,
             idempotency_key=run.idempotency_key,
             status=run.status.value,
@@ -1210,33 +1265,46 @@ class ProjectAnalysisService:
             slug=slug,
             requested_mode=mode,
         )
+        analysis_delta = (
+            await _build_analysis_delta(
+                driver,
+                slug=slug,
+                target_commit=stale_since_commit,
+            )
+            if effective_mode == AnalysisRunMode.INCREMENTAL
+            else None
+        )
         checkpoints: list[AnalysisCheckpoint] = []
         for index, extractor_name in enumerate(ordered_extractors):
-            checkpoint_mode = (
-                ExtractorExecutionMode.FULL
-                if effective_mode == AnalysisRunMode.FULL
-                else (
-                    ExtractorExecutionMode.SKIPPED
-                    if extractor_name in _INCREMENTAL_GLOBAL_EXTRACTORS
-                    else ExtractorExecutionMode.INCREMENTAL
-                )
-            )
+            capability = self._extractor_registry[extractor_name].incremental_capability
+            checkpoint_mode = ExtractorExecutionMode.FULL
+            skip_reason: str | None = None
+            if effective_mode == AnalysisRunMode.INCREMENTAL:
+                if capability is ExtractorIncrementalCapability.DELTA:
+                    checkpoint_mode = ExtractorExecutionMode.INCREMENTAL
+                elif capability is ExtractorIncrementalCapability.GLOBAL_STALE:
+                    checkpoint_mode = ExtractorExecutionMode.SKIPPED
+                    skip_reason = "global_stale"
+                else:
+                    checkpoint_mode = ExtractorExecutionMode.SKIPPED
+                    skip_reason = "requires_full"
             checkpoint = AnalysisCheckpoint(
                 extractor=extractor_name,
                 position=index,
                 mode=checkpoint_mode,
             )
             if checkpoint_mode == ExtractorExecutionMode.SKIPPED:
+                assert skip_reason is not None
                 checkpoint = checkpoint.model_copy(
                     update={
                         "status": AnalysisCheckpointStatus.SKIPPED,
                         "message": (
-                            f"Skipped {extractor_name} during incremental project_analyze; "
-                            f"latest project-wide findings may be stale_since={stale_since_commit}."
+                            f"Skipped {extractor_name} during incremental project_analyze: "
+                            f"{skip_reason}; stale_since={stale_since_commit}."
                         ),
                         "next_action": (
                             f"Run a full project_analyze for {extractor_name} to refresh "
-                            "project-wide audit results."
+                            "this extractor."
                         ),
                     }
                 )
@@ -1260,6 +1328,7 @@ class ProjectAnalysisService:
             stale_since_commit=stale_since_commit,
             changed_file_count=changed_file_count,
             changed_file_ratio=changed_file_ratio,
+            analysis_delta=analysis_delta,
             continue_on_failure=continue_on_failure,
             idempotency_key=idempotency_key or str(uuid4()),
             status=AnalysisRunStatus.RUNNING,
@@ -1462,6 +1531,21 @@ class ProjectAnalysisService:
             )
 
             attempt = await step_executor(checkpoint.extractor, run)
+            if (
+                checkpoint.mode is ExtractorExecutionMode.INCREMENTAL
+                and attempt.mode is not ExtractorExecutionMode.INCREMENTAL
+            ):
+                attempt = ExtractorAttemptResult(
+                    status=AnalysisCheckpointStatus.RUN_FAILED,
+                    mode=attempt.mode,
+                    ingest_run_id=attempt.ingest_run_id,
+                    error_code="incremental_scope_mismatch",
+                    message=(
+                        f"{checkpoint.extractor} was scheduled as incremental but "
+                        f"reported execution scope {attempt.mode.value}."
+                    ),
+                    next_action="Run an explicit full refresh or repair the extractor delta contract.",
+                )
             finished_at = _iso(self._clock())
             updated_checkpoint = started_checkpoint.model_copy(
                 update={
@@ -1685,6 +1769,15 @@ class ProjectAnalysisService:
                 name=extractor_name,
                 project=run.slug,
                 companion_run_id=companion_run_id,
+                execution_mode=(
+                    next(
+                        checkpoint.mode
+                        for checkpoint in run.checkpoints
+                        if checkpoint.extractor == extractor_name
+                    )
+                    or ExtractorExecutionMode.FULL
+                ),
+                analysis_delta=run.analysis_delta,
             )
             if response.get("ok") is True:
                 ingest_run_id = response.get("run_id")

@@ -1,15 +1,21 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from palace_mcp.extractors.base import ExtractorRunContext
+from palace_mcp.extractors.base import (
+    AnalysisDelta,
+    ExtractorExecutionMode,
+    ExtractorRunContext,
+)
 from palace_mcp.extractors import embedding_symbol as embedding_symbol_module
 from palace_mcp.extractors.embedding_symbol import (
     _LOAD_SYMBOL_ROWS,
+    _LOAD_DELTA_SYMBOL_ROWS,
     _WRITE_EMBEDDINGS,
     EmbeddingSymbolExtractor,
     _embedding_text,
@@ -55,7 +61,7 @@ def _make_graphiti(
     writes: list[dict[str, object]] = []
 
     async def run_side_effect(query: str, **kwargs: object) -> _FakeResult:
-        if query == _LOAD_SYMBOL_ROWS:
+        if query in {_LOAD_SYMBOL_ROWS, _LOAD_DELTA_SYMBOL_ROWS}:
             return _FakeResult(rows)
         if query == _WRITE_EMBEDDINGS:
             writes.append(kwargs)
@@ -187,6 +193,70 @@ async def test_run_with_all_unchanged_symbols_skips_backend_resolution() -> None
     assert stats.edges_written == 0
     assert writes == []
     assert run_mock.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_incremental_run_queries_only_the_delta_candidates() -> None:
+    changed_rows = [
+        {
+            "qualified_name": f"demo.changed_{index}",
+            "kind": "function",
+            "file_path": "src/changed.swift",
+            "module_name": "demo",
+            "source_scope": "project",
+            "embedding_input_hash": None,
+            "has_embedding": False,
+        }
+        for index in range(2)
+    ]
+    graphiti, run_mock, writes = _make_graphiti(changed_rows)
+    backend = _FakeBackend()
+    ctx = replace(
+        _make_ctx(),
+        execution_mode=ExtractorExecutionMode.INCREMENTAL,
+        analysis_delta=AnalysisDelta(
+            delta_id="delta-1",
+            base_commit="base",
+            target_commit="head",
+            changed_symbol_ids=("demo.changed_0", "demo.changed_1"),
+        ),
+    )
+
+    stats = await EmbeddingSymbolExtractor(backend=backend).run(
+        graphiti=graphiti,
+        ctx=ctx,
+    )
+
+    assert run_mock.await_args_list[0].args[0] == _LOAD_DELTA_SYMBOL_ROWS
+    assert run_mock.await_args_list[0].kwargs["qualified_names"] == [
+        "demo.changed_0",
+        "demo.changed_1",
+    ]
+    assert backend.calls == [[_embedding_text(row) for row in changed_rows]]
+    assert len(writes) == 1
+    assert stats.mode is ExtractorExecutionMode.INCREMENTAL
+
+
+@pytest.mark.asyncio
+async def test_incremental_run_with_empty_delta_skips_without_backend() -> None:
+    graphiti, run_mock, writes = _make_graphiti([])
+    ctx = replace(
+        _make_ctx(),
+        execution_mode=ExtractorExecutionMode.INCREMENTAL,
+        analysis_delta=AnalysisDelta(
+            delta_id="delta-empty",
+            base_commit="base",
+            target_commit="head",
+        ),
+    )
+
+    stats = await EmbeddingSymbolExtractor().run(graphiti=graphiti, ctx=ctx)
+
+    assert stats.outcome.value == "skipped"
+    assert stats.message == "no_changed_symbols"
+    assert stats.mode is ExtractorExecutionMode.SKIPPED
+    run_mock.assert_not_awaited()
+    assert writes == []
 
 
 # ---------------------------------------------------------------------------

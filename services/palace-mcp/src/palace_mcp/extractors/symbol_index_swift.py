@@ -26,6 +26,7 @@ from neo4j import AsyncDriver
 from palace_mcp.extractors.base import (
     BaseExtractor,
     ExtractorExecutionMode,
+    ExtractorIncrementalCapability,
     ExtractorOutcome,
     ExtractorRunContext,
     ExtractorStats,
@@ -198,6 +199,9 @@ class _GitChangeSet:
 
 class SymbolIndexSwift(BaseExtractor):
     name: ClassVar[str] = "symbol_index_swift"
+    incremental_capability: ClassVar[ExtractorIncrementalCapability] = (
+        ExtractorIncrementalCapability.DELTA
+    )
     timeout_s: ClassVar[float] = 3600.0
     description: ClassVar[str] = (
         "Ingest Swift symbols + occurrences from pre-generated SCIP file "

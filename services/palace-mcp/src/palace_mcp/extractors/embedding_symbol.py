@@ -10,6 +10,9 @@ from palace_mcp.code.embedding_candidate_policy import CandidateRow, apply_polic
 from palace_mcp.embeddings import EmbeddingBackend, QodoEmbeddingBackend
 from palace_mcp.extractors.base import (
     BaseExtractor,
+    ExtractorExecutionMode,
+    ExtractorIncrementalCapability,
+    ExtractorOutcome,
     ExtractorRunContext,
     ExtractorStats,
 )
@@ -31,6 +34,24 @@ RETURN
   s.source_scope AS source_scope,
   s.embedding_input_hash AS embedding_input_hash,
   s.embedding IS NOT NULL AS has_embedding
+"""
+
+_LOAD_DELTA_SYMBOL_ROWS = """
+MATCH (s:Symbol {group_id: $group_id})
+WHERE NOT s:Deprecated
+  AND (
+    s.qualified_name IN $qualified_names
+    OR (size($qualified_names) = 0 AND s.file_path IN $changed_paths)
+  )
+RETURN
+  s.qualified_name AS qualified_name,
+  s.kind AS kind,
+  s.file_path AS file_path,
+  s.module_name AS module_name,
+  s.source_scope AS source_scope,
+  s.embedding_input_hash AS embedding_input_hash,
+  s.embedding IS NOT NULL AS has_embedding
+ORDER BY qualified_name
 """
 
 _WRITE_EMBEDDINGS = """
@@ -101,6 +122,23 @@ async def _load_symbol_rows(
         return cast(list[_LoadedSymbolRow], await result.data())
 
 
+async def _load_delta_symbol_rows(
+    driver: AsyncDriver,
+    group_id: str,
+    *,
+    qualified_names: tuple[str, ...],
+    changed_paths: tuple[str, ...],
+) -> list[_LoadedSymbolRow]:
+    async with driver.session() as session:
+        result = await session.run(
+            _LOAD_DELTA_SYMBOL_ROWS,
+            group_id=group_id,
+            qualified_names=list(qualified_names),
+            changed_paths=list(changed_paths),
+        )
+        return cast(list[_LoadedSymbolRow], await result.data())
+
+
 async def _write_embeddings(
     driver: AsyncDriver,
     group_id: str,
@@ -113,6 +151,7 @@ async def _write_embeddings(
 class EmbeddingSymbolExtractor(BaseExtractor):
     name = "embedding_symbol"
     description = "Populate :Symbol.embedding vectors for a single project."
+    incremental_capability = ExtractorIncrementalCapability.DELTA
     # Large projects (uw-ios-app ~248k symbols) need >2h; the old 7200s cap timed
     # out mid-run. Configurable via PALACE_EMBEDDING_TIMEOUT_S; default 10h.
     timeout_s: ClassVar[float] = float(
@@ -134,8 +173,31 @@ class EmbeddingSymbolExtractor(BaseExtractor):
         ctx: ExtractorRunContext,
     ) -> ExtractorStats:
         driver = graphiti.driver  # type: ignore[attr-defined]
+        if ctx.execution_mode is ExtractorExecutionMode.INCREMENTAL:
+            delta = ctx.analysis_delta
+            if delta is None:
+                return ExtractorStats(
+                    outcome=ExtractorOutcome.MISSING_INPUT,
+                    message="incremental embedding requires an AnalysisDelta",
+                    next_action="Rerun project_analyze after its durable delta is available.",
+                    mode=ExtractorExecutionMode.SKIPPED,
+                )
+            if not delta.changed_symbol_ids and not delta.changed_paths:
+                return ExtractorStats(
+                    outcome=ExtractorOutcome.SKIPPED,
+                    message="no_changed_symbols",
+                    mode=ExtractorExecutionMode.SKIPPED,
+                )
+            loaded_rows = await _load_delta_symbol_rows(
+                driver,
+                ctx.group_id,
+                qualified_names=delta.changed_symbol_ids,
+                changed_paths=delta.changed_paths,
+            )
+        else:
+            loaded_rows = await _load_symbol_rows(driver, ctx.group_id)
         pending_rows: list[_PendingSymbolRow] = []
-        for row in await _load_symbol_rows(driver, ctx.group_id):
+        for row in loaded_rows:
             text = _embedding_text(row)
             text_hash = _embedding_text_hash(text)
             if row["has_embedding"] and row["embedding_input_hash"] == text_hash:
@@ -152,10 +214,31 @@ class EmbeddingSymbolExtractor(BaseExtractor):
             )
 
         if not pending_rows:
-            return ExtractorStats(nodes_written=0, edges_written=0)
+            return ExtractorStats(
+                nodes_written=0,
+                edges_written=0,
+                outcome=(
+                    ExtractorOutcome.SKIPPED
+                    if ctx.execution_mode is ExtractorExecutionMode.INCREMENTAL
+                    else ExtractorOutcome.OK
+                ),
+                message=(
+                    "no_changed_symbols"
+                    if ctx.execution_mode is ExtractorExecutionMode.INCREMENTAL
+                    else None
+                ),
+                mode=(
+                    ExtractorExecutionMode.SKIPPED
+                    if ctx.execution_mode is ExtractorExecutionMode.INCREMENTAL
+                    else None
+                ),
+            )
 
         max_symbols = _read_max_symbols()
-        if max_symbols is not None:
+        if (
+            max_symbols is not None
+            and ctx.execution_mode is not ExtractorExecutionMode.INCREMENTAL
+        ):
             selected, _ = apply_policy(
                 cast(list[CandidateRow], pending_rows), max_symbols
             )
@@ -177,4 +260,12 @@ class EmbeddingSymbolExtractor(BaseExtractor):
             await _write_embeddings(driver, ctx.group_id, write_rows)
             nodes_written += len(write_rows)
 
-        return ExtractorStats(nodes_written=nodes_written, edges_written=0)
+        return ExtractorStats(
+            nodes_written=nodes_written,
+            edges_written=0,
+            mode=(
+                ExtractorExecutionMode.INCREMENTAL
+                if ctx.execution_mode is ExtractorExecutionMode.INCREMENTAL
+                else None
+            ),
+        )

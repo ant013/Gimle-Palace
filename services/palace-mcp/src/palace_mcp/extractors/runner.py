@@ -25,6 +25,7 @@ from neo4j import AsyncDriver
 
 from palace_mcp.extractors import registry
 from palace_mcp.extractors.base import (
+    AnalysisDelta,
     BaseExtractor,
     ExtractorError,
     ExtractorExecutionMode,
@@ -304,6 +305,8 @@ async def run_extractor(
     timeout_s: float = EXTRACTOR_TIMEOUT_S,
     scip_path: str | None = None,
     companion_run_id: str | None = None,
+    execution_mode: ExtractorExecutionMode = ExtractorExecutionMode.FULL,
+    analysis_delta: AnalysisDelta | None = None,
     force: bool = False,
 ) -> dict[str, Any]:
     """Full lifecycle: precheck → create :IngestRun → execute → finalize."""
@@ -368,6 +371,8 @@ async def run_extractor(
         logger=logger,
         scip_path=scip_path_override,
         companion_run_id=companion_run_id,
+        execution_mode=execution_mode,
+        analysis_delta=analysis_delta,
         force=force,
     )
     exec_result = await _execute(

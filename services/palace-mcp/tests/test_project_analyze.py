@@ -563,12 +563,12 @@ async def test_start_run_incremental_mode_skips_global_extractors_and_stamps_sta
     assert started.run.effective_mode == AnalysisRunMode.INCREMENTAL
     assert started.run.stale_since_commit == "head-abc"
     assert [checkpoint.mode for checkpoint in started.run.checkpoints] == [
-        ExtractorExecutionMode.INCREMENTAL,
+        ExtractorExecutionMode.SKIPPED,
         ExtractorExecutionMode.SKIPPED,
         ExtractorExecutionMode.SKIPPED,
     ]
     assert [checkpoint.status for checkpoint in started.run.checkpoints] == [
-        AnalysisCheckpointStatus.NOT_ATTEMPTED,
+        AnalysisCheckpointStatus.SKIPPED,
         AnalysisCheckpointStatus.SKIPPED,
         AnalysisCheckpointStatus.SKIPPED,
     ]
@@ -1254,12 +1254,7 @@ async def test_execute_run_records_extractor_modes_and_stale_since_in_report(
         extractor_name: str,
         run: AnalysisRun,
     ) -> ExtractorAttemptResult:
-        assert extractor_name == "code_ownership"
-        return ExtractorAttemptResult(
-            status=AnalysisCheckpointStatus.OK,
-            mode=ExtractorExecutionMode.INCREMENTAL,
-            ingest_run_id="ingest-code-ownership",
-        )
+        raise AssertionError(f"GLOBAL_STALE extractor should not run: {extractor_name}")
 
     finished = await service.execute_run(
         started.run.run_id,
@@ -1270,7 +1265,7 @@ async def test_execute_run_records_extractor_modes_and_stale_since_in_report(
     assert finished.audit is not None
     assert finished.audit["effective_mode"] == "incremental"
     assert finished.audit["extractor_modes"] == {
-        "code_ownership": "incremental",
+        "code_ownership": "skipped",
         "hotspot": "skipped",
     }
     assert finished.audit["stale_since"] == "head-xyz"

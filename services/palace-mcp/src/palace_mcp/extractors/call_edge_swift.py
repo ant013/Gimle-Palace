@@ -11,6 +11,7 @@ from palace_mcp.code.indexstore import collect_call_edges
 from palace_mcp.extractors.base import (
     BaseExtractor,
     ExtractorExecutionMode,
+    ExtractorIncrementalCapability,
     ExtractorOutcome,
     ExtractorRunContext,
     ExtractorStats,
@@ -127,6 +128,9 @@ async def _replace_call_edges(
 
 class CallEdgeSwiftExtractor(BaseExtractor):
     name: ClassVar[str] = "call_edge_swift"
+    incremental_capability: ClassVar[ExtractorIncrementalCapability] = (
+        ExtractorIncrementalCapability.DELTA
+    )
     description: ClassVar[str] = (
         "Materialize precise Swift :CALLS edges from IndexStore occurrence relations."
     )

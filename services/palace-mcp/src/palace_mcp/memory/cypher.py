@@ -60,6 +60,7 @@ CREATE (r:AnalysisRun {
     stale_since_commit: $stale_since_commit,
     changed_file_count: $changed_file_count,
     changed_file_ratio: $changed_file_ratio,
+    analysis_delta_json: $analysis_delta_json,
     continue_on_failure: $continue_on_failure,
     idempotency_key: $idempotency_key,
     status: $status,
