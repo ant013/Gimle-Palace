@@ -1534,9 +1534,9 @@ def reconcile_daily(args: argparse.Namespace) -> dict[str, Any]:
     expected_cursor_name = f"{binding['platform']}-version-audit.json"
     if cursor_path.name != expected_cursor_name:
         _fail(f"daily cursor must be state/{expected_cursor_name}")
-    expected_lock_dir = cursor_path.parent / "locks" / f"{binding['source_ref']['routine_id']}.lock"
+    expected_lock_parent = cursor_path.parent / "locks"
     lock_dir = args.lock_dir.resolve()
-    if lock_dir != expected_lock_dir:
+    if lock_dir.parent != expected_lock_parent or lock_dir.suffix != ".lock":
         _fail("routine lock path does not match cursor state root and routine")
     if not lock_dir.is_dir():
         _fail("matching routine lock is not held")

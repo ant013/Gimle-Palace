@@ -153,6 +153,8 @@ def prepare_run(
     *,
     kind: str = "pr",
     platform: str = "ios",
+    routine_id: str | None = None,
+    lock_routine_id: str | None = None,
     statuses: dict[str, str] | None = None,
     findings: dict[str, list[dict]] | None = None,
     diff_patch: bytes | None = None,
@@ -168,6 +170,8 @@ def prepare_run(
             ref["pr_url"] = "https://github.com/horizontalsystems/unstoppable-wallet-android/pull/456"
         else:
             ref["routine_id"] = "daily-android-version-0.49"
+    if kind != "pr" and routine_id is not None:
+        ref["routine_id"] = routine_id
     intake = {
         "schema_version": 1,
         "issue_identifier": "UNS-123",
@@ -189,7 +193,8 @@ def prepare_run(
         (run / "diff.patch").write_bytes(
             diff_patch or b"diff --git a/A b/A\n--- a/A\n+++ b/A\n@@\n-old\n+new\n"
         )
-        lock = root / "state" / "locks" / f"{ref['routine_id']}.lock"
+        lock_name = lock_routine_id or ref["routine_id"]
+        lock = root / "state" / "locks" / f"{lock_name}.lock"
         lock.mkdir(parents=True)
         write_json(
             lock / "metadata.json",
@@ -576,6 +581,36 @@ def test_partial_zero_requires_document_and_allowlisted_human_approval(tmp_path:
         approvers,
     )
     assert resumed["status"] == "already_applied"
+
+
+def test_reconcile_daily_accepts_metadata_bound_versioned_lock_for_stable_routine_id(tmp_path: Path):
+    fixture = prepare_run(
+        tmp_path,
+        kind="daily_delta",
+        platform="android",
+        routine_id="uaudit-daily-android",
+        lock_routine_id="daily-android-version-0.50",
+    )
+    aggregate(fixture)
+    record(fixture, "message")
+    cursor = tmp_path / "state" / "android-version-audit.json"
+    write_json(cursor, {"last_successfully_audited_sha": BASE_SHA})
+
+    result = call(
+        fixture["helper"],
+        "reconcile-daily",
+        "--run-dir",
+        fixture["run"],
+        "--cursor",
+        cursor,
+        "--lock-dir",
+        fixture["lock"],
+        "--reconciled-at",
+        RECONCILED_AT,
+    )
+
+    assert result["status"] == "applied"
+    assert read_json(cursor)["last_successfully_audited_sha"] == HEAD_SHA
 
 
 @pytest.mark.parametrize("state", ["blocked", "missing_marker"])
