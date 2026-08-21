@@ -41,11 +41,7 @@ def test_daily_routine_config_uses_names_not_uuids_and_resolves_agents():
     assert not UUID_RE.search(raw)
     assert "required_subagents" not in raw
     config = load_config(CONFIG)
-    assert config["limits"] == {
-        "max_commits": 30,
-        "max_files": 300,
-        "max_diff_lines": 3000,
-    }
+    assert "limits" not in config
     assert {r["platform"] for r in config["routines"]} == {"android", "ios"}
     assert {r["app_id"] for r in config["routines"]} == {"unstoppable_wallet"}
     assert config["apps"] == [{"id": "unstoppable_wallet", "display_name": "Unstoppable Wallet", "enabled": True, "report_route": "UAudit"}]
@@ -148,7 +144,7 @@ def test_generated_dispatcher_bundles_start_staged_daily_chain():
         assert "Russian" in text
         for chain_name in chain_names:
             assert chain_name in text
-        assert "max_files=300" in text
+        assert "Never block a proven range by size" in text
 
 
 def test_forced_full_range_is_explicit_and_does_not_relax_daily_rules():
@@ -166,7 +162,7 @@ def test_forced_full_range_is_explicit_and_does_not_relax_daily_rules():
         assert "UAudit forced full-range audit" in source
         assert "daily_limits_bypassed: true" in source
         assert "cursor_mutation: forbidden" in source
-        assert "max_files=300" in source
+        assert "Never block a proven range by size" in source
         assert "never call `reconcile-daily`" in infra_source
 
 
@@ -185,12 +181,12 @@ def test_generated_dispatchers_pin_canonical_daily_cursors():
         text = (REPO / f"paperclips/dist/uaudit/codex/{name}.md").read_text()
         assert canonical in text
         assert "FROM is only" in text
-        assert "preserve this cursor" in text
+        assert "preserve it" in text
         assert legacy in text
-        assert "Never read a cursor below" in text
+        assert "never read below" in text
 
 
-def test_daily_dispatchers_fetch_declared_authoritative_refs_before_intake():
+def test_daily_dispatchers_resolve_direct_release_successors_before_intake():
     expected = {
         "android": "https://github.com/horizontalsystems/unstoppable-wallet-android",
         "ios": "https://github.com/horizontalsystems/unstoppable-wallet-ios",
@@ -206,8 +202,12 @@ def test_daily_dispatchers_fetch_declared_authoritative_refs_before_intake():
         for text in (source, rendered):
             assert repo_url in text
             assert "fetch --no-tags" in text
-            assert "refs/remotes/uaudit-upstream/version/0.50" in text
-            assert "Never resolve TO from origin/version/0.50" in text
+            assert "`$BASE`" in text
+            assert "strict next `version/X.(Y+1)`" in text
+            assert "FROM ⊑ master ⊑ next" in text
+            assert "FROM..master" in text
+            assert "Never block a proven range by size" in text
+            assert "origin/*" in text
 
 
 def test_uaudit_bootstrap_deploy_does_not_require_partial_approvers():
