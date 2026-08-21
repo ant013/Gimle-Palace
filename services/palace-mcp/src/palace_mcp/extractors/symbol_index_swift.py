@@ -468,6 +468,30 @@ class SymbolIndexSwift(BaseExtractor):
                         baseline=baseline,
                     )
 
+            # A project_analyze incremental checkpoint is a hard execution
+            # boundary. The historical extractor fallback below rebuilds the
+            # entire Tantivy/graph scope when git/SCIP reconciliation cannot
+            # prove a closed path set; that is valid for an explicit full
+            # extractor invocation, never for an incremental analysis run.
+            if (
+                ctx.execution_mode is ExtractorExecutionMode.INCREMENTAL
+                and not incremental_tantivy
+            ):
+                reason = graph_fallback_reason or "incremental_scope_unavailable"
+                await finalize_ingest_run(driver, run_id=ctx.run_id, success=True)
+                return ExtractorStats(
+                    outcome=ExtractorOutcome.SKIPPED,
+                    message=(
+                        "Skipped symbol_index_swift: incremental scope could not "
+                        f"be proven ({reason}); refusing a hidden full reindex."
+                    ),
+                    next_action=(
+                        "Run an explicit full symbol_index_swift refresh to rebuild "
+                        "this source scope."
+                    ),
+                    mode=ExtractorExecutionMode.SKIPPED,
+                )
+
             tantivy_path = Path(settings.palace_tantivy_index_path)
             counter = _load_or_reset_counter(tantivy_path, ctx.run_id)
             for occ in _iter_occurrences():
