@@ -103,12 +103,15 @@ async def _resolve_repo_path(project: str) -> Path:
 async def native_detect_changes(
     project: str | None = None,
     since: str | None = None,
+    until: str | None = None,
     **_: Any,
 ) -> dict[str, Any] | _FallbackToCM:
     if project is None:
         return FALLBACK_TO_CM
     if since is not None and not _valid_since(since):
         return _error("invalid_since", f"invalid since value: {since!r}", project)
+    if until is not None and not _valid_since(until):
+        return _error("invalid_until", f"invalid until value: {until!r}", project)
 
     try:
         repo_path = await _resolve_repo_path(project)
@@ -121,12 +124,17 @@ async def native_detect_changes(
             project,
         )
 
-    args = ["diff", "--name-only"]
+    # Preserve a flat ``files`` view for existing callers, but carry enough
+    # structure for a run-owned incremental delta: a rename has a new path to
+    # refresh and an old path whose graph state must be retired.
+    args = ["diff", "--name-status", "-M"]
     try:
         if since is not None:
             args.append(await _resolve_since_base(repo_path, since))
         else:
             args.append("HEAD")
+        if until is not None:
+            args.append(until)
         args.append("--")
         result = await asyncio.to_thread(
             run_git,
@@ -147,11 +155,37 @@ async def native_detect_changes(
     if result.rc != 0:
         return _error("git_error", result.stderr[:200], project)
 
-    files = [line for line in result.stdout.splitlines() if line]
+    changed_paths: set[str] = set()
+    removed_paths: set[str] = set()
+    added_paths: set[str] = set()
+    renamed_paths: list[dict[str, str]] = []
+    for line in result.stdout.splitlines():
+        if not line:
+            continue
+        parts = line.split("\t")
+        status = parts[0]
+        if status.startswith("R") and len(parts) == 3:
+            old_path, new_path = parts[1:]
+            removed_paths.add(old_path)
+            changed_paths.add(new_path)
+            renamed_paths.append({"from": old_path, "to": new_path})
+        elif len(parts) == 2:
+            path = parts[1]
+            if status == "D":
+                removed_paths.add(path)
+            else:
+                changed_paths.add(path)
+                if status == "A":
+                    added_paths.add(path)
     return {
         "ok": True,
         "project": project,
         "since": since,
-        "files": files,
+        "until": until,
+        "files": sorted(changed_paths | removed_paths),
+        "changed_paths": sorted(changed_paths),
+        "removed_paths": sorted(removed_paths),
+        "added_paths": sorted(added_paths),
+        "renamed_paths": renamed_paths,
         "truncated": result.truncated,
     }

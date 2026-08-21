@@ -133,3 +133,38 @@ async def test_native_detect_changes_accepts_commit_sha_since(
 
     assert result["ok"] is True
     assert result["files"] == ["a.py"]
+
+
+@pytest.mark.asyncio
+async def test_native_detect_changes_preserves_rename_and_removed_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repos_root = tmp_path / "repos"
+    repo = repos_root / "testproj"
+    repo.mkdir(parents=True)
+    _run(["git", "init", "-q", "-b", "main"], cwd=repo)
+    _run(["git", "config", "user.email", "t@t"], cwd=repo)
+    _run(["git", "config", "user.name", "T"], cwd=repo)
+    (repo / "old.swift").write_text("v1\n")
+    (repo / "removed.swift").write_text("v1\n")
+    _run(["git", "add", "."], cwd=repo)
+    _run(["git", "commit", "-m", "initial", "-q"], cwd=repo)
+    base_sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    _run(["git", "mv", "old.swift", "new.swift"], cwd=repo)
+    (repo / "removed.swift").unlink()
+    _run(["git", "add", "-A"], cwd=repo)
+    _run(["git", "commit", "-m", "rename", "-q"], cwd=repo)
+    monkeypatch.setattr("palace_mcp.git.path_resolver.REPOS_ROOT", repos_root)
+    monkeypatch.setattr("palace_mcp.mcp_server.get_driver", lambda: None)
+
+    result = await native_detect_changes(project="testproj", since=base_sha)
+
+    assert result["changed_paths"] == ["new.swift"]
+    assert result["removed_paths"] == ["old.swift", "removed.swift"]
+    assert result["renamed_paths"] == [{"from": "old.swift", "to": "new.swift"}]

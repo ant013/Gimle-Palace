@@ -132,6 +132,13 @@ SET r.updated_at = $updated_at,
 RETURN r
 """
 
+UPDATE_ANALYSIS_RUN_DELTA = """
+MATCH (r:AnalysisRun {run_id: $run_id})
+SET r.analysis_delta_json = $analysis_delta_json,
+    r.updated_at = $updated_at
+RETURN r
+"""
+
 FINALIZE_ANALYSIS_RUN = """
 MATCH (r:AnalysisRun {run_id: $run_id})
 SET r.status = $status,
@@ -364,6 +371,14 @@ MATCH (r:IngestRun {source: $source})
 WHERE r.group_id = $group_id
 RETURN r
 ORDER BY r.started_at DESC
+LIMIT 1
+"""
+
+PROJECT_LAST_ANALYSIS_RUN = """
+MATCH (r:AnalysisRun {slug: $slug})
+OPTIONAL MATCH (r)-[:HAS_ANALYSIS_CHECKPOINT]->(c:AnalysisCheckpoint)
+RETURN r, collect(c) AS checkpoints
+ORDER BY r.created_at DESC
 LIMIT 1
 """
 

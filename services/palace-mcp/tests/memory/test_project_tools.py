@@ -242,6 +242,7 @@ def _make_mock_driver_for_overview(
     count_rows: list[dict[str, Any]],
     *,
     indexed_commit: str | None = None,
+    analysis_row: dict[str, Any] | None = None,
 ) -> MagicMock:
     call_count: list[int] = [0]
 
@@ -274,13 +275,16 @@ def _make_mock_driver_for_overview(
             # PROJECT_LAST_INGEST — no ingest run
             result.single = AsyncMock(return_value=None)
             return result
-        else:
+        elif call_count[0] == 4:
             if indexed_commit is None:
                 result.single = AsyncMock(return_value=None)
                 return result
             row = MagicMock()
             row.__getitem__ = lambda _self, key: {"commit_sha": indexed_commit}[key]
             result.single = AsyncMock(return_value=row)
+            return result
+        else:
+            result.single = AsyncMock(return_value=analysis_row)
             return result
 
     session = MagicMock()
@@ -306,6 +310,37 @@ async def test_get_project_overview_returns_entity_counts() -> None:
     assert info.slug == "gimle"
     assert info.entity_counts == {"Episode": 10, "Iteration": 5}
     assert info.code_index_stats == {"Symbol": 3}
+
+
+@pytest.mark.asyncio
+async def test_get_project_overview_reports_delta_and_embedding_coverage() -> None:
+    project_row = _make_project_row("gimle", "Gimle", ["infra"])
+    driver = _make_mock_driver_for_overview(
+        project_row,
+        [],
+        analysis_row={
+            "r": {
+                "analysis_delta_json": (
+                    '{"delta_id":"delta-1","changed_symbol_ids":["A.one","A.two"]}'
+                )
+            },
+            "checkpoints": [
+                {
+                    "extractor": "embedding_symbol",
+                    "mode": "incremental",
+                    "status": "OK",
+                },
+                {"extractor": "hotspot", "mode": "skipped", "status": "SKIPPED"},
+            ],
+        },
+    )
+
+    info = await get_project_overview(driver, slug="gimle")
+
+    assert info.last_analysis_delta_id == "delta-1"
+    assert info.last_analysis_delta_symbol_count == 2
+    assert info.embedding_coverage_status == "OK"
+    assert info.stale_extractors == ["hotspot"]
 
 
 def _run(args: list[str], cwd: Path) -> None:

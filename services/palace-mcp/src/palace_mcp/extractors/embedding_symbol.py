@@ -37,12 +37,9 @@ RETURN
 """
 
 _LOAD_DELTA_SYMBOL_ROWS = """
-MATCH (s:Symbol {group_id: $group_id})
+UNWIND $qualified_names AS qualified_name
+MATCH (s:Symbol {group_id: $group_id, qualified_name: qualified_name})
 WHERE NOT s:Deprecated
-  AND (
-    s.qualified_name IN $qualified_names
-    OR (size($qualified_names) = 0 AND s.file_path IN $changed_paths)
-  )
 RETURN
   s.qualified_name AS qualified_name,
   s.kind AS kind,
@@ -127,14 +124,12 @@ async def _load_delta_symbol_rows(
     group_id: str,
     *,
     qualified_names: tuple[str, ...],
-    changed_paths: tuple[str, ...],
 ) -> list[_LoadedSymbolRow]:
     async with driver.session() as session:
         result = await session.run(
             _LOAD_DELTA_SYMBOL_ROWS,
             group_id=group_id,
             qualified_names=list(qualified_names),
-            changed_paths=list(changed_paths),
         )
         return cast(list[_LoadedSymbolRow], await result.data())
 
@@ -183,7 +178,7 @@ class EmbeddingSymbolExtractor(BaseExtractor):
                     next_action="Rerun project_analyze after its durable delta is available.",
                     mode=ExtractorExecutionMode.SKIPPED,
                 )
-            if not delta.changed_symbol_ids and not delta.changed_paths:
+            if not delta.changed_symbol_ids:
                 return ExtractorStats(
                     outcome=ExtractorOutcome.SKIPPED,
                     message="no_changed_symbols",
@@ -193,7 +188,6 @@ class EmbeddingSymbolExtractor(BaseExtractor):
                 driver,
                 ctx.group_id,
                 qualified_names=delta.changed_symbol_ids,
-                changed_paths=delta.changed_paths,
             )
         else:
             if not self.allow_global_backfill:

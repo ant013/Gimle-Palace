@@ -11,6 +11,7 @@ import pytest
 from neo4j.exceptions import ServiceUnavailable
 
 from palace_mcp.extractors import registry
+from palace_mcp.extractors.base import AnalysisDelta
 from palace_mcp.extractors.foundation.profiles import SWIFT_KIT_EXTRACTOR_ORDER
 from palace_mcp.project_analyze import (
     ActiveAnalysisRunExistsError,
@@ -200,6 +201,20 @@ class InMemoryAnalysisRunStore:
                 "last_completed_extractor": last_completed_extractor,
                 "checkpoints": checkpoints,
             }
+        )
+        self._runs[run_id] = updated
+        return updated.model_copy(deep=True)
+
+    async def update_analysis_delta(
+        self,
+        run_id: str,
+        *,
+        analysis_delta,
+        updated_at: str,
+    ) -> AnalysisRun:
+        run = self._require(run_id)
+        updated = run.model_copy(
+            update={"analysis_delta": analysis_delta, "updated_at": updated_at}
         )
         self._runs[run_id] = updated
         return updated.model_copy(deep=True)
@@ -1272,6 +1287,126 @@ async def test_execute_run_records_extractor_modes_and_stale_since_in_report(
     assert finished.report_markdown is not None
     assert "Requested mode: `incremental`" in finished.report_markdown
     assert "stale_since=`head-xyz`" in finished.report_markdown
+
+
+@pytest.mark.asyncio
+async def test_execute_run_persists_symbol_delta_before_embedding_checkpoint(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "palace_mcp.project_analyze._resolve_run_mode_plan",
+        AsyncMock(
+            return_value=(
+                AnalysisRunMode.INCREMENTAL,
+                "requested_incremental",
+                "head-xyz",
+                2,
+                0.2,
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        "palace_mcp.project_analyze._collect_symbol_delta",
+        AsyncMock(
+            side_effect=lambda _driver, *, run, ingest_run_id: AnalysisDelta(
+                delta_id=run.analysis_delta.delta_id,
+                base_commit=run.analysis_delta.base_commit,
+                target_commit=run.analysis_delta.target_commit,
+                changed_paths=run.analysis_delta.changed_paths,
+                changed_symbol_ids=("Demo.changed", "Demo.other"),
+            )
+        ),
+    )
+    service = _build_service(store=InMemoryAnalysisRunStore())
+    started = await service.start_run(
+        slug="tron-kit",
+        parent_mount="hs",
+        relative_path="TronKit.Swift",
+        language_profile="swift_kit",
+        extractors=["symbol_index_swift", "embedding_symbol"],
+        mode=AnalysisRunMode.INCREMENTAL,
+        idempotency_key="persist-symbol-delta",
+    )
+    observed_embedding_deltas: list[AnalysisDelta | None] = []
+
+    async def _executor(
+        extractor_name: str, run: AnalysisRun
+    ) -> ExtractorAttemptResult:
+        if extractor_name == "embedding_symbol":
+            observed_embedding_deltas.append(run.analysis_delta)
+        return ExtractorAttemptResult(
+            status=AnalysisCheckpointStatus.OK,
+            mode=ExtractorExecutionMode.INCREMENTAL,
+            ingest_run_id=f"ingest-{extractor_name}",
+        )
+
+    finished = await service.execute_run(
+        started.run.run_id,
+        executor=_executor,
+        reacquire_lease=False,
+    )
+
+    assert observed_embedding_deltas[0] is not None
+    assert observed_embedding_deltas[0].changed_symbol_ids == (
+        "Demo.changed",
+        "Demo.other",
+    )
+    assert finished.analysis_delta == observed_embedding_deltas[0]
+
+
+@pytest.mark.asyncio
+async def test_execute_run_allows_incremental_no_work_skip(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "palace_mcp.project_analyze._resolve_run_mode_plan",
+        AsyncMock(
+            return_value=(
+                AnalysisRunMode.INCREMENTAL,
+                "requested_incremental",
+                "head-xyz",
+                0,
+                0.0,
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        "palace_mcp.project_analyze._collect_symbol_delta",
+        AsyncMock(
+            side_effect=lambda _driver, *, run, ingest_run_id: AnalysisDelta(
+                delta_id=run.analysis_delta.delta_id,
+                base_commit=run.analysis_delta.base_commit,
+                target_commit=run.analysis_delta.target_commit,
+            )
+        ),
+    )
+    service = _build_service(store=InMemoryAnalysisRunStore())
+    started = await service.start_run(
+        slug="tron-kit",
+        parent_mount="hs",
+        relative_path="TronKit.Swift",
+        language_profile="swift_kit",
+        extractors=["symbol_index_swift"],
+        mode=AnalysisRunMode.INCREMENTAL,
+        idempotency_key="incremental-no-work",
+    )
+
+    async def _executor(
+        _extractor_name: str, _run: AnalysisRun
+    ) -> ExtractorAttemptResult:
+        return ExtractorAttemptResult(
+            status=AnalysisCheckpointStatus.SKIPPED,
+            mode=ExtractorExecutionMode.SKIPPED,
+            ingest_run_id="ingest-empty",
+            message="no_changed_symbols",
+        )
+
+    finished = await service.execute_run(
+        started.run.run_id,
+        executor=_executor,
+        reacquire_lease=False,
+    )
+
+    assert finished.checkpoints[0].status is AnalysisCheckpointStatus.SKIPPED
+    assert finished.checkpoints[0].error_code is None
 
 
 @pytest.mark.asyncio

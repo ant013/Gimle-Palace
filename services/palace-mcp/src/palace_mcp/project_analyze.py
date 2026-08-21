@@ -12,6 +12,7 @@ import json
 import logging
 import socket
 from collections.abc import Awaitable, Callable, Sequence
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from enum import StrEnum
 from pathlib import Path
@@ -46,6 +47,7 @@ from palace_mcp.memory.cypher import (
     GET_ANALYSIS_RUN_WITH_CHECKPOINTS,
     MARK_ANALYSIS_RUN_RESUMABLE,
     UPDATE_ANALYSIS_RUN_LEASE,
+    UPDATE_ANALYSIS_RUN_DELTA,
     UPDATE_ANALYSIS_RUN_PROGRESS,
     UPSERT_ANALYSIS_CHECKPOINT,
 )
@@ -262,6 +264,14 @@ class AnalysisRunStore(Protocol):
         lease_expires_at: str | None,
     ) -> AnalysisRun: ...
 
+    async def update_analysis_delta(
+        self,
+        run_id: str,
+        *,
+        analysis_delta: AnalysisDelta,
+        updated_at: str,
+    ) -> AnalysisRun: ...
+
     async def finalize_run(
         self,
         run_id: str,
@@ -395,6 +405,46 @@ RETURN coalesce(b.indexed_commit, b.commit_sha) AS commit
 ORDER BY b.updated_at DESC
 LIMIT 1
 """.strip()
+
+_READ_SYMBOL_DELTA_IDENTITIES = """
+MATCH (s:Symbol {group_id: $group_id, last_seen_in_run_id: $ingest_run_id})
+WHERE NOT s:Deprecated
+RETURN s.qualified_name AS qualified_name
+ORDER BY qualified_name
+""".strip()
+
+
+async def _collect_symbol_delta(
+    driver: AsyncDriver,
+    *,
+    run: AnalysisRun,
+    ingest_run_id: str,
+) -> AnalysisDelta:
+    """Materialize exact symbol identities produced by the source checkpoint.
+
+    The persisted source-path delta is immutable. This only fills its downstream
+    symbol scope, keyed by the source extractor's own IngestRun, before any
+    embedding checkpoint can execute.
+    """
+    delta = run.analysis_delta
+    if delta is None:
+        raise ValueError("incremental symbol delta requires an AnalysisDelta")
+    async with driver.session() as session:
+        result = await session.run(
+            _READ_SYMBOL_DELTA_IDENTITIES,
+            group_id=f"project/{run.slug}",
+            ingest_run_id=ingest_run_id,
+        )
+        symbols = [
+            str(row["qualified_name"])
+            async for row in result
+            if row["qualified_name"] is not None
+        ]
+    return replace(
+        delta,
+        changed_symbol_ids=tuple(sorted(set(symbols))),
+        removed_symbol_paths=delta.removed_paths,
+    )
 
 
 async def _record_project_indexed_commit(
@@ -539,23 +589,32 @@ async def _build_analysis_delta(
         )
     if base_commit is None:
         return None
-    result = await native_detect_changes(project=slug, since=base_commit)
+    result = await native_detect_changes(
+        project=slug,
+        since=base_commit,
+        until=target_commit,
+    )
     if (
         result is FALLBACK_TO_CM
         or not isinstance(result, dict)
         or result.get("ok") is not True
     ):
         return None
-    raw_files = result.get("files")
-    if not isinstance(raw_files, list) or not all(
-        isinstance(path, str) for path in raw_files
+    raw_changed_paths = result.get("changed_paths", result.get("files"))
+    raw_removed_paths = result.get("removed_paths", [])
+    if (
+        not isinstance(raw_changed_paths, list)
+        or not all(isinstance(path, str) for path in raw_changed_paths)
+        or not isinstance(raw_removed_paths, list)
+        or not all(isinstance(path, str) for path in raw_removed_paths)
     ):
         return None
     return AnalysisDelta(
         delta_id=str(uuid4()),
         base_commit=base_commit,
         target_commit=target_commit,
-        changed_paths=tuple(sorted({path for path in raw_files if path})),
+        changed_paths=tuple(sorted({path for path in raw_changed_paths if path})),
+        removed_paths=tuple(sorted({path for path in raw_removed_paths if path})),
     )
 
 
@@ -1060,6 +1119,43 @@ class Neo4jAnalysisRunStore:
             now=_parse_iso(updated_at) or _utc_now(),
         )
 
+    async def update_analysis_delta(
+        self,
+        run_id: str,
+        *,
+        analysis_delta: AnalysisDelta,
+        updated_at: str,
+    ) -> AnalysisRun:
+        async with self._driver.session() as session:
+            return await session.execute_write(
+                self._tx_update_analysis_delta,
+                run_id,
+                analysis_delta,
+                updated_at,
+            )
+
+    @staticmethod
+    async def _tx_update_analysis_delta(
+        tx: AsyncManagedTransaction,
+        run_id: str,
+        analysis_delta: AnalysisDelta,
+        updated_at: str,
+    ) -> AnalysisRun:
+        result = await tx.run(
+            UPDATE_ANALYSIS_RUN_DELTA,
+            run_id=run_id,
+            analysis_delta_json=_serialize_json(analysis_delta.as_dict()),
+            updated_at=updated_at,
+        )
+        row = await result.single()
+        if row is None:
+            raise AnalysisRunNotFoundError(run_id)
+        return await Neo4jAnalysisRunStore._read_run_tx(
+            tx,
+            run_id,
+            now=_parse_iso(updated_at) or _utc_now(),
+        )
+
     async def finalize_run(
         self,
         run_id: str,
@@ -1193,6 +1289,19 @@ class ProjectAnalysisService:
         if missing:
             raise ValueError(
                 "extractor(s) missing from registry: " + ", ".join(sorted(missing))
+            )
+        invalid_capabilities = [
+            extractor_name
+            for extractor_name in ordered
+            if not isinstance(
+                self._extractor_registry[extractor_name].incremental_capability,
+                ExtractorIncrementalCapability,
+            )
+        ]
+        if invalid_capabilities:
+            raise ValueError(
+                "extractor(s) missing incremental capability: "
+                + ", ".join(sorted(invalid_capabilities))
             )
         return ordered
 
@@ -1533,7 +1642,11 @@ class ProjectAnalysisService:
             attempt = await step_executor(checkpoint.extractor, run)
             if (
                 checkpoint.mode is ExtractorExecutionMode.INCREMENTAL
-                and attempt.mode is not ExtractorExecutionMode.INCREMENTAL
+                and attempt.mode
+                not in {
+                    ExtractorExecutionMode.INCREMENTAL,
+                    ExtractorExecutionMode.SKIPPED,
+                }
             ):
                 attempt = ExtractorAttemptResult(
                     status=AnalysisCheckpointStatus.RUN_FAILED,
@@ -1575,10 +1688,30 @@ class ProjectAnalysisService:
             )
             # F2: symbol_index success is the moment the project's authoritative
             # indexed commit becomes known — persist it (monotonic, best-effort).
-            if (
-                updated_checkpoint.extractor.startswith("symbol_index_")
-                and attempt.status is AnalysisCheckpointStatus.OK
-            ):
+            if updated_checkpoint.extractor.startswith(
+                "symbol_index_"
+            ) and attempt.status in {
+                AnalysisCheckpointStatus.OK,
+                AnalysisCheckpointStatus.SKIPPED,
+            }:
+                if (
+                    run.effective_mode is AnalysisRunMode.INCREMENTAL
+                    and run.analysis_delta is not None
+                    and updated_checkpoint.ingest_run_id is not None
+                ):
+                    symbol_delta = await _collect_symbol_delta(
+                        self._require_driver(),
+                        run=run,
+                        ingest_run_id=updated_checkpoint.ingest_run_id,
+                    )
+                    run = await self._with_neo4j_retry(
+                        action="update_analysis_delta.symbol_index",
+                        operation=lambda: self._store.update_analysis_delta(
+                            run.run_id,
+                            analysis_delta=symbol_delta,
+                            updated_at=_iso(checkpoint_updated_at),
+                        ),
+                    )
                 await _record_project_indexed_commit(
                     self._require_driver(),
                     run.slug,

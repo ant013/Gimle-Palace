@@ -17,6 +17,7 @@ from palace_mcp.memory.cypher import (
     LIST_PROJECTS,
     PROJECT_ENTITY_COUNTS,
     PROJECT_INDEXED_COMMIT,
+    PROJECT_LAST_ANALYSIS_RUN,
     PROJECT_LAST_INGEST,
     UPSERT_PROJECT,
 )
@@ -304,6 +305,8 @@ async def get_project_overview(
             group_id=group_id,
         )
         indexed_commit_row = await indexed_commit_result.single()
+        analysis_result = await session.run(PROJECT_LAST_ANALYSIS_RUN, slug=slug)
+        analysis_row = await analysis_result.single()
 
     # Dominant per-symbol vote: DIAGNOSTIC ONLY (dominant_symbol_commit).
     # After any incremental ingest the vote is a previous run's sha; feeding
@@ -324,6 +327,36 @@ async def get_project_overview(
         if project_node.get("indexed_commit_status")
         else None
     )
+    last_analysis_delta_id: str | None = None
+    last_analysis_delta_symbol_count: int | None = None
+    embedding_coverage_status: str | None = None
+    stale_extractors: list[str] = []
+    if analysis_row is not None:
+        analysis_run = analysis_row["r"]
+        raw_delta = analysis_run.get("analysis_delta_json")
+        if isinstance(raw_delta, str):
+            try:
+                import json
+
+                delta = json.loads(raw_delta)
+                if isinstance(delta, dict):
+                    raw_id = delta.get("delta_id")
+                    last_analysis_delta_id = str(raw_id) if raw_id else None
+                    raw_symbols = delta.get("changed_symbol_ids")
+                    if isinstance(raw_symbols, list):
+                        last_analysis_delta_symbol_count = len(raw_symbols)
+            except (TypeError, ValueError):
+                logger.warning("get_project_overview analysis delta was malformed")
+        for checkpoint in analysis_row["checkpoints"]:
+            if checkpoint is None:
+                continue
+            extractor = checkpoint.get("extractor")
+            mode = checkpoint.get("mode")
+            status = checkpoint.get("status")
+            if mode == "skipped" and isinstance(extractor, str):
+                stale_extractors.append(extractor)
+            if extractor == "embedding_symbol" and isinstance(status, str):
+                embedding_coverage_status = status
 
     identity_check = registration_identity_check(slug, project_node=project_node)
     try:
@@ -374,5 +407,9 @@ async def get_project_overview(
             "origin_checked": False,
             "commits_behind_origin": None,
             "identity_check": identity_check,
+            "last_analysis_delta_id": last_analysis_delta_id,
+            "last_analysis_delta_symbol_count": last_analysis_delta_symbol_count,
+            "embedding_coverage_status": embedding_coverage_status,
+            "stale_extractors": sorted(set(stale_extractors)),
         }
     )

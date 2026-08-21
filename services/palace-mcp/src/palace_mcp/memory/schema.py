@@ -101,6 +101,11 @@ class ProjectInfo(BaseModel):
     origin_checked: bool = False
     commits_behind_origin: int | None = None
     identity_check: str = "unchecked"
+    # Last project_analyze provenance, separate from source freshness above.
+    last_analysis_delta_id: str | None = None
+    last_analysis_delta_symbol_count: int | None = None
+    embedding_coverage_status: str | None = None
+    stale_extractors: list[str] = Field(default_factory=list)
 
 
 class BridgeHealthInfo(BaseModel):

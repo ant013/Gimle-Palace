@@ -8,7 +8,7 @@ no thread-safety needed.
 from __future__ import annotations
 
 from palace_mcp.extractors.arch_layer.extractor import ArchLayerExtractor
-from palace_mcp.extractors.base import BaseExtractor
+from palace_mcp.extractors.base import BaseExtractor, ExtractorIncrementalCapability
 from palace_mcp.extractors.code_ownership.extractor import CodeOwnershipExtractor
 from palace_mcp.extractors.call_edge_swift import CallEdgeSwiftExtractor
 from palace_mcp.extractors.crypto_domain_model.extractor import (
@@ -108,3 +108,22 @@ def get(name: str) -> BaseExtractor | None:
 def list_all() -> list[BaseExtractor]:
     """All registered extractors, in insertion order."""
     return list(EXTRACTORS.values())
+
+
+def validate_incremental_capabilities(
+    extractors: dict[str, BaseExtractor] | None = None,
+) -> None:
+    """Fail closed if a registered extractor has no declared run-mode contract."""
+    registry = EXTRACTORS if extractors is None else extractors
+    invalid = [
+        name
+        for name, extractor in registry.items()
+        if not isinstance(
+            getattr(extractor, "incremental_capability", None),
+            ExtractorIncrementalCapability,
+        )
+    ]
+    if invalid:
+        raise ValueError(
+            "extractor(s) missing incremental capability: " + ", ".join(sorted(invalid))
+        )
