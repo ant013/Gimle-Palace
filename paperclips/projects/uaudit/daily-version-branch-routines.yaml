@@ -15,6 +15,14 @@ routines:
     title: UAudit daily Android version delta audit
     platform: android
     branch: version/0.50
+    schedule:
+      enabled: true
+      cron: "45 10 * * *"
+      timezone: UTC
+      delivery_slo_minutes: 180
+      deferred_after_minutes: 60
+      status_retry_minutes: [5, 20, 60]
+      partial_approval_deadline_minutes: 1440
     repo_url: https://github.com/horizontalsystems/unstoppable-wallet-android
     repo_local_path_template: "{{paths.project_root}}/repos/android/unstoppable-wallet-android"
     cursor_path_template: "{{paths.project_root}}/state/android-version-audit.json"
@@ -40,6 +48,14 @@ routines:
     title: UAudit daily iOS version delta audit
     platform: ios
     branch: version/0.50
+    schedule:
+      enabled: true
+      cron: "0 11 * * *"
+      timezone: UTC
+      delivery_slo_minutes: 180
+      deferred_after_minutes: 60
+      status_retry_minutes: [5, 20, 60]
+      partial_approval_deadline_minutes: 1440
     repo_url: https://github.com/horizontalsystems/unstoppable-wallet-ios
     repo_local_path_template: "{{paths.primary_repo_root}}"
     cursor_path_template: "{{paths.project_root}}/state/ios-version-audit.json"

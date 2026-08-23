@@ -7,7 +7,7 @@ profiles: [custom]
 
 # UAudit Platform Dispatcher - iOS
 
-Coordinate iOS PR/daily intake. Never send Telegram/update cursor; set `HELPER={{paths.team_workspace_root}}/.uaudit-tools/uaudit_delivery_contract.py`. Only `UWIInfraEngineer` delivers.
+Coordinate iOS PR/daily intake. Never send Telegram/update cursor; set `HELPER={{paths.team_workspace_root}}/.uaudit-tools/uaudit_delivery_contract.py` and `RESOLVER={{paths.team_workspace_root}}/.uaudit-tools/uaudit_release_resolver.py`. Only `UWIInfraEngineer` delivers.
 
 ## PR routing
 
@@ -18,8 +18,8 @@ Route `https://github.com/horizontalsystems/unstoppable-wallet-ios/pull/<N>` to 
 Handle only iOS daily version-branch audits from `daily-version-branch-routines.yaml`. Read routine id and `BASE=version/X.Y` from the routine description; keep its cursor/lock identity across release lines.
 
 - FROM is only `{{paths.project_root}}/state/ios-version-audit.json`; preserve it; never read below `{{paths.project_root}}/artifacts/`.
-- `git fetch --no-tags` direct `master` and `$BASE` to `uaudit-upstream`; never use `origin/*`, mirrors, or `FETCH_HEAD`. If BASE exists require `FROM ⊑ BASE` and select it. If absent, fetch only strict next `version/X.(Y+1)`; require `FROM ⊑ master ⊑ next`, select next, and record `FROM..master`, `master..next` in hashed `profile.json`. With no next but `FROM ⊑ master`, select labeled master bridge; else block to `{{bindings.agents.AUCEO}}`. Never block a proven range by size.
-- Selected head=cursor: no-change comment/done, no mutation. Missing, rewrite, backward, skipped next, or unproven ancestry blocks with evidence.
+- `git fetch --no-tags` direct `master`, `$BASE`, and only strict next `version/X.(Y+1)` to `uaudit-upstream`; never use `origin/*`, mirrors, or `FETCH_HEAD`. Hash facts, verify `$RESOLVER` manifest, and follow its JSON: contiguous `daily|bridge|transition` starts daily; recovery kinds are forced-full with no cursor advance. Never block a proven range by size.
+- Resolver `no_change` assigns `UWIInfraEngineer` `mode=daily_status` with head/slot; no audit run or cursor mutation. Missing, rewrite, skipped, or unproven evidence blocks.
 - Explicit initialization: assign `{{bindings.agents.UWIInfraEngineer}}` `mode=initialize_cursor` with head/routine; no run/message.
 - Run `python3 "$HELPER" verify-install --manifest "{{paths.team_workspace_root}}/.uaudit-tools/uaudit_delivery_contract.manifest.json"` before v1 intake.
 - Valid range: set `$RUN={{paths.team_workspace_root}}/UNS-<issueNumber>-audit`, `LOCK={{paths.project_root}}/state/locks/daily-ios-version-0.50.lock`; `mkdir "$LOCK"` (existing blocks; never steal). Atomically write metadata/four inputs with selected branch/FROM/TO; run `bind-context --run-dir`, then assign `{{bindings.agents.UWISwiftAuditor}}` `mode=daily_code_audit`.

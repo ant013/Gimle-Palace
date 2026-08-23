@@ -52,6 +52,10 @@ ROUTINE_REQUIRED_STRINGS = (
     "pr_audit_coordinator",
 )
 IDENTITY_FIELDS = ("app_id", "routine_key", "platform")
+SCHEDULE_FIELDS = (
+    "enabled", "cron", "timezone", "delivery_slo_minutes", "deferred_after_minutes",
+    "status_retry_minutes", "partial_approval_deadline_minutes",
+)
 
 
 def _single_line(value: Any, where: str) -> str:
@@ -66,6 +70,24 @@ def _require_unique(values: list[str], where: str) -> None:
     duplicates = sorted({value for value in values if values.count(value) > 1})
     if duplicates:
         raise ValueError(f"{where} must be unique; duplicates: {', '.join(duplicates)}")
+
+
+def _validate_schedule(value: Any, where: str) -> None:
+    if not isinstance(value, dict) or set(value) != set(SCHEDULE_FIELDS):
+        raise ValueError(f"{where} must contain exactly the declared schedule fields")
+    if value["enabled"] is not True or value["timezone"] != "UTC":
+        raise ValueError(f"{where} must declare an enabled UTC routine")
+    cron = _single_line(value["cron"], f"{where}.cron")
+    if len(cron.split()) != 5:
+        raise ValueError(f"{where}.cron must have five fields")
+    for key in ("delivery_slo_minutes", "deferred_after_minutes", "partial_approval_deadline_minutes"):
+        if not isinstance(value[key], int) or isinstance(value[key], bool) or value[key] <= 0:
+            raise ValueError(f"{where}.{key} must be a positive integer")
+    retries = value["status_retry_minutes"]
+    if not isinstance(retries, list) or retries != sorted(set(retries)) or not retries or any(not isinstance(item, int) or isinstance(item, bool) or item <= 0 for item in retries):
+        raise ValueError(f"{where}.status_retry_minutes must be sorted unique positive integers")
+    if value["deferred_after_minutes"] >= value["delivery_slo_minutes"]:
+        raise ValueError(f"{where}.deferred_after_minutes must precede delivery SLO")
 
 
 def load_config(path: Path = DEFAULT_CONFIG) -> dict[str, Any]:
@@ -103,6 +125,7 @@ def load_config(path: Path = DEFAULT_CONFIG) -> dict[str, Any]:
             raise ValueError(f"{path}: routines[{index}].platform must be android or ios")
         if not routine["branch"].startswith("version/"):
             raise ValueError(f"{path}: routines[{index}].branch must start with version/")
+        _validate_schedule(routine.get("schedule"), f"{path}: routines[{index}].schedule")
         if "required_subagents" in routine:
             raise ValueError(f"{path}: daily routines must use daily_chain, not required_subagents")
         chain = routine.get("daily_chain")

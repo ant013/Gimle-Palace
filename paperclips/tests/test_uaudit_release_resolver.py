@@ -6,7 +6,7 @@ from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "projects/uaudit/runtime"))
-from uaudit_release_resolver import ResolutionError, resolve_release_history  # noqa: E402
+from uaudit_release_resolver import ResolutionError, resolve_json, resolve_release_history  # noqa: E402
 
 
 def sha(char: str) -> str:
@@ -28,6 +28,30 @@ class ReleaseResolverTests(unittest.TestCase):
         split = resolve_release_history(cursor_sha=sha("a"), release_branch="version/0.50", release_head=sha("c"), master_anchor_sha=sha("a"), master_head=sha("b"), cursor_is_ancestor_of_release=False, cursor_is_ancestor_of_master=True, master_is_ancestor_of_release=False, next_release_branch="version/0.51", next_release_head=sha("d"), master_is_ancestor_of_next_release=False)
         self.assertEqual(split.kind, "split_recovery")
         self.assertEqual(len(split.segments), 2)
+
+    def test_absent_base_successor_at_cursor_is_no_change_even_if_master_is_behind(self) -> None:
+        result = resolve_release_history(
+            cursor_sha=sha("c"), release_branch="version/0.50", release_head=None,
+            master_anchor_sha=sha("a"), master_head=sha("b"),
+            cursor_is_ancestor_of_release=None, cursor_is_ancestor_of_master=False,
+            master_is_ancestor_of_release=None, next_release_branch="version/0.51",
+            next_release_head=sha("c"), master_is_ancestor_of_next_release=False,
+        )
+        self.assertEqual(result.kind, "no_change")
+        self.assertEqual(result.selected_branch, "version/0.51")
+        self.assertEqual(result.segments, ())
+
+    def test_json_adapter_rejects_unknown_input_and_returns_plain_resolution(self) -> None:
+        with self.assertRaises(ResolutionError):
+            resolve_json({"unexpected": True})
+        result = resolve_json({
+            "cursor_sha": sha("a"), "release_branch": "version/0.50", "release_head": sha("b"),
+            "master_anchor_sha": sha("a"), "master_head": sha("c"),
+            "cursor_is_ancestor_of_release": True, "cursor_is_ancestor_of_master": True,
+            "master_is_ancestor_of_release": True,
+        })
+        self.assertEqual(result["kind"], "daily")
+        self.assertEqual(result["segments"][0]["from_sha"], sha("a"))
 
     def test_ambiguous_rebase_is_full_recovery(self) -> None:
         result = resolve_release_history(cursor_sha=sha("a"), release_branch="version/0.50", release_head=sha("d"), master_anchor_sha=sha("a"), master_head=sha("b"), cursor_is_ancestor_of_release=False, cursor_is_ancestor_of_master=True, master_is_ancestor_of_release=True, old_series_equivalence="ambiguous")

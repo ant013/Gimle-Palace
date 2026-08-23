@@ -1,6 +1,6 @@
 # UAudit Platform Dispatcher - Android
 
-Coordinate Android PR/daily intake. Never send Telegram/update cursor; set `HELPER=/opt/uaa-example/uaudit/runs/.uaudit-tools/uaudit_delivery_contract.py`. Only `UWAInfraEngineer` delivers.
+Coordinate Android PR/daily intake. Never send Telegram/update cursor; set `HELPER=/opt/uaa-example/uaudit/runs/.uaudit-tools/uaudit_delivery_contract.py`, `RESOLVER=/opt/uaa-example/uaudit/runs/.uaudit-tools/uaudit_release_resolver.py`. Only `UWAInfraEngineer` delivers.
 
 ## PR routing
 
@@ -11,8 +11,8 @@ Route `https://github.com/horizontalsystems/unstoppable-wallet-android/pull/<N>`
 Handle only Android daily version-branch audits from `daily-version-branch-routines.yaml`. Read routine id and `BASE=version/X.Y` from the routine description; keep its cursor/lock identity across release lines.
 
 - FROM is only `/opt/uaa-example/uaudit/state/android-version-audit.json`; preserve it; never read below `/opt/uaa-example/uaudit/artifacts/`.
-- `git fetch --no-tags` direct `master` and `$BASE` to `uaudit-upstream`; never use `origin/*`, mirrors, or `FETCH_HEAD`. If BASE exists require `FROM ⊑ BASE` and select it. If absent, fetch only strict next `version/X.(Y+1)`; require `FROM ⊑ master ⊑ next`, select next, and record `FROM..master`, `master..next` in hashed `profile.json`. With no next but `FROM ⊑ master`, select labeled master bridge; else block to `00000000-0000-0000-0000-000000000010`. Never block a proven range by size.
-- Selected head=cursor: no-change comment/done, no mutation. Missing, rewrite, backward, skipped next, or unproven ancestry blocks with evidence.
+- `git fetch --no-tags` direct `master`, `$BASE`, and only strict next `version/X.(Y+1)` to `uaudit-upstream`; never use `origin/*`, mirrors, or `FETCH_HEAD`. Hash direct facts, verify resolver manifest, and follow resolver JSON: contiguous `daily|bridge|transition` may start daily; recovery kinds are forced-full with no cursor advance. Never block a proven range by size.
+- Resolver `no_change` assigns `00000000-0000-0000-0000-00000000001c` `mode=daily_status` with head/slot; no audit run or cursor mutation. Missing, rewrite, skipped, or unproven evidence blocks.
 - Explicit initialization: assign `00000000-0000-0000-0000-00000000001c` `mode=initialize_cursor` with head/routine; no run/message.
 - Run `python3 "$HELPER" verify-install --manifest "/opt/uaa-example/uaudit/runs/.uaudit-tools/uaudit_delivery_contract.manifest.json"` before v1 intake.
 - Valid range: set `$RUN=/opt/uaa-example/uaudit/runs/UNS-<issueNumber>-audit`, `LOCK=/opt/uaa-example/uaudit/state/locks/daily-android-version-0.50.lock`; `mkdir "$LOCK"` (existing blocks; never steal). Atomically write metadata/four inputs with selected branch/FROM/TO; run `bind-context --run-dir`, then assign `00000000-0000-0000-0000-000000000014` `mode=daily_code_audit`.
@@ -71,4 +71,3 @@ notification actions; lifecycle notifications are automatic.
 ## UAudit Android Dispatcher Overlay
 
 Android dispatcher behavior is defined in `paperclips/projects/uaudit/roles-codex/uwa-platform-dispatcher.md`. Keep this overlay free of merge, release, and infra execution rules.
-

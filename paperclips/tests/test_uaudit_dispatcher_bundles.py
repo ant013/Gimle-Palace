@@ -134,6 +134,7 @@ def test_generated_dispatcher_bundles_start_staged_daily_chain():
         assert "audit-final.md" in text
         assert "do not use `uaudit-*` subagents for daily real-delta audits" in text
         assert "uaudit_delivery_contract.py" in text
+        assert "uaudit_release_resolver.py" in text
         assert "verify-install --manifest" in text
         assert "bind-context --run-dir" in text
         assert "aggregate --run-dir" in text
@@ -204,9 +205,9 @@ def test_daily_dispatchers_resolve_direct_release_successors_before_intake():
             assert "fetch --no-tags" in text
             assert "`$BASE`" in text
             assert "strict next `version/X.(Y+1)`" in text
-            assert "FROM ⊑ master ⊑ next" in text
-            assert "FROM..master" in text
-            assert "Never block a proven range by size" in text
+            assert "resolver" in text.lower()
+            assert "daily_status" in text
+            assert "FROM ⊑ master ⊑ next" not in text
             assert "origin/*" in text
 
 
