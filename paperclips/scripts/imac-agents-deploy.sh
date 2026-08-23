@@ -28,8 +28,6 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 DEPLOY_LOG="$SCRIPT_DIR/imac-agents-deploy.log"
 RUN_LOG="/tmp/imac-agents-deploy-$(date -u +%Y%m%dT%H%M%SZ).log"
 
-EXPECTED_CWD="/Users/Shared/Ios/Gimle-Palace"
-EXPECTED_BRANCH="develop"
 WORKTREE_PATH="/tmp/gimle-agents-deploy"
 
 # shellcheck source=lib/_common.sh
@@ -94,17 +92,13 @@ if [ ! -f "$bindings" ]; then
 fi
 log info "Using bindings at $bindings"
 
-# ---- Pre-flight: cwd + branch ----
-if [ "$REPO_ROOT" != "$EXPECTED_CWD" ]; then
-  die "must run from $EXPECTED_CWD (got $REPO_ROOT)"
-fi
+# ---- Source checkout ----
+# The deploy script creates its own temporary worktree below, so it may be
+# invoked from any clean iMac checkout. This avoids colliding with developers'
+# uncommitted work in the primary checkout.
 cd "$REPO_ROOT"
 
-CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
-if [ "$CURRENT_BRANCH" != "$EXPECTED_BRANCH" ]; then
-  die "branch must be '${EXPECTED_BRANCH}' (got '${CURRENT_BRANCH}')"
-fi
-log info "Pre-flight OK (cwd=$REPO_ROOT, branch=$CURRENT_BRANCH)"
+log info "Source checkout: $REPO_ROOT ($(git rev-parse --short HEAD))"
 
 # ---- Cleanup trap ----
 cleanup() {
@@ -118,10 +112,6 @@ cleanup() {
       rm -rf "$WORKTREE_PATH" 2>/dev/null || true
       git worktree prune 2>/dev/null || true
     fi
-  fi
-  current="$(cd "$REPO_ROOT" && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
-  if [ "$current" != "$EXPECTED_BRANCH" ]; then
-    log warn "production checkout on '${current}', expected '${EXPECTED_BRANCH}'"
   fi
 }
 trap cleanup EXIT
