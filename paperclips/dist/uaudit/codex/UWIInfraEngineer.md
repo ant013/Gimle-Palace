@@ -441,7 +441,7 @@ For explicitly authorized `mode=initialize_cursor`, require the exact supplied u
 
 ## V1 PR and daily delivery
 
-For receipt-validated `audit_kind=forced_full`, keep normal payload/Telegram receipt checks but never call `reconcile-daily`, touch daily cursor/routine; after matching receipt + Board comment, write workflow marker and release its forced lock.
+For `audit_kind=forced_full`, use normal receipt checks; never call `reconcile-daily` or touch daily cursor. Matching receipt + Board comment writes workflow marker and releases its lock.
 
 Resume only from matching receipt, terminal marker, Board comment and final status; daily also needs matching cursor marker and metadata. All agree: exit without send/mutation. Missing lock is allowed only for that terminal daily no-op; any inconsistency blocks. A matching receipt otherwise skips send and continues reconciliation.
 
@@ -449,9 +449,9 @@ For `mode=pr_delivery`/`mode=daily_delivery`, require `delivery_contract=uaudit-
 
 For `daily_status`, require resolver outcome, manifest-bound descriptor and scheduled-slot proof. `prepare-daily-status` supplies the only text; send it to `UAudit`, save response, then `record-daily-status`. Unknown send: escalate; never advance cursor.
 
-Read exact bytes from `telegram-summary.txt`. PR document mode remains one `audit.md` document. Daily/forced-full document mode has two helper-validated files. If `$RUN/delivery-progress.json` is absent, send `audit-final.ru.md` first with the Russian caption, save its response, and record it; `english_pending` confirms it. Then (or on resume when progress exists) send only `audit-final.en.md` with the same caption. Both use the same `issueIdentifier="UNS-$N"`. Text-only has no Markdown fields. Accept only `ok:true`, expected `mode`, `routeSource:"file_route"`, `routeName:"UAudit"`, matching issue and a message id for every send. A plugin/permission/error response creates no receipt/marker and never changes cursor.
+Read `telegram-summary.txt`; PR sends `audit.md`. Daily/forced: no `$RUN/delivery-progress.json` → send/save/record `audit-final.ru.md` with Russian caption (`english_pending`); with progress → only `audit-final.en.md` same caption. Use `issueIdentifier="UNS-$N"`; text has no Markdown. Require expected `mode`, `routeSource:"file_route"`, `routeName:"UAudit"`, issue and id; errors change no state.
 
-Save the Russian/only raw response atomically to `$RUN/delivery-plugin-response.json`; for bilingual delivery first run `python3 "$HELPER" record-delivery --run-dir "$RUN" --response "$RUN/delivery-plugin-response.json" --delivered-at <UTC-RFC3339>`, then save English response to `$RUN/delivery-plugin-response.en.json` and rerun it with `--english-response "$RUN/delivery-plugin-response.en.json"`. Only helper creates progress, immutable `$RUN/delivery-result.json`, and `status/telegram.done`.
+Run `record-delivery --run-dir "$RUN" --response "$RUN/delivery-plugin-response.json" [--english-response "$RUN/delivery-plugin-response.en.json"] --delivered-at <UTC-RFC3339>`; first bilingual call omits English. Helper writes progress, receipt and `status/telegram.done`.
 
 Resume is receipt-led. A matching receipt forbids resend and reconciles missing later steps. A conflicting receipt, `telegram.done` without matching receipt, `cursor.done` without matching receipt/cursor (daily), or `workflow.done` without prerequisites blocks. With no receipt and no terminal markers, retry may resend; this is at-least-once and the crash window may duplicate a Telegram message. Never use `status/delivery.done` for v1.
 
