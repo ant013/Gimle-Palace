@@ -217,6 +217,7 @@ def test_uaudit_bootstrap_deploy_does_not_require_partial_approvers():
     assert "approver_actor_ids" not in text
     assert "install_uaudit_delivery_helper \"$team_root\"" in text
     assert "team_workspace_root required to install UAudit delivery helper" in text
+    assert "d3fe36b8c820f5092cde81ec9a69771a17fffa4d7e7ebfce1be65e68f5ba08b7" in text
 
 
 def test_uaudit_codex_agents_get_an_explicit_supported_model_when_unset():
