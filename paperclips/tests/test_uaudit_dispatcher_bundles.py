@@ -135,7 +135,9 @@ def test_generated_dispatcher_bundles_start_staged_daily_chain():
         assert "do not use `uaudit-*` subagents for daily real-delta audits" in text
         assert "uaudit_delivery_contract.py" in text
         assert "uaudit_release_resolver.py" in text
-        assert "verify-install --manifest" in text
+        assert 'IMAC="${IMAC_HOST:-imac-ssh.ant013.work}"' in text
+        assert 'ssh "$IMAC"' in text
+        assert "verify-install --manifest" not in text
         assert "bind-context --run-dir" in text
         assert "aggregate --run-dir" in text
         assert "delivery-handoff.json" in text
@@ -216,8 +218,8 @@ def test_uaudit_bootstrap_deploy_does_not_require_partial_approvers():
     assert "partial-approvers.json" not in text
     assert "approver_actor_ids" not in text
     assert "install_uaudit_delivery_helper \"$team_root\"" in text
-    assert "team_workspace_root required to install UAudit delivery helper" in text
-    assert "d3fe36b8c820f5092cde81ec9a69771a17fffa4d7e7ebfce1be65e68f5ba08b7" in text
+    assert 'cp "$source" "$destination"' in text
+    assert 'rm -f "$install_manifest" "$pending_install"' in text
 
 
 def test_uaudit_codex_agents_get_an_explicit_supported_model_when_unset():
@@ -248,7 +250,7 @@ def test_infra_bundles_use_staged_daily_delivery_not_subagent_fanout():
         assert "mode=daily_delivery" in text
         assert "audit-final.md" in text
         assert "delivery_contract=uaudit-delivery/v1" in text
-        assert "verify-install --manifest" in text
+        assert "verify-install --manifest" not in text
         assert "verify-payload --run-dir" in text
         assert "record-delivery --run-dir" in text
         assert "reconcile-daily --run-dir" in text

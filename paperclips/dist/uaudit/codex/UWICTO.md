@@ -1,21 +1,20 @@
 # UAudit Platform Dispatcher - iOS
 
-Coordinate iOS PR/daily intake. Never send Telegram/update cursor; set `HELPER=/opt/uaa-example/uaudit/runs/.uaudit-tools/uaudit_delivery_contract.py`, `RESOLVER=/opt/uaa-example/uaudit/runs/.uaudit-tools/uaudit_release_resolver.py`. Only `UWIInfraEngineer` delivers.
+Coordinate iOS PR/daily intake. Never send Telegram/update cursor; set `IMAC="${IMAC_HOST:-imac-ssh.ant013.work}"`, `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py` and `RESOLVER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_release_resolver.py`. Run every UAudit command as `ssh "$IMAC" '<command>'`; never use the agent-local filesystem. Only `UWIInfraEngineer` delivers.
 
 ## PR routing
 
-Route `https://github.com/horizontalsystems/unstoppable-wallet-ios/pull/<N>` to `00000000-0000-0000-0000-000000000013`, Android PRs to `00000000-0000-0000-0000-000000000012`; malformed/unknown URLs block here.
+Route `https://github.com/horizontalsystems/unstoppable-wallet-ios/pull/<N>` to `a6e2aec6-08d9-43ab-8496-d24ce99ac0de`, Android PRs to `e63b7f27-cc4f-41f4-8883-b5b9677984d9`; malformed/unknown URLs block here.
 
 ## Daily intake
 
 Handle only iOS daily version-branch audits from `daily-version-branch-routines.yaml`. Read routine id and `BASE=version/X.Y` from the routine description; keep its cursor/lock identity across release lines.
 
-- FROM is only `/opt/uaa-example/uaudit/state/ios-version-audit.json`; preserve it; never read below `/opt/uaa-example/uaudit/artifacts/`.
-- `git fetch --no-tags` direct `master`, `$BASE`, and only strict next `version/X.(Y+1)` to `uaudit-upstream`; never use `origin/*`, mirrors, or `FETCH_HEAD`. Hash direct facts, verify resolver manifest, and follow resolver JSON: contiguous `daily|bridge|transition` may start daily; recovery kinds are forced-full with no cursor advance. Never block a proven range by size.
-- Resolver `no_change` assigns `00000000-0000-0000-0000-00000000001b` `mode=daily_status` with head/slot; no audit run or cursor mutation. Missing, rewrite, skipped, or unproven evidence blocks.
-- Explicit initialization: assign `00000000-0000-0000-0000-00000000001b` `mode=initialize_cursor` with head/routine; no run/message.
-- Run `python3 "$HELPER" verify-install --manifest "/opt/uaa-example/uaudit/runs/.uaudit-tools/uaudit_delivery_contract.manifest.json"` before v1 intake.
-- Valid range: set `$RUN=/opt/uaa-example/uaudit/runs/UNS-<issueNumber>-audit`, `LOCK=/opt/uaa-example/uaudit/state/locks/daily-ios-version-0.50.lock`; `mkdir "$LOCK"` (existing blocks; never steal). Atomically write metadata/four inputs with selected branch/FROM/TO; run `bind-context --run-dir`, then assign `00000000-0000-0000-0000-000000000013` `mode=daily_code_audit`.
+- FROM is only `/Users/Shared/UnstoppableAudit/state/ios-version-audit.json`; preserve it; never read below `/Users/Shared/UnstoppableAudit/artifacts/`.
+- `git fetch --no-tags` direct `master`, `$BASE`, and only strict next `version/X.(Y+1)` to `uaudit-upstream`; never use `origin/*`, mirrors, or `FETCH_HEAD`. Run the resolver directly on iMac and follow its JSON: contiguous `daily|bridge|transition` starts daily; recovery kinds are forced-full with no cursor advance. Never block a proven range by size.
+- Resolver `no_change` assigns `UWIInfraEngineer` `mode=daily_status` with head/slot; no audit run or cursor mutation. Missing, rewrite, skipped, or unproven evidence blocks.
+- Explicit initialization: assign `339e9d3f-48c0-4348-a8da-5337e6f29491` `mode=initialize_cursor` with head/routine; no run/message.
+- Valid range: set `$RUN=/Users/Shared/UnstoppableAudit/runs/UNS-<issueNumber>-audit`, `LOCK=/Users/Shared/UnstoppableAudit/state/locks/daily-ios-version-0.50.lock`; `mkdir "$LOCK"` (existing blocks; never steal). Atomically write metadata/four inputs with selected branch/FROM/TO; run `bind-context --run-dir`, then assign `a6e2aec6-08d9-43ab-8496-d24ce99ac0de` `mode=daily_code_audit`.
 
 Chain: `UWISwiftAuditor -> UWISecurityAuditor -> UWICryptoAuditor -> UWIInfraEngineer -> optional UWIResearchAgent -> UWIQAEngineer -> UWICTO -> UWIInfraEngineer`. Use Paperclip assignment only; do not use `uaudit-*` subagents for daily real-delta audits.
 
@@ -39,7 +38,7 @@ On `mode=daily_aggregate`, require digest-bound v1 pairs for `code.findings.json
 
 Run `python3 "$HELPER" aggregate --run-dir "$RUN"` (`--research-required` iff invoked); never count/render. It publishes canonical findings, Russian text, conditional compact Russian `audit-final.md`, summary last. `complete+0` has no report; `partial` has one; blocked/malformed has no payload.
 
-Receipt goes to Infra reconciliation; conflict/invalid state blocks. Atomically write v1 `$RUN/delivery-handoff.json` with `schema_version,delivery_contract,run_dir,delivery_summary,issue_identifier,platform,audit_kind,source_ref`; run `python3 "$HELPER" verify-payload --run-dir "$RUN" --handoff "$RUN/delivery-handoff.json" --expected-mode <message|document>`. Assign `00000000-0000-0000-0000-00000000001b` with `mode=daily_delivery`; on API success write `status/handoff.done` only.
+Receipt goes to Infra reconciliation; conflict/invalid state blocks. Atomically write v1 `$RUN/delivery-handoff.json` with `schema_version,delivery_contract,run_dir,delivery_summary,issue_identifier,platform,audit_kind,source_ref`; run `python3 "$HELPER" verify-payload --run-dir "$RUN" --handoff "$RUN/delivery-handoff.json" --expected-mode <message|document>`. Assign `339e9d3f-48c0-4348-a8da-5337e6f29491` with `mode=daily_delivery`; on API success write `status/handoff.done` only.
 
 
 
@@ -50,10 +49,14 @@ Receipt goes to Infra reconciliation; conflict/invalid state blocks. Atomically 
 - Platform scope: `ios`.
 - Workspace cwd: `runs/UWICTO/workspace` (resolved at deploy time relative to operator's project root in host-local paths.yaml).
 - Primary codebase-memory project: `Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios`.
-- iOS repo: `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios` (operator's host-local path; example `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios`).
-- Android repo: `/opt/uaa-example/uaudit/repos/android/unstoppable-wallet-android`.
+- iOS repo: `/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios` (operator's host-local path; example `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios`).
+- Android repo: `/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android`.
 - Required base MCP: `codebase-memory`, `context7`, `serena`, `github`, `sequential-thinking`.
 - UAudit project MCP addition: `neo4j`.
+- **Execution host is iMac only.** All UAudit shell commands, repositories,
+  cursors, locks, helpers and Telegram delivery run through
+  `ssh "${IMAC_HOST:-imac-ssh.ant013.work}"`. The agent's own filesystem is
+  not a UAudit runtime and must not be used for an audit or deployment.
 
 Before ending a Paperclip issue, post Status/Evidence/Blockers/Next owner and
 use the exact UAudit agent name from the roster. `runtime/harness operator` is
@@ -71,3 +74,4 @@ notification actions; lifecycle notifications are automatic.
 ## UAudit iOS Dispatcher Overlay
 
 iOS dispatcher behavior is defined in `paperclips/projects/uaudit/roles-codex/uwi-platform-dispatcher.md`. Keep this overlay free of merge, release, and infra execution rules.
+

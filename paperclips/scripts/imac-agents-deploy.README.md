@@ -137,6 +137,10 @@ manual cleanup. Useful for postmortem if a deploy fails.
 
 ## UAudit Dispatcher Deploy And Routine Reconciliation
 
+**UAudit runs only on iMac.** From another machine, first connect with
+`ssh imac-ssh.ant013.work`, then run every UAudit deploy or audit command in
+that SSH session. Do not run UAudit against the caller's local filesystem.
+
 UAudit prompt deploy uses the same wrapper:
 
 ```bash

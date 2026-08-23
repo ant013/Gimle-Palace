@@ -223,7 +223,7 @@ Switching branches inside an agent worktree drags uncommitted changes across bra
 
 ### Operator vs production checkout
 
-The `production_checkout` path (e.g. `/opt/uaa-example/uaudit`) is the iMac deploy target. Stay on `develop` (typically `develop`) there — never check out feature branches in production_checkout. Discovered in UNS-48: feature checkout in production_checkout caused QA to test stale code.
+The `production_checkout` path (e.g. `/Users/ant013/Android/Gimle-Palace-serving`) is the iMac deploy target. Stay on `develop` (typically `develop`) there — never check out feature branches in production_checkout. Discovered in UNS-48: feature checkout in production_checkout caused QA to test stale code.
 
 
 ## Pre-work: codebase-memory first
@@ -390,10 +390,14 @@ Write tools as appropriate per profile (see AGENTS.md for capability boundaries)
 - Platform scope: `ios`.
 - Workspace cwd: `runs/UWIInfraEngineer/workspace` (resolved at deploy time relative to operator's project root in host-local paths.yaml).
 - Primary codebase-memory project: `Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios`.
-- iOS repo: `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios` (operator's host-local path; example `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios`).
-- Android repo: `/opt/uaa-example/uaudit/repos/android/unstoppable-wallet-android`.
+- iOS repo: `/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios` (operator's host-local path; example `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios`).
+- Android repo: `/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android`.
 - Required base MCP: `codebase-memory`, `context7`, `serena`, `github`, `sequential-thinking`.
 - UAudit project MCP addition: `neo4j`.
+- **Execution host is iMac only.** All UAudit shell commands, repositories,
+  cursors, locks, helpers and Telegram delivery run through
+  `ssh "${IMAC_HOST:-imac-ssh.ant013.work}"`. The agent's own filesystem is
+  not a UAudit runtime and must not be used for an audit or deployment.
 
 Before ending a Paperclip issue, post Status/Evidence/Blockers/Next owner and
 use the exact UAudit agent name from the roster. `runtime/harness operator` is
@@ -410,7 +414,7 @@ notification actions; lifecycle notifications are automatic.
 
 ## UAudit Telegram delivery owner (iOS)
 
-Only Infra may call Telegram. Use the deployed `HELPER=/opt/uaa-example/uaudit/runs/.uaudit-tools/uaudit_delivery_contract.py`; never reproduce its validation, counting, rendering, receipt, approval, or cursor logic.
+Only Infra may call Telegram. Use the deployed `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py`; never reproduce its validation, counting, rendering, receipt, approval, or cursor logic.
 
 The plugin rejects agent-scoped tokens with `Board access required`. Read only `/Users/anton/.paperclip/auth.json`, never `.env`, bot tokens, or other secrets:
 
@@ -422,21 +426,19 @@ test -n "$$PAPERCLIP_DELIVERY_TOKEN"
 
 If the token is empty or the plugin returns `Board access required`, comment only the artifact path, PATCH permission-blocked, and stop retrying.
 
-POST with Board bearer token to `/api/plugins/00000000-0000-0000-0000-000000000000/actions/send_to_telegram`. Send only `companyId`, `agentId`, `issueIdentifier`, exact validated `text`, and, in document mode only, `markdownFileName` plus inline `markdownContent`. `issueIdentifier` must be `UNS-*`. Never pass an explicit destination, local-file reference, URL, binary, raw diff, or credential; never call Telegram directly. Lifecycle events use `opsRoutes` automatically.
+POST with Board bearer token to `/api/plugins/60023916-4b6c-40f5-829f-bc8b98abc4ed/actions/send_to_telegram`. Send only `companyId`, `agentId`, `issueIdentifier`, exact validated `text`, and, in document mode only, `markdownFileName` plus inline `markdownContent`. `issueIdentifier` must be `UNS-*`. Never pass an explicit destination, local-file reference, URL, binary, raw diff, or credential; never call Telegram directly. Lifecycle events use `opsRoutes` automatically.
 
 ## Daily infra audit stage
 
 On a previously blocked wake, resume only after the latest verified human Board input explicitly says `unblocked`, `resume approved`, or `proceed`; automated blocker/watchdog text is not approval. This never substitutes for digest-bound partial approval. Otherwise keep blocked and leave cursor/lock unchanged.
 
-For `mode=daily_infra_audit`, read `$RUN/run-context.json`, prepared inputs, and validated code/security/crypto sidecars+markers. Write `$RUN/infra.md` with build, CI, dependency, delivery, repo, configuration and operational evidence. Atomically publish strict `$RUN/infra.findings.json` with exact binding, `stage="infra"`, `source_agent="UWIInfraEngineer"`, `audit_status=complete|partial|blocked`, structured findings, typed `{text,material}` limitations and status-valid block reason. Every finding has exactly `severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification`; location is either relative file+positive line+null area or null file/line+nonempty area. Finding prose, limitation text and non-null blocked reason are Russian; complete/partial use null block reason. Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/infra.findings.json"`; only it writes `status/infra.done.json`. Validation failure or blocked status PATCHes issue blocked and stops without completion/delivery/cursor work. If an unresolved external question materially affects the result, assign `00000000-0000-0000-0000-00000000001d` with `mode=daily_research`; otherwise record why research was skipped and assign `00000000-0000-0000-0000-000000000019` with `mode=daily_qa_verify`.
+For `mode=daily_infra_audit`, read `$RUN/run-context.json`, prepared inputs, and validated code/security/crypto sidecars+markers. Write `$RUN/infra.md` with build, CI, dependency, delivery, repo, configuration and operational evidence. Atomically publish strict `$RUN/infra.findings.json` with exact binding, `stage="infra"`, `source_agent="UWIInfraEngineer"`, `audit_status=complete|partial|blocked`, structured findings, typed `{text,material}` limitations and status-valid block reason. Every finding has exactly `severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification`; location is either relative file+positive line+null area or null file/line+nonempty area. Finding prose, limitation text and non-null blocked reason are Russian; complete/partial use null block reason. Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/infra.findings.json"`; only it writes `status/infra.done.json`. Validation failure or blocked status PATCHes issue blocked and stops without completion/delivery/cursor work. If an unresolved external question materially affects the result, assign `0be9b9c5-de38-45ce-8b33-25bb39434d50` with `mode=daily_research`; otherwise record why research was skipped and assign `d928e408-ab63-4699-8ec2-c6ac7558c268` with `mode=daily_qa_verify`.
 
 For explicitly authorized `mode=initialize_cursor`, require the exact supplied upstream head to be a lowercase 40-hex SHA and atomically initialize the configured iOS routine cursor with exactly `{"last_successfully_audited_sha":"<40hex>"}`. Comment the routine/SHA, mark done and stop. Do not create `$RUN`, audit, or send Telegram.
 
 ## V1 PR and daily delivery
 
 For receipt-validated `audit_kind=forced_full`, keep normal payload/Telegram receipt checks but never call `reconcile-daily`, touch daily cursor/routine; after matching receipt + Board comment, write workflow marker and release its forced lock.
-
-First run `python3 "$HELPER" verify-install --manifest "/opt/uaa-example/uaudit/runs/.uaudit-tools/uaudit_delivery_contract.manifest.json"`; failure blocks.
 
 Resume only from matching receipt, terminal marker, Board comment and final status; daily also needs matching cursor marker and metadata. All agree: exit without send/mutation. Missing lock is allowed only for that terminal daily no-op; any inconsistency blocks. A matching receipt otherwise skips send and continues reconciliation.
 
@@ -452,12 +454,13 @@ Resume is receipt-led. A matching receipt forbids resend and reconciles missing 
 
 For PR, after matching receipt create/verify the Board comment and final issue status through API, then atomically write `status/workflow.done`; no cursor step exists.
 
-For daily, keep `/opt/uaa-example/uaudit/state/locks/daily-ios-version-0.50.lock` until completion. If status is partial, fetch bounded issue comments with verifiable stable actor id/kind into `$RUN/approval-comments.json`; require exact `partial audit approved <current-summary-sha256>` from a human in `/opt/uaa-example/uaudit/state/partial-approvers.json`. Then run `python3 "$HELPER" reconcile-daily --run-dir "$RUN" --cursor "/opt/uaa-example/uaudit/state/ios-version-audit.json" --lock-dir "/opt/uaa-example/uaudit/state/locks/daily-ios-version-0.50.lock" --reconciled-at <UTC-RFC3339> --approval-comments "$RUN/approval-comments.json" --approvers "/opt/uaa-example/uaudit/state/partial-approvers.json"`. Omit approval flags only for complete. Helper alone performs cursor CAS and `status/cursor.done`; failed/absent approval or conflict leaves cursor/lock unchanged. After cursor.done, create/verify Board comment and status, atomically write `status/workflow.done`, then release the lock. A matching already-applied CAS resumes safely.
+For daily, keep `/Users/Shared/UnstoppableAudit/state/locks/daily-ios-version-0.50.lock` until completion. If status is partial, fetch bounded issue comments with verifiable stable actor id/kind into `$RUN/approval-comments.json`; require exact `partial audit approved <current-summary-sha256>` from a human in `/Users/Shared/UnstoppableAudit/state/partial-approvers.json`. Then run `python3 "$HELPER" reconcile-daily --run-dir "$RUN" --cursor "/Users/Shared/UnstoppableAudit/state/ios-version-audit.json" --lock-dir "/Users/Shared/UnstoppableAudit/state/locks/daily-ios-version-0.50.lock" --reconciled-at <UTC-RFC3339> --approval-comments "$RUN/approval-comments.json" --approvers "/Users/Shared/UnstoppableAudit/state/partial-approvers.json"`. Omit approval flags only for complete. Helper alone performs cursor CAS and `status/cursor.done`; failed/absent approval or conflict leaves cursor/lock unchanged. After cursor.done, create/verify Board comment and status, atomically write `status/workflow.done`, then release the lock. A matching already-applied CAS resumes safely.
 
 ## Strict legacy compatibility and smoke
 
 Unversioned PR/smoke is document-only: fixed report `$RUN/audit.md` for PR; for `UAudit subagent smoke`, require `smoke/summary.json` plus subagent JSON and atomically render short Russian `$RUN/smoke/telegram-report.md`. Missing input/report, symlink, `$RUN` escape or malformed v1 blocks; never treat it as zero-result/legacy fallback.
 
-Compute lowercase report SHA-256. Load at most 100 entries from `/opt/uaa-example/uaudit/state/legacy-delivery-allowlist.json`: root keys exactly `schema_version:1,entries`; entry keys exactly `issue_identifier,run_dir,audit_kind,report_file,report_sha256`; kind `pr|smoke`, canonical run, and fixed relative report above. Require one exact issue/run/kind/file/digest match; zero/duplicate/invalid entries block.
+Compute lowercase report SHA-256. Load at most 100 entries from `/Users/Shared/UnstoppableAudit/state/legacy-delivery-allowlist.json`: root keys exactly `schema_version:1,entries`; entry keys exactly `issue_identifier,run_dir,audit_kind,report_file,report_sha256`; kind `pr|smoke`, canonical run, and fixed relative report above. Require one exact issue/run/kind/file/digest match; zero/duplicate/invalid entries block.
 
 Accept only one document response with `file_route`, route `UAudit`, matching issue and positive message id. Atomically write these values and report SHA to `$RUN/status/legacy-delivery.done.json`; matching forbids resend, conflict blocks. Verify Board comment with path/digest/message id and final status, then write `status/workflow.done`. Resume is no-op only when marker/Board/workflow agree. Operator removes the allowlist entry.
+

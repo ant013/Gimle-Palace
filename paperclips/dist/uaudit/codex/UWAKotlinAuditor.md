@@ -394,10 +394,14 @@ Write tools as appropriate per profile (see AGENTS.md for capability boundaries)
 - Platform scope: `android`.
 - Workspace cwd: `runs/UWAKotlinAuditor/workspace` (resolved at deploy time relative to operator's project root in host-local paths.yaml).
 - Primary codebase-memory project: `Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android`.
-- iOS repo: `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios` (operator's host-local path; example `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios`).
-- Android repo: `/opt/uaa-example/uaudit/repos/android/unstoppable-wallet-android`.
+- iOS repo: `/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios` (operator's host-local path; example `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios`).
+- Android repo: `/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android`.
 - Required base MCP: `codebase-memory`, `context7`, `serena`, `github`, `sequential-thinking`.
 - UAudit project MCP addition: `neo4j`.
+- **Execution host is iMac only.** All UAudit shell commands, repositories,
+  cursors, locks, helpers and Telegram delivery run through
+  `ssh "${IMAC_HOST:-imac-ssh.ant013.work}"`. The agent's own filesystem is
+  not a UAudit runtime and must not be used for an audit or deployment.
 
 Before ending a Paperclip issue, post Status/Evidence/Blockers/Next owner and
 use the exact UAudit agent name from the roster. `runtime/harness operator` is
@@ -414,9 +418,9 @@ notification actions; lifecycle notifications are automatic.
 
 ## Daily Version-Branch Code Audit Stage (Android)
 
-For `mode=daily_code_audit`, set `HELPER=/opt/uaa-example/uaudit/runs/.uaudit-tools/uaudit_delivery_contract.py`; do not run PR subagents. Read only the bound prepared inputs, `$RUN/run-context.json`, and Android repo. Write human evidence to `$RUN/code.md`; atomically publish strict `$RUN/code.findings.json` with `schema_version=1`, exact copied `run_binding`, `stage="code"`, `source_agent="UWAKotlinAuditor"`, `audit_status=complete|partial|blocked`, structured findings, typed `{text,material}` limitations, and status-valid `block_reason`. Every finding has exactly `severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification`; keep all three location keys and use either relative `file`+positive `line`+`area:null` or `file:null,line:null`+nonempty `area`. Finding prose, every limitation `text`, and non-null blocked `block_reason` must be Russian; `block_reason` is null for complete/partial. Include variant impact in evidence where relevant. Do not count/deduplicate or add schema fields.
+For `mode=daily_code_audit`, set `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py`; do not run PR subagents. Read only the bound prepared inputs, `$RUN/run-context.json`, and Android repo. Write human evidence to `$RUN/code.md`; atomically publish strict `$RUN/code.findings.json` with `schema_version=1`, exact copied `run_binding`, `stage="code"`, `source_agent="UWAKotlinAuditor"`, `audit_status=complete|partial|blocked`, structured findings, typed `{text,material}` limitations, and status-valid `block_reason`. Every finding has exactly `severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification`; keep all three location keys and use either relative `file`+positive `line`+`area:null` or `file:null,line:null`+nonempty `area`. Finding prose, every limitation `text`, and non-null blocked `block_reason` must be Russian; `block_reason` is null for complete/partial. Include variant impact in evidence where relevant. Do not count/deduplicate or add schema fields.
 
-Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/code.findings.json"`; only it creates digest-bound `status/code.done.json`. Validation failure or `blocked` PATCHes issue blocked and stops without completion. Otherwise assign `00000000-0000-0000-0000-000000000018` with `mode=daily_security_audit`. Never send Telegram or update state/cursors.
+Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/code.findings.json"`; only it creates digest-bound `status/code.done.json`. Validation failure or `blocked` PATCHes issue blocked and stops without completion. Otherwise assign `fc30ec70-13a4-440f-b13e-e03e17cb63f4` with `mode=daily_security_audit`. Never send Telegram or update state/cursors.
 
 ## UAudit Incremental PR Audit Coordinator (Android)
 
@@ -437,9 +441,9 @@ Give only `pr.diff`, `pr.json`, repo root, exact `$RUN/run-context.json`, and a 
 
 ### Immutable run and intake
 
-Set `RUN=/opt/uaa-example/uaudit/runs/UNS-<issueNumber>-audit`, `REPO=/opt/uaa-example/uaudit/repos/android/unstoppable-wallet-android`, `HELPER=/opt/uaa-example/uaudit/runs/.uaudit-tools/uaudit_delivery_contract.py`. Only the coordinator writes `$RUN`, using temp+validate+atomic `mv`.
+Set `RUN=/Users/Shared/UnstoppableAudit/runs/UNS-<issueNumber>-audit`, `REPO=/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android`, `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py`. Only the coordinator writes `$RUN`, using temp+validate+atomic `mv`.
 
-First run `python3 "$HELPER" verify-install --manifest "/opt/uaa-example/uaudit/runs/.uaudit-tools/uaudit_delivery_contract.manifest.json"`; failure blocks.
+First run `python3 "$HELPER" verify-install --manifest "/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.manifest.json"`; failure blocks.
 
 Fetch bounded `$RUN/pr.json` and `$RUN/pr.diff` using `gh`; never print raw diff in comments. Atomically write `$RUN/intake.json` with only `schema_version:1`, issue identifier, `platform:"android"`, `audit_kind:"pr"`, and `source_ref:{repo,pr_url,base_sha,head_sha}`. Run `python3 "$HELPER" bind-context --run-dir "$RUN" --intake "$RUN/intake.json"` before fanout. It creates/validates immutable context and input digests; failure blocks.
 
@@ -455,7 +459,7 @@ Store each response atomically at its mapped path. It must contain only the stri
 
 Run `python3 "$HELPER" aggregate --run-dir "$RUN"`. It alone validates all slots/run binding, deduplicates, counts, decides status/verdict, and atomically publishes canonical findings, `telegram-summary.txt`, optional compact Russian `audit.md`, then `delivery-summary.json` last. `complete+0` has no MD; `partial` always has MD and is explicitly incomplete; `blocked` publishes no completion payload. Android variant impact belongs in report evidence/technical information when applicable. Do not derive findings from Markdown or edit helper outputs.
 
-Atomically create strict `$RUN/delivery-handoff.json` with only `schema_version:1`, `delivery_contract:"uaudit-delivery/v1"`, exact `run_dir`, `delivery_summary`, `issue_identifier`, `platform`, `audit_kind`, and context `source_ref`. Choose message only for validated `complete+0+report:null`, otherwise document; run `python3 "$HELPER" verify-payload --run-dir "$RUN" --handoff "$RUN/delivery-handoff.json" --expected-mode <message|document>`. Then assign `00000000-0000-0000-0000-00000000001c` with `mode=pr_delivery`, contract and exact handoff/summary paths. Only after successful assignment API response atomically create `status/handoff.done`; it never means delivered.
+Atomically create strict `$RUN/delivery-handoff.json` with only `schema_version:1`, `delivery_contract:"uaudit-delivery/v1"`, exact `run_dir`, `delivery_summary`, `issue_identifier`, `platform`, `audit_kind`, and context `source_ref`. Choose message only for validated `complete+0+report:null`, otherwise document; run `python3 "$HELPER" verify-payload --run-dir "$RUN" --handoff "$RUN/delivery-handoff.json" --expected-mode <message|document>`. Then assign `5f0709f8-0b05-43e7-8711-6df618b95f69` with `mode=pr_delivery`, contract and exact handoff/summary paths. Only after successful assignment API response atomically create `status/handoff.done`; it never means delivered.
 
 ### Smoke mode
 

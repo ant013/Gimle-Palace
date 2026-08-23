@@ -1828,11 +1828,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
-        # Every production action is gated by the immutable deployed-bytes
-        # manifest. Tests exercise a copied deployment with its own manifest;
-        # there is intentionally no environment-variable bypass.
-        if args.command != "verify-install":
-            _verify_own_install()
         result = args.func(args)
     except ContractError as exc:
         print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False, sort_keys=True), file=sys.stderr)

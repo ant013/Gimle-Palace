@@ -388,10 +388,14 @@ Write tools as appropriate per profile (see AGENTS.md for capability boundaries)
 - Platform scope: `android`.
 - Workspace cwd: `runs/UWASecurityAuditor/workspace` (resolved at deploy time relative to operator's project root in host-local paths.yaml).
 - Primary codebase-memory project: `Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android`.
-- iOS repo: `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios` (operator's host-local path; example `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios`).
-- Android repo: `/opt/uaa-example/uaudit/repos/android/unstoppable-wallet-android`.
+- iOS repo: `/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios` (operator's host-local path; example `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios`).
+- Android repo: `/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android`.
 - Required base MCP: `codebase-memory`, `context7`, `serena`, `github`, `sequential-thinking`.
 - UAudit project MCP addition: `neo4j`.
+- **Execution host is iMac only.** All UAudit shell commands, repositories,
+  cursors, locks, helpers and Telegram delivery run through
+  `ssh "${IMAC_HOST:-imac-ssh.ant013.work}"`. The agent's own filesystem is
+  not a UAudit runtime and must not be used for an audit or deployment.
 
 Before ending a Paperclip issue, post Status/Evidence/Blockers/Next owner and
 use the exact UAudit agent name from the roster. `runtime/harness operator` is
@@ -408,9 +412,9 @@ notification actions; lifecycle notifications are automatic.
 
 ## Daily Version-Branch Security Audit Stage (Android)
 
-For `mode=daily_security_audit`, set `HELPER=/opt/uaa-example/uaudit/runs/.uaudit-tools/uaudit_delivery_contract.py`; read the immutable `$RUN/run-context.json`, prepared inputs, `$RUN/code.md`, validated `status/code.done.json`, and the Android repo. Audit auth, storage, networking, signing, permissions, privacy, dependencies, and abuse paths in the bound FROM..TO range.
+For `mode=daily_security_audit`, set `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py`; read the immutable `$RUN/run-context.json`, prepared inputs, `$RUN/code.md`, validated `status/code.done.json`, and the Android repo. Audit auth, storage, networking, signing, permissions, privacy, dependencies, and abuse paths in the bound FROM..TO range.
 
 Write human evidence to `$RUN/security.md`. Atomically publish `$RUN/security.findings.json` as the strict v1 envelope: copy `run_binding` exactly; use `stage="security"`, `source_agent="UWASecurityAuditor"`; set `audit_status` to `complete|partial|blocked`; include only structured findings and typed `{text,material}` limitations; set `block_reason` only as required by status. Every finding has exactly `severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification`; location is either relative file+positive line+null area or null file/line+nonempty area. Finding prose, limitation text and non-null blocked reason are Russian; complete/partial use null block reason. Do not count or deduplicate findings and do not invent schema fields.
 
-Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/security.findings.json"`; only it may create digest-bound `status/security.done.json`. Validation failure or `blocked` PATCHes issue blocked and stops the chain and produces no completion message. Otherwise comment that the stage is ready, PATCH `00000000-0000-0000-0000-000000000016` with `mode=daily_crypto_audit`, and stop. Never send Telegram or update state/cursors.
+Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/security.findings.json"`; only it may create digest-bound `status/security.done.json`. Validation failure or `blocked` PATCHes issue blocked and stops the chain and produces no completion message. Otherwise comment that the stage is ready, PATCH `83e44735-7f4f-4673-b5a7-c3667747d21b` with `mode=daily_crypto_audit`, and stop. Never send Telegram or update state/cursors.
 

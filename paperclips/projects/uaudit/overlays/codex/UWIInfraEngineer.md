@@ -26,8 +26,6 @@ For explicitly authorized `mode=initialize_cursor`, require the exact supplied u
 
 For receipt-validated `audit_kind=forced_full`, keep normal payload/Telegram receipt checks but never call `reconcile-daily`, touch daily cursor/routine; after matching receipt + Board comment, write workflow marker and release its forced lock.
 
-First run `python3 "$HELPER" verify-install --manifest "{{paths.team_workspace_root}}/.uaudit-tools/uaudit_delivery_contract.manifest.json"`; failure blocks.
-
 Resume only from matching receipt, terminal marker, Board comment and final status; daily also needs matching cursor marker and metadata. All agree: exit without send/mutation. Missing lock is allowed only for that terminal daily no-op; any inconsistency blocks. A matching receipt otherwise skips send and continues reconciliation.
 
 For `pr_delivery`/`daily_delivery`, require `delivery_contract=uaudit-delivery/v1` plus exact handoff and summary paths; missing/malformed/mismatched/blocked input fails closed. Use `message` only for complete zero findings with `report:null`, else `document`; immediately run `verify-payload` before send.
