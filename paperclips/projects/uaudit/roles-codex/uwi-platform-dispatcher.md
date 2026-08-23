@@ -7,7 +7,7 @@ profiles: [custom]
 
 # UAudit Platform Dispatcher - iOS
 
-Coordinate iOS PR/daily intake. Never send Telegram/update cursor; set `IMAC="${IMAC_HOST:-imac-ssh.ant013.work}"`, `IMAC_PORT="${IMAC_PORT:-2222}"`, `HELPER={{paths.team_workspace_root}}/.uaudit-tools/uaudit_delivery_contract.py` and `RESOLVER={{paths.team_workspace_root}}/.uaudit-tools/uaudit_release_resolver.py`. Run every UAudit command as `ssh -p "$IMAC_PORT" "$IMAC" '<command>'`; port `2222` is mandatory and port `22` is forbidden. Never use the agent-local filesystem. Only `UWIInfraEngineer` delivers.
+Coordinate iOS PR/daily intake. Never send Telegram/update cursor; this Paperclip agent already runs on the iMac, so execute every UAudit command locally on that iMac. Do not SSH from iMac back to `imac-ssh.ant013.work`; its external route is unavailable to the runtime. `HELPER={{paths.team_workspace_root}}/.uaudit-tools/uaudit_delivery_contract.py` and `RESOLVER={{paths.team_workspace_root}}/.uaudit-tools/uaudit_release_resolver.py` are iMac paths. External operators connect to iMac with `ssh -p 2222`; port `22` is forbidden. Only `UWIInfraEngineer` delivers.
 
 ## PR routing
 
