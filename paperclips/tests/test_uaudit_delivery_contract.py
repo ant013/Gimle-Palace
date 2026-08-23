@@ -82,8 +82,10 @@ def sha256_path(path: Path) -> str:
 
 def install_helper(root: Path) -> Path:
     tools = root / ".uaudit-tools"
-    tools.mkdir(parents=True)
+    tools.mkdir(parents=True, exist_ok=True)
     helper = tools / "uaudit_delivery_contract.py"
+    if helper.exists():
+        return helper
     shutil.copyfile(SOURCE_HELPER, helper)
     digest = hashlib.sha256(helper.read_bytes()).hexdigest()
     write_json(
@@ -277,8 +279,32 @@ def prepare_run(
     return {"helper": helper, "run": run, "lock": lock, "binding": binding}
 
 
-def aggregate(fixture: dict, *, ok: bool = True) -> dict:
-    return call(fixture["helper"], "aggregate", "--run-dir", fixture["run"], ok=ok)
+def finalize_translation(fixture: dict) -> dict:
+    run = fixture["run"]
+    translation = read_json(run / "translation-input.json")
+    english = "# English audit\n\nThis is the complete English translation of the attached Russian audit.\n"
+    (run / "audit-final.en.md").write_text(english)
+    write_json(
+        run / "translation-result.json",
+        {
+            "schema_version": 1,
+            "run_binding_sha256": translation["run_binding_sha256"],
+            "source_sha256": translation["source_sha256"],
+            "target_file": "audit-final.en.md",
+            "target_sha256": sha256_path(run / "audit-final.en.md"),
+        },
+    )
+    return call(fixture["helper"], "finalize-translation", "--run-dir", run)
+
+
+def aggregate(fixture: dict, *, ok: bool = True, research_required: bool = False) -> dict:
+    args: list[object] = ["aggregate", "--run-dir", fixture["run"]]
+    if research_required:
+        args.append("--research-required")
+    result = call(fixture["helper"], *args, ok=ok)
+    if ok and result["status"] == "translation_required":
+        return finalize_translation(fixture)
+    return result
 
 
 def write_handoff(fixture: dict) -> Path:
@@ -321,17 +347,17 @@ def record(fixture: dict, mode: str, *, route: str = "UAudit", ok: bool = True) 
             }
         },
     )
-    return call(
-        fixture["helper"],
-        "record-delivery",
-        "--run-dir",
-        fixture["run"],
-        "--response",
-        response,
-        "--delivered-at",
-        DELIVERED_AT,
-        ok=ok,
-    )
+    args: list[object] = [
+        "record-delivery", "--run-dir", fixture["run"], "--response", response,
+    ]
+    if read_json(fixture["run"] / "delivery-summary.json").get("english_report") is not None:
+        english_response = fixture["run"] / "delivery-plugin-response.en.json"
+        value = read_json(response)
+        value["data"]["data"]["messageId"] = 322
+        write_json(english_response, value)
+        args.extend(("--english-response", english_response))
+    args.extend(("--delivered-at", DELIVERED_AT))
+    return call(fixture["helper"], *args, ok=ok)
 
 
 def test_install_manifest_is_mandatory_and_tamper_evident(tmp_path: Path):
@@ -419,11 +445,15 @@ def test_complete_zero_removes_stale_reports_and_uses_message_receipt(tmp_path: 
     fixture = prepare_run(tmp_path, kind="daily_delta", platform="android")
     (fixture["run"] / "audit.md").write_text("stale")
     (fixture["run"] / "audit-final.md").write_text("stale")
+    (fixture["run"] / "audit-final.ru.md").write_text("stale")
+    (fixture["run"] / "audit-final.en.md").write_text("stale")
     result = aggregate(fixture)
     assert result["finding_count"] == 0
     assert result["mode"] == "message"
     assert not (fixture["run"] / "audit.md").exists()
     assert not (fixture["run"] / "audit-final.md").exists()
+    assert not (fixture["run"] / "audit-final.ru.md").exists()
+    assert not (fixture["run"] / "audit-final.en.md").exists()
     summary = read_json(fixture["run"] / "delivery-summary.json")
     assert summary["report"] is None
     assert summary["verdict"] == "approve"
@@ -463,8 +493,95 @@ def test_daily_aggregate_streams_diff_larger_than_generic_file_limit(tmp_path: P
     result = aggregate(fixture)
 
     assert result["mode"] == "document"
-    report = (fixture["run"] / "audit-final.md").read_text()
+    report = (fixture["run"] / "audit-final.ru.md").read_text()
     assert "добавлений — 3565158" in report
+
+
+def test_daily_document_requires_bound_english_translation_before_delivery(tmp_path: Path):
+    fixture = prepare_run(
+        tmp_path,
+        kind="daily_delta",
+        findings={"security": [finding("Important")]},
+    )
+
+    pending = call(fixture["helper"], "aggregate", "--run-dir", fixture["run"])
+
+    assert pending == {
+        "ok": True,
+        "status": "translation_required",
+        "audit_status": "complete",
+        "finding_count": 1,
+        "translation_input": "translation-input.json",
+    }
+    assert not (fixture["run"] / "delivery-summary.json").exists()
+    translation = read_json(fixture["run"] / "translation-input.json")
+    assert translation["source_file"] == "audit-final.ru.md"
+    assert translation["target_file"] == "audit-final.en.md"
+
+    ready = finalize_translation(fixture)
+
+    assert ready["mode"] == "document"
+    summary = read_json(fixture["run"] / "delivery-summary.json")
+    assert summary["report"]["file"] == "audit-final.ru.md"
+    assert summary["english_report"]["file"] == "audit-final.en.md"
+    payload = call(
+        fixture["helper"], "verify-payload", "--run-dir", fixture["run"],
+        "--handoff", write_handoff(fixture), "--expected-mode", "document",
+    )
+    assert payload["english_report_file"].endswith("audit-final.en.md")
+
+
+def test_bilingual_delivery_records_russian_then_recovers_english_only(tmp_path: Path):
+    fixture = prepare_run(tmp_path, kind="daily_delta", findings={"code": [finding()]})
+    aggregate(fixture)
+    write_handoff(fixture)
+    response = fixture["run"] / "delivery-plugin-response.json"
+    write_json(response, {
+        "ok": True, "mode": "document", "routeSource": "file_route", "routeName": "UAudit",
+        "issueIdentifier": "UNS-123", "projectKey": "UNS", "messageId": 321,
+    })
+
+    pending = call(
+        fixture["helper"], "record-delivery", "--run-dir", fixture["run"], "--response", response,
+        "--delivered-at", DELIVERED_AT,
+    )
+
+    assert pending["status"] == "english_pending"
+    assert not (fixture["run"] / "delivery-result.json").exists()
+    assert read_json(fixture["run"] / "delivery-progress.json")["message_id"] == 321
+    receipt = record(fixture, "document")
+    stored = read_json(fixture["run"] / "delivery-result.json")
+    assert receipt["english_message_id"] == 322
+    assert stored["english_message_id"] == 322
+    assert stored["english_report_sha256"] == read_json(fixture["run"] / "delivery-summary.json")["english_report"]["sha256"]
+    assert not (fixture["run"] / "delivery-progress.json").exists()
+
+
+def test_existing_single_language_daily_summary_remains_reconcilable(tmp_path: Path):
+    fixture = prepare_run(tmp_path, kind="daily_delta", findings={"code": [finding()]})
+    aggregate(fixture)
+    run = fixture["run"]
+    summary = read_json(run / "delivery-summary.json")
+    (run / "audit-final.ru.md").replace(run / "audit-final.md")
+    (run / "audit-final.en.md").unlink()
+    (run / "translation-input.json").unlink()
+    (run / "translation-result.json").unlink()
+    summary.pop("english_report")
+    summary["report"] = {"file": "audit-final.md", "sha256": sha256_path(run / "audit-final.md")}
+    write_json(run / "delivery-summary.json", summary)
+    summary_sha = sha256_path(run / "delivery-summary.json")
+    write_json(run / "status/aggregate.done", {
+        "schema_version": 1,
+        "summary_sha256": summary_sha,
+        "run_binding_sha256": summary["run_binding_sha256"],
+    })
+
+    resumed = aggregate(fixture)
+
+    assert resumed["status"] == "ready"
+    assert resumed["summary_sha256"] == summary_sha
+    record(fixture, "document")
+    assert "english_message_id" not in read_json(run / "delivery-result.json")
 
 
 @pytest.mark.parametrize("platform", ("android", "ios"))
@@ -482,7 +599,7 @@ def test_forced_full_uses_russian_v1_delivery_without_daily_cursor(tmp_path: Pat
     assert result["mode"] == "document"
     summary = read_json(fixture["run"] / "delivery-summary.json")
     assert summary["audit_kind"] == "forced_full"
-    report = (fixture["run"] / "audit-final.md").read_text()
+    report = (fixture["run"] / "audit-final.ru.md").read_text()
     assert "# Аудит изменений" in report
     assert "Проверка полного диапазона" in report
     assert "Аудит " in (fixture["run"] / "telegram-summary.txt").read_text()
@@ -506,8 +623,9 @@ def test_partial_zero_requires_document_and_allowlisted_human_approval(tmp_path:
     assert result["mode"] == "document"
     summary = read_json(fixture["run"] / "delivery-summary.json")
     assert summary["verdict"] == "inconclusive"
-    assert summary["report"]["file"] == "audit-final.md"
-    report = (fixture["run"] / "audit-final.md").read_text()
+    assert summary["report"]["file"] == "audit-final.ru.md"
+    assert summary["english_report"]["file"] == "audit-final.en.md"
+    report = (fixture["run"] / "audit-final.ru.md").read_text()
     assert report.index("> Проверка выполнена частично") < report.index("## Замечания")
     assert "В проверенной части замечаний не найдено." in report
     record(fixture, "document")
@@ -868,19 +986,13 @@ def test_daily_research_is_explicit_and_partial_positive_never_approves(tmp_path
     call(fixture["helper"], "validate-stage", "--run-dir", fixture["run"], "--sidecar", research_path)
     failure = aggregate(fixture, ok=False)
     assert "--research-required" in failure["error"]
-    result = call(
-        fixture["helper"],
-        "aggregate",
-        "--run-dir",
-        fixture["run"],
-        "--research-required",
-    )
+    result = aggregate(fixture, research_required=True)
     assert result["audit_status"] == "partial"
     summary = read_json(fixture["run"] / "delivery-summary.json")
     assert summary["finding_count"] == 1
     assert summary["severity_counts"]["critical"] == 1
     assert summary["verdict"] == "block"
-    assert summary["report"]["file"] == "audit-final.md"
+    assert summary["report"]["file"] == "audit-final.ru.md"
     text = (fixture["run"] / "telegram-summary.txt").read_text()
     assert "Вердикт: блокирует принятие" in text
     assert "Покрытие неполное" in text

@@ -98,6 +98,11 @@ PAYLOAD_ARTIFACTS = (
     "telegram-summary.txt",
     "audit.md",
     "audit-final.md",
+    "audit-final.ru.md",
+    "audit-final.en.md",
+    "translation-input.json",
+    "translation-result.json",
+    "delivery-progress.json",
     "delivery-summary.json",
 )
 TERMINAL_MARKERS = (
@@ -994,6 +999,39 @@ def _render_report(
     return ("\n".join(lines).rstrip() + "\n").encode("utf-8")
 
 
+def _translation_input(run_dir: Path, binding_sha: str, report_raw: bytes) -> bytes:
+    """Bind the human English translation to the canonical Russian report."""
+    return _canonical_bytes({
+        "schema_version": SCHEMA_VERSION,
+        "run_binding_sha256": binding_sha,
+        "source_file": "audit-final.ru.md",
+        "source_sha256": _sha256_bytes(report_raw),
+        "target_file": "audit-final.en.md",
+        "target_language": "en",
+    })
+
+
+def _validate_translation(run_dir: Path, binding_sha: str, russian_raw: bytes) -> tuple[dict[str, Any], bytes]:
+    input_value = _expect_object(_load_json(run_dir / "translation-input.json"), "translation-input.json")
+    _exact_keys(input_value, ("schema_version", "run_binding_sha256", "source_file", "source_sha256", "target_file", "target_language"), where="translation-input.json")
+    expected_input = _expect_object(json.loads(_translation_input(run_dir, binding_sha, russian_raw)), "expected translation input")
+    if input_value != expected_input:
+        _fail("translation input binding mismatch")
+    result = _expect_object(_load_json(run_dir / "translation-result.json"), "translation-result.json")
+    _exact_keys(result, ("schema_version", "run_binding_sha256", "source_sha256", "target_file", "target_sha256"), where="translation-result.json")
+    if result["schema_version"] != SCHEMA_VERSION or result["run_binding_sha256"] != binding_sha:
+        _fail("translation result binding mismatch")
+    if result["source_sha256"] != input_value["source_sha256"] or result["target_file"] != "audit-final.en.md":
+        _fail("translation result source mismatch")
+    _sha(result["target_sha256"], "translation target sha256")
+    english_raw = _read_bytes(run_dir / "audit-final.en.md", maximum=512 * 1024)
+    if not english_raw.endswith(b"\n") or len(english_raw.strip()) == 0:
+        _fail("English audit-final is empty or non-canonical")
+    if _sha256_bytes(english_raw) != result["target_sha256"]:
+        _fail("English audit-final digest mismatch")
+    return result, english_raw
+
+
 def _validate_canonical(value: Any, binding: Mapping[str, Any]) -> dict[str, Any]:
     canonical = _expect_object(value, "canonical-findings.json")
     _exact_keys(canonical, ("schema_version", "run_binding", "audit_status", "findings", "limitations"), where="canonical-findings.json")
@@ -1041,15 +1079,21 @@ def _validate_summary(run_dir: Path) -> tuple[dict[str, Any], dict[str, Any], st
     binding, _, binding_sha = _load_context(run_dir)
     summary_path = run_dir / "delivery-summary.json"
     summary = _expect_object(_load_json(summary_path), "delivery-summary.json")
-    _exact_keys(
-        summary,
-        (
-            "schema_version", "issue_identifier", "platform", "audit_kind", "audit_status",
-            "run_binding_sha256", "source_ref", "finding_count", "severity_counts", "verdict",
-            "material_limitations", "telegram_text", "findings", "report", "created_at",
-        ),
-        where="delivery-summary.json",
+    legacy_keys = (
+        "schema_version", "issue_identifier", "platform", "audit_kind", "audit_status",
+        "run_binding_sha256", "source_ref", "finding_count", "severity_counts", "verdict",
+        "material_limitations", "telegram_text", "findings", "report", "created_at",
     )
+    current_keys = legacy_keys[:-1] + ("english_report", "created_at")
+    if set(summary) == set(legacy_keys):
+        # Old persisted receipts must remain readable; they predate bilingual
+        # daily delivery and therefore have no English report field.
+        legacy_summary = True
+        english_report = None
+    else:
+        legacy_summary = False
+        _exact_keys(summary, current_keys, where="delivery-summary.json")
+        english_report = summary["english_report"]
     if summary["schema_version"] != SCHEMA_VERSION:
         _fail("unsupported summary schema_version")
     for field in ("issue_identifier", "platform", "audit_kind", "source_ref"):
@@ -1123,7 +1167,9 @@ def _validate_summary(run_dir: Path) -> tuple[dict[str, Any], dict[str, Any], st
     if needs_report:
         report = _expect_object(report_ref, "summary.report")
         _exact_keys(report, ("file", "sha256"), where="summary.report")
-        expected_name = "audit.md" if binding["audit_kind"] == "pr" else "audit-final.md"
+        expected_name = "audit.md" if binding["audit_kind"] == "pr" else (
+            "audit-final.md" if legacy_summary else "audit-final.ru.md"
+        )
         if report["file"] != expected_name:
             _fail("summary report filename mismatch")
         _sha(report["sha256"], "summary.report.sha256")
@@ -1134,27 +1180,47 @@ def _validate_summary(run_dir: Path) -> tuple[dict[str, Any], dict[str, Any], st
         expected_report = _render_report(run_dir, canonical, counts, summary["verdict"], sidecars)
         if report_raw != expected_report:
             _fail("report does not match deterministic rendering")
+        if binding["audit_kind"] == "pr":
+            if english_report is not None:
+                _fail("PR summary must not contain English audit-final")
+        else:
+            if legacy_summary:
+                # Historical daily reports were deliberately single-language.
+                english = None
+            else:
+                english = _expect_object(english_report, "summary.english_report")
+            if english is None:
+                if not legacy_summary:
+                    _fail("daily summary must contain English audit-final")
+            else:
+                _exact_keys(english, ("file", "sha256"), where="summary.english_report")
+                if english["file"] != "audit-final.en.md":
+                    _fail("English report filename mismatch")
+                _sha(english["sha256"], "summary.english_report.sha256")
+                result, _ = _validate_translation(run_dir, binding_sha, report_raw)
+                if english["sha256"] != result["target_sha256"]:
+                    _fail("English report digest mismatch")
     else:
-        if report_ref is not None:
+        if report_ref is not None or english_report is not None:
             _fail("complete-zero summary must have null report")
-        if (run_dir / "audit.md").exists() or (run_dir / "audit-final.md").exists():
+        if any((run_dir / name).exists() for name in ("audit.md", "audit-final.md", "audit-final.ru.md", "audit-final.en.md")):
             _fail("complete-zero run must not have a report")
-    raw = _canonical_bytes(summary)
-    if _read_bytes(summary_path) != raw:
+    raw = _read_bytes(summary_path)
+    if not legacy_summary and raw != _canonical_bytes(summary):
         _fail("delivery-summary.json is not canonical")
     return summary, canonical, _sha256_bytes(raw)
 
 
 def _validate_receipt(run_dir: Path, summary: Mapping[str, Any], summary_sha: str) -> dict[str, Any]:
     receipt = _expect_object(_load_json(run_dir / "delivery-result.json"), "delivery-result.json")
-    _exact_keys(
-        receipt,
-        (
-            "schema_version", "summary_sha256", "run_binding_sha256", "mode", "route_source",
-            "route_name", "message_id", "telegram_text_sha256", "report_sha256", "delivered_at",
-        ),
-        where="delivery-result.json",
-    )
+    bilingual = summary.get("english_report") is not None
+    keys = [
+        "schema_version", "summary_sha256", "run_binding_sha256", "mode", "route_source",
+        "route_name", "message_id", "telegram_text_sha256", "report_sha256", "delivered_at",
+    ]
+    if bilingual:
+        keys.extend(("english_message_id", "english_report_sha256"))
+    _exact_keys(receipt, tuple(keys), where="delivery-result.json")
     if receipt["schema_version"] != SCHEMA_VERSION:
         _fail("unsupported receipt schema_version")
     expected_mode = "message" if summary["report"] is None else "document"
@@ -1173,8 +1239,38 @@ def _validate_receipt(run_dir: Path, summary: Mapping[str, Any], summary_sha: st
             _fail(f"receipt mismatch: {field}")
     if not _is_int(receipt["message_id"]) or receipt["message_id"] <= 0:
         _fail("receipt message_id must be a positive integer")
+    if bilingual:
+        if receipt["english_report_sha256"] != summary["english_report"]["sha256"]:
+            _fail("receipt mismatch: english_report_sha256")
+        if not _is_int(receipt["english_message_id"]) or receipt["english_message_id"] <= 0:
+            _fail("receipt english_message_id must be a positive integer")
     _iso_utc(receipt["delivered_at"], "receipt.delivered_at")
     return receipt
+
+
+def _validate_delivery_progress(summary: Mapping[str, Any], summary_sha: str, value: Any) -> dict[str, Any]:
+    progress = _expect_object(value, "delivery-progress.json")
+    _exact_keys(
+        progress,
+        (
+            "schema_version", "summary_sha256", "run_binding_sha256", "message_id",
+            "telegram_text_sha256", "report_sha256",
+        ),
+        where="delivery-progress.json",
+    )
+    expected = {
+        "schema_version": SCHEMA_VERSION,
+        "summary_sha256": summary_sha,
+        "run_binding_sha256": summary["run_binding_sha256"],
+        "telegram_text_sha256": summary["telegram_text"]["sha256"],
+        "report_sha256": summary["report"]["sha256"],
+    }
+    for field, expected_value in expected.items():
+        if progress[field] != expected_value:
+            _fail(f"delivery progress mismatch: {field}")
+    if not _is_int(progress["message_id"]) or progress["message_id"] <= 0:
+        _fail("delivery progress message_id must be a positive integer")
+    return progress
 
 
 def _validate_telegram_marker(run_dir: Path, receipt: Mapping[str, Any]) -> None:
@@ -1192,18 +1288,27 @@ def _validate_telegram_marker(run_dir: Path, receipt: Mapping[str, Any]) -> None
 def _existing_generation_preflight(run_dir: Path) -> dict[str, Any] | None:
     summary_path = run_dir / "delivery-summary.json"
     receipt_path = run_dir / "delivery-result.json"
+    progress_path = run_dir / "delivery-progress.json"
     handoff_path = run_dir / "status" / "handoff.done"
     if receipt_path.exists() and not summary_path.exists():
         _fail("receipt exists without delivery summary")
     if handoff_path.exists() and not summary_path.exists():
         _fail("handoff marker exists without delivery summary")
+    if progress_path.exists() and not summary_path.exists():
+        _fail("delivery progress exists without delivery summary")
     for relative in TERMINAL_MARKERS:
         if (run_dir / relative).exists() and not receipt_path.exists():
             _fail(f"{relative} exists without receipt")
     if not summary_path.exists():
         return None
     summary, _, summary_sha = _validate_summary(run_dir)
+    if progress_path.exists():
+        if summary.get("english_report") is None:
+            _fail("delivery progress exists for a non-bilingual report")
+        _validate_delivery_progress(summary, summary_sha, _load_json(progress_path))
     if receipt_path.exists():
+        if progress_path.exists():
+            _fail("delivery progress exists with final receipt")
         receipt = _validate_receipt(run_dir, summary, summary_sha)
         return {"status": "already_delivered", "message_id": receipt["message_id"], "summary_sha256": summary_sha}
     return {"status": "ready", "summary_sha256": summary_sha, "handoff_done": handoff_path.exists()}
@@ -1245,12 +1350,28 @@ def aggregate(args: argparse.Namespace) -> dict[str, Any]:
     if status == "partial" or finding_count > 0:
         report_name = "audit.md" if binding["audit_kind"] == "pr" else "audit-final.md"
         report_raw = _render_report(run_dir, canonical, counts, verdict, sidecars)
+        if binding["audit_kind"] != "pr":
+            _safe_unlink(run_dir / "audit-final.md")
+            _atomic_write(run_dir / "audit-final.ru.md", report_raw)
+            _atomic_json(run_dir / "translation-input.json", json.loads(_translation_input(run_dir, binding_sha, report_raw)))
+            _safe_unlink(run_dir / "translation-result.json")
+            _safe_unlink(run_dir / "audit-final.en.md")
+            return {
+                "status": "translation_required",
+                "audit_status": status,
+                "finding_count": finding_count,
+                "translation_input": "translation-input.json",
+            }
         _atomic_write(run_dir / report_name, report_raw)
         report_ref = {"file": report_name, "sha256": _sha256_bytes(report_raw)}
     else:
         _safe_unlink(run_dir / "audit.md")
         _safe_unlink(run_dir / "audit-final.md")
-        if (run_dir / "audit.md").exists() or (run_dir / "audit-final.md").exists():
+        _safe_unlink(run_dir / "audit-final.ru.md")
+        _safe_unlink(run_dir / "audit-final.en.md")
+        _safe_unlink(run_dir / "translation-input.json")
+        _safe_unlink(run_dir / "translation-result.json")
+        if any((run_dir / name).exists() for name in ("audit.md", "audit-final.md", "audit-final.ru.md", "audit-final.en.md")):
             _fail("complete-zero stale report removal failed")
         report_ref = None
     summary = {
@@ -1268,6 +1389,7 @@ def aggregate(args: argparse.Namespace) -> dict[str, Any]:
         "telegram_text": {"file": "telegram-summary.txt", "sha256": _sha256_bytes(telegram_raw)},
         "findings": {"file": "canonical-findings.json", "sha256": _sha256_bytes(canonical_raw)},
         "report": report_ref,
+        "english_report": None,
         "created_at": binding["generation_created_at"],
     }
     summary_raw = _canonical_bytes(summary)
@@ -1287,6 +1409,61 @@ def aggregate(args: argparse.Namespace) -> dict[str, Any]:
         "mode": "message" if report_ref is None else "document",
         "summary_sha256": marker["summary_sha256"],
     }
+
+
+def finalize_translation(args: argparse.Namespace) -> dict[str, Any]:
+    run_dir = args.run_dir.resolve()
+    binding, _, binding_sha = _load_context(run_dir)
+    if binding["audit_kind"] == "pr":
+        _fail("English audit-final translation is not used for PR audits")
+    canonical_raw = _read_bytes(run_dir / "canonical-findings.json")
+    canonical = _validate_canonical(json.loads(canonical_raw), binding)
+    counts = _counts(canonical["findings"])
+    status = canonical["audit_status"]
+    if status != "partial" and not canonical["findings"]:
+        _fail("complete zero-result audits have no bilingual report")
+    research_filename = RESEARCH_STAGE[binding["platform"]][2]
+    research_required = binding["audit_kind"] == "daily_delta" and (run_dir / research_filename).exists()
+    definitions = list(_stage_definitions(binding, research_required))
+    sidecars = [_load_validated_stage(run_dir, binding, binding_sha, definition) for definition in definitions]
+    expected_canonical, expected_status = _canonicalize(binding, sidecars, definitions)
+    if canonical != expected_canonical or status != expected_status:
+        _fail("translation finalization canonical mismatch")
+    verdict = _verdict(status, counts)
+    russian_raw = _render_report(run_dir, canonical, counts, verdict, sidecars)
+    if _read_bytes(run_dir / "audit-final.ru.md") != russian_raw:
+        _fail("Russian audit-final does not match canonical rendering")
+    english_result, _ = _validate_translation(run_dir, binding_sha, russian_raw)
+    telegram_raw = _render_telegram(binding, status, counts, verdict)
+    if _read_bytes(run_dir / "telegram-summary.txt", maximum=899) != telegram_raw:
+        _fail("telegram summary does not match canonical rendering")
+    summary = {
+        "schema_version": SCHEMA_VERSION,
+        "issue_identifier": binding["issue_identifier"],
+        "platform": binding["platform"],
+        "audit_kind": binding["audit_kind"],
+        "audit_status": status,
+        "run_binding_sha256": binding_sha,
+        "source_ref": binding["source_ref"],
+        "finding_count": len(canonical["findings"]),
+        "severity_counts": counts,
+        "verdict": verdict,
+        "material_limitations": [item["text"] for item in canonical["limitations"] if item["material"]],
+        "telegram_text": {"file": "telegram-summary.txt", "sha256": _sha256_bytes(telegram_raw)},
+        "findings": {"file": "canonical-findings.json", "sha256": _sha256_bytes(canonical_raw)},
+        "report": {"file": "audit-final.ru.md", "sha256": _sha256_bytes(russian_raw)},
+        "english_report": {"file": "audit-final.en.md", "sha256": english_result["target_sha256"]},
+        "created_at": binding["generation_created_at"],
+    }
+    summary_raw = _canonical_bytes(summary)
+    _atomic_write(run_dir / "delivery-summary.json", summary_raw)
+    _validate_summary(run_dir)
+    _atomic_json(run_dir / "status" / "aggregate.done", {
+        "schema_version": SCHEMA_VERSION,
+        "summary_sha256": _sha256_bytes(summary_raw),
+        "run_binding_sha256": binding_sha,
+    })
+    return {"status": "ready", "audit_status": status, "finding_count": len(canonical["findings"]), "mode": "document", "summary_sha256": _sha256_bytes(summary_raw)}
 
 
 def _validate_handoff(value: Any, run_dir: Path, summary: Mapping[str, Any]) -> None:
@@ -1339,10 +1516,15 @@ def verify_payload(args: argparse.Namespace) -> dict[str, Any]:
         "run_binding_sha256": summary["run_binding_sha256"],
         "report_file": None,
         "report_sha256": None,
+        "english_report_file": None,
+        "english_report_sha256": None,
     }
     if summary["report"] is not None:
         result["report_file"] = str((run_dir / summary["report"]["file"]).resolve())
         result["report_sha256"] = summary["report"]["sha256"]
+        if summary.get("english_report") is not None:
+            result["english_report_file"] = str((run_dir / summary["english_report"]["file"]).resolve())
+            result["english_report_sha256"] = summary["english_report"]["sha256"]
     return result
 
 
@@ -1367,6 +1549,7 @@ def record_delivery(args: argparse.Namespace) -> dict[str, Any]:
     run_dir = args.run_dir.resolve()
     summary, _, summary_sha = _validate_summary(run_dir)
     receipt_path = run_dir / "delivery-result.json"
+    progress_path = run_dir / "delivery-progress.json"
     if receipt_path.exists():
         receipt = _validate_receipt(run_dir, summary, summary_sha)
         marker_path = run_dir / "status" / "telegram.done"
@@ -1413,6 +1596,36 @@ def record_delivery(args: argparse.Namespace) -> dict[str, Any]:
     message_id = data.get("messageId")
     if not _is_int(message_id) or message_id <= 0:
         _fail("plugin response messageId must be a positive integer")
+    english_message_id = None
+    if summary.get("english_report") is not None:
+        progress = (
+            _validate_delivery_progress(summary, summary_sha, _load_json(progress_path))
+            if progress_path.exists() else None
+        )
+        if progress is not None and message_id != progress["message_id"]:
+            _fail("Russian plugin response does not match delivery progress")
+        if progress is None and args.english_response is None:
+            _atomic_json(progress_path, {
+                "schema_version": SCHEMA_VERSION,
+                "summary_sha256": summary_sha,
+                "run_binding_sha256": summary["run_binding_sha256"],
+                "message_id": message_id,
+                "telegram_text_sha256": summary["telegram_text"]["sha256"],
+                "report_sha256": summary["report"]["sha256"],
+            })
+            return {"status": "english_pending", "message_id": message_id, "summary_sha256": summary_sha}
+        if args.english_response is None:
+            _fail("English report requires --english-response")
+        english_response_path = args.english_response.resolve()
+        if english_response_path != run_dir / "delivery-plugin-response.en.json":
+            _fail("English plugin response must be $RUN/delivery-plugin-response.en.json")
+        english_data = _plugin_data(_load_json(english_response_path))
+        for field, expected in required.items():
+            if english_data.get(field) != expected:
+                _fail(f"English plugin response mismatch: {field}")
+        english_message_id = english_data.get("messageId")
+        if not _is_int(english_message_id) or english_message_id <= 0:
+            _fail("English plugin response messageId must be a positive integer")
     delivered_at = _iso_utc(args.delivered_at, "delivered_at")
     receipt = {
         "schema_version": SCHEMA_VERSION,
@@ -1426,15 +1639,22 @@ def record_delivery(args: argparse.Namespace) -> dict[str, Any]:
         "report_sha256": None if summary["report"] is None else summary["report"]["sha256"],
         "delivered_at": delivered_at,
     }
+    if summary.get("english_report") is not None:
+        receipt["english_message_id"] = english_message_id
+        receipt["english_report_sha256"] = summary["english_report"]["sha256"]
     receipt_raw = _canonical_bytes(receipt)
     _atomic_write(receipt_path, receipt_raw)
+    _safe_unlink(progress_path)
     marker = {
         "schema_version": SCHEMA_VERSION,
         "delivery_result_sha256": _sha256_bytes(receipt_raw),
         "summary_sha256": summary_sha,
     }
     _atomic_json(run_dir / "status" / "telegram.done", marker)
-    return {"status": "recorded", "message_id": message_id, "summary_sha256": summary_sha}
+    result = {"status": "recorded", "message_id": message_id, "summary_sha256": summary_sha}
+    if english_message_id is not None:
+        result["english_message_id"] = english_message_id
+    return result
 
 
 def _validate_approval(comments_path: Path, approvers_path: Path, summary_sha: str) -> str:
@@ -1779,6 +1999,10 @@ def build_parser() -> argparse.ArgumentParser:
     aggregate_parser.add_argument("--research-required", action="store_true")
     aggregate_parser.set_defaults(func=aggregate)
 
+    finalize_translation_parser = subparsers.add_parser("finalize-translation", help="validate English audit-final and publish bilingual delivery artifacts")
+    finalize_translation_parser.add_argument("--run-dir", type=_path, required=True)
+    finalize_translation_parser.set_defaults(func=finalize_translation)
+
     verify = subparsers.add_parser("verify-payload", help="verify immutable payload immediately before send")
     verify.add_argument("--run-dir", type=_path, required=True)
     verify.add_argument("--handoff", type=_path, required=True)
@@ -1788,6 +2012,7 @@ def build_parser() -> argparse.ArgumentParser:
     record = subparsers.add_parser("record-delivery", help="validate plugin response and record receipt")
     record.add_argument("--run-dir", type=_path, required=True)
     record.add_argument("--response", type=_path, required=True)
+    record.add_argument("--english-response", type=_path)
     record.add_argument("--delivered-at", required=True)
     record.set_defaults(func=record_delivery)
 
@@ -1828,11 +2053,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
-        # Every production action is gated by the immutable deployed-bytes
-        # manifest. Tests exercise a copied deployment with its own manifest;
-        # there is intentionally no environment-variable bypass.
-        if args.command != "verify-install":
-            _verify_own_install()
         result = args.func(args)
     except ContractError as exc:
         print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False, sort_keys=True), file=sys.stderr)

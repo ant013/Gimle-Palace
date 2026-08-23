@@ -505,10 +505,17 @@ Write tools as appropriate per profile (see AGENTS.md for capability boundaries)
 - Platform scope: `all`.
 - Workspace cwd: `runs/AUCEO/workspace` (resolved at deploy time relative to operator's project root in host-local paths.yaml).
 - Primary codebase-memory project: `Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios`.
-- iOS repo: `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios` (operator's host-local path; example `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios`).
-- Android repo: `/opt/uaa-example/uaudit/repos/android/unstoppable-wallet-android`.
+- iOS repo: `/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios` (operator's host-local path; example `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios`).
+- Android repo: `/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android`.
 - Required base MCP: `codebase-memory`, `context7`, `serena`, `github`, `sequential-thinking`.
 - UAudit project MCP addition: `neo4j`.
+- **Execution host is iMac only.** Paperclip UAudit agents already execute on
+  the iMac, so they run UAudit shell commands, repositories, cursors, locks,
+  helpers and Telegram delivery directly on that host. They must not SSH from
+  iMac back to `imac-ssh.ant013.work`: that external route is unavailable from
+  the iMac runtime. A command initiated from another machine must connect with
+  `ssh -p 2222 "${IMAC_HOST:-imac-ssh.ant013.work}"`; port `22` is forbidden.
+  The caller's local filesystem is not a UAudit runtime.
 
 Before ending a Paperclip issue, post Status/Evidence/Blockers/Next owner and
 use the exact UAudit agent name from the roster. `runtime/harness operator` is

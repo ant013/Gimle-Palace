@@ -14,7 +14,7 @@
 
 ```bash
 # 0.1 SSH to iMac
-ssh -L 8080:localhost:8080 imac-ssh.ant013.work
+ssh -p 2222 -L 8080:localhost:8080 imac-ssh.ant013.work
 
 # 0.2 Sync repo
 cd /Users/Shared/Ios/Gimle-Palace

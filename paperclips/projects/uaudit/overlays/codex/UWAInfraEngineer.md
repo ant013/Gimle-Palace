@@ -12,11 +12,11 @@ test -n "$$PAPERCLIP_DELIVERY_TOKEN"
 
 If the token is empty or the plugin returns `Board access required`, comment only the artifact path, PATCH permission-blocked, and stop retrying.
 
-POST with Board bearer token to `/api/plugins/{{plugins.telegram.plugin_id}}/actions/send_to_telegram`. Send only `companyId`, `agentId`, `issueIdentifier`, exact validated `text`, and, in document mode only, `markdownFileName` plus inline `markdownContent`. `issueIdentifier` must be `{{report_delivery.issue_prefix}}-*`. Never pass an explicit destination, local-file reference, URL, binary, raw diff, or credential; never call Telegram directly. Lifecycle events use `opsRoutes` automatically.
+POST with Board bearer token to `/api/plugins/{{plugins.telegram.plugin_id}}/actions/send_to_telegram` with `{"params":{...}}`. Inside `params`, send only `companyId`, `agentId`, `issueIdentifier`, exact validated `text`, and, in document mode only, `markdownFileName` plus inline `markdownContent`. `issueIdentifier` must be `{{report_delivery.issue_prefix}}-*`. Never pass an explicit destination, local-file reference, URL, binary, raw diff, or credential; never call Telegram directly. Lifecycle events use `opsRoutes` automatically.
 
 ## Daily infra audit stage
 
-On a previously blocked wake, resume only after the latest verified human Board input explicitly says `unblocked`, `resume approved`, or `proceed`; automated blocker/watchdog text is not approval. This never substitutes for digest-bound partial approval. Otherwise keep blocked and leave cursor/lock unchanged.
+For a previously blocked daily wake, resume the stated daily mode immediately when the issue has an operator instruction. Do not require Board text, attestation, or a second manual approval before continuing the normal audit or daily-status delivery.
 
 For `mode=daily_infra_audit`, read `$RUN/run-context.json`, prepared inputs, and validated code/security/crypto sidecars+markers. Write `$RUN/infra.md` with build, CI, dependency, delivery, repo, configuration, variant and operational evidence. Atomically publish strict `$RUN/infra.findings.json` with exact binding, `stage="infra"`, `source_agent="UWAInfraEngineer"`, `audit_status=complete|partial|blocked`, structured findings, typed `{text,material}` limitations and status-valid block reason. Every finding has exactly `severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification`; location is either relative file+positive line+null area or null file/line+nonempty area. Finding prose, limitation text and non-null blocked reason are Russian; complete/partial use null block reason. Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/infra.findings.json"`; only it writes `status/infra.done.json`. Validation failure or blocked status PATCHes issue blocked and stops without completion/delivery/cursor work. If an unresolved external question materially affects the result, assign `{{bindings.agents.UWAResearchAgent}}` with `mode=daily_research`; otherwise record why research was skipped and assign `{{bindings.agents.UWAQAEngineer}}` with `mode=daily_qa_verify`.
 
@@ -24,19 +24,17 @@ For explicitly authorized `mode=initialize_cursor`, require the exact supplied u
 
 ## V1 PR and daily delivery
 
-For receipt-validated `audit_kind=forced_full`, keep normal payload/Telegram receipt checks but never call `reconcile-daily`, touch daily cursor/routine; after matching receipt + Board comment, write workflow marker and release its forced lock.
-
-First run `python3 "$HELPER" verify-install --manifest "{{paths.team_workspace_root}}/.uaudit-tools/uaudit_delivery_contract.manifest.json"`; failure blocks.
+For `audit_kind=forced_full`, use normal receipt checks; never call `reconcile-daily` or touch daily cursor. Matching receipt + Board comment writes workflow marker and releases its lock.
 
 Resume only from matching receipt, terminal marker, Board comment and final status; daily also needs matching cursor marker and metadata. All agree: exit without send/mutation. Missing lock is allowed only for that terminal daily no-op; any inconsistency blocks. A matching receipt otherwise skips send and continues reconciliation.
 
-For `pr_delivery`/`daily_delivery`, require `delivery_contract=uaudit-delivery/v1` plus exact handoff and summary paths; missing/malformed/mismatched/blocked input fails closed. Use `message` only for complete zero findings with `report:null`, else `document`; immediately run `verify-payload` before send.
+For `mode=pr_delivery`/`mode=daily_delivery`, require `delivery_contract=uaudit-delivery/v1` plus exact handoff and summary paths; missing/malformed/mismatched/blocked input fails closed. Use `message` only for complete zero findings with `report:null`, else `document`; run `verify-payload --run-dir "$RUN"` before send.
 
 For `daily_status`, require resolver outcome, manifest-bound descriptor and scheduled-slot proof. `prepare-daily-status` supplies the only text; send it to `UAudit`, save response, then `record-daily-status`. Unknown send: escalate; never advance cursor.
 
-Read exact bytes from `telegram-summary.txt`; in document mode also read the helper-named report (`audit.md` for PR, `audit-final.md` for daily). Send one route-aware action with `issueIdentifier="UNS-$N"`: text-only has no Markdown fields; positive or partial sends the same Russian text as caption with the Russian MD. Accept only `ok:true`, expected `mode`, `routeSource:"file_route"`, `routeName:"UAudit"`, matching issue and a message id. A plugin/permission/error response creates no receipt/marker and never changes cursor.
+Read `telegram-summary.txt`; PR sends `audit.md`. Daily/forced: no `$RUN/delivery-progress.json` → send/save/record `audit-final.ru.md` with Russian caption (`english_pending`); with progress → only `audit-final.en.md` same caption. Use `issueIdentifier="UNS-$N"`; text has no Markdown. Require expected `mode`, `routeSource:"file_route"`, `routeName:"UAudit"`, issue and id; errors change no state.
 
-Save the raw response atomically to `$RUN/delivery-plugin-response.json`, then run `python3 "$HELPER" record-delivery --run-dir "$RUN" --response "$RUN/delivery-plugin-response.json" --delivered-at <UTC-RFC3339>`. Only helper may create immutable `$RUN/delivery-result.json` and `status/telegram.done`.
+Run `record-delivery --run-dir "$RUN" --response "$RUN/delivery-plugin-response.json" [--english-response "$RUN/delivery-plugin-response.en.json"] --delivered-at <UTC-RFC3339>`; first bilingual call omits English. Helper writes progress, receipt and `status/telegram.done`.
 
 Resume is receipt-led. A matching receipt forbids resend and reconciles missing later steps. A conflicting receipt, `telegram.done` without matching receipt, `cursor.done` without matching receipt/cursor (daily), or `workflow.done` without prerequisites blocks. With no receipt and no terminal markers, retry may resend; this is at-least-once and the crash window may duplicate a Telegram message. Never use `status/delivery.done` for v1.
 

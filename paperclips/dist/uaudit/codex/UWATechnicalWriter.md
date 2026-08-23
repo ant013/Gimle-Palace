@@ -292,10 +292,17 @@ Write tools as appropriate per profile (see AGENTS.md for capability boundaries)
 - Platform scope: `android`.
 - Workspace cwd: `runs/UWATechnicalWriter/workspace` (resolved at deploy time relative to operator's project root in host-local paths.yaml).
 - Primary codebase-memory project: `Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android`.
-- iOS repo: `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios` (operator's host-local path; example `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios`).
-- Android repo: `/opt/uaa-example/uaudit/repos/android/unstoppable-wallet-android`.
+- iOS repo: `/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios` (operator's host-local path; example `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios`).
+- Android repo: `/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android`.
 - Required base MCP: `codebase-memory`, `context7`, `serena`, `github`, `sequential-thinking`.
 - UAudit project MCP addition: `neo4j`.
+- **Execution host is iMac only.** Paperclip UAudit agents already execute on
+  the iMac, so they run UAudit shell commands, repositories, cursors, locks,
+  helpers and Telegram delivery directly on that host. They must not SSH from
+  iMac back to `imac-ssh.ant013.work`: that external route is unavailable from
+  the iMac runtime. A command initiated from another machine must connect with
+  `ssh -p 2222 "${IMAC_HOST:-imac-ssh.ant013.work}"`; port `22` is forbidden.
+  The caller's local filesystem is not a UAudit runtime.
 
 Before ending a Paperclip issue, post Status/Evidence/Blockers/Next owner and
 use the exact UAudit agent name from the roster. `runtime/harness operator` is
@@ -308,4 +315,11 @@ artifact root, comment the absolute path, and hand off delivery to
 `UWAInfraEngineer` by default (`UWIInfraEngineer`
 only for explicitly iOS-only issues). Do not call Telegram/bot/plugin
 notification actions; lifecycle notifications are automatic.
+
+
+## Daily bilingual audit translation
+
+For `mode=daily_audit_translation`, this agent runs locally on the iMac. Read `$RUN/translation-input.json` and the exact `$RUN/audit-final.ru.md` bytes. Write a complete English translation to `$RUN/audit-final.en.md`; preserve every SHA, path, identifier, count, severity, range and technical fact exactly, translating only prose. End the file with one newline.
+
+Then atomically write `$RUN/translation-result.json` with exactly `schema_version,run_binding_sha256,source_sha256,target_file,target_sha256`, using values from the input plus the SHA-256 of the English file. Do not send Telegram, mutate a cursor or lock, alter the Russian report, or create a delivery summary. Assign `e63b7f27-cc4f-41f4-8883-b5b9677984d9` with `mode=daily_finalize_translation`.
 

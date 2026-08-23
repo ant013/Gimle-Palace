@@ -306,10 +306,17 @@ Write tools as appropriate per profile (see AGENTS.md for capability boundaries)
 - Platform scope: `android`.
 - Workspace cwd: `runs/UWAResearchAgent/workspace` (resolved at deploy time relative to operator's project root in host-local paths.yaml).
 - Primary codebase-memory project: `Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android`.
-- iOS repo: `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios` (operator's host-local path; example `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios`).
-- Android repo: `/opt/uaa-example/uaudit/repos/android/unstoppable-wallet-android`.
+- iOS repo: `/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios` (operator's host-local path; example `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios`).
+- Android repo: `/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android`.
 - Required base MCP: `codebase-memory`, `context7`, `serena`, `github`, `sequential-thinking`.
 - UAudit project MCP addition: `neo4j`.
+- **Execution host is iMac only.** Paperclip UAudit agents already execute on
+  the iMac, so they run UAudit shell commands, repositories, cursors, locks,
+  helpers and Telegram delivery directly on that host. They must not SSH from
+  iMac back to `imac-ssh.ant013.work`: that external route is unavailable from
+  the iMac runtime. A command initiated from another machine must connect with
+  `ssh -p 2222 "${IMAC_HOST:-imac-ssh.ant013.work}"`; port `22` is forbidden.
+  The caller's local filesystem is not a UAudit runtime.
 
 Before ending a Paperclip issue, post Status/Evidence/Blockers/Next owner and
 use the exact UAudit agent name from the roster. `runtime/harness operator` is
@@ -326,9 +333,9 @@ notification actions; lifecycle notifications are automatic.
 
 ## Daily Version-Branch Research Stage (Android)
 
-For `mode=daily_research`, set `HELPER=/opt/uaa-example/uaudit/runs/.uaudit-tools/uaudit_delivery_contract.py`; read `$RUN/run-context.json`, validated prior sidecars/markers and only references needed for open library, protocol, or platform questions. Do not redo prior audits.
+For `mode=daily_research`, set `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py`; read `$RUN/run-context.json`, validated prior sidecars/markers and only references needed for open library, protocol, or platform questions. Do not redo prior audits.
 
 Write cited human context to `$RUN/research-context.md`. Atomically publish `$RUN/research-context.findings.json` as the strict v1 envelope with exact copied `run_binding`, `stage="research_context"`, `source_agent="UWAResearchAgent"`, `audit_status=complete|partial|blocked`, structured findings, typed `{text,material}` limitations, and status-valid `block_reason`. Every finding has exactly `severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification`; location is either relative file+positive line+null area or null file/line+nonempty area. Finding prose, limitation text and non-null blocked reason are Russian; complete/partial use null block reason. Do not count/deduplicate or add fields.
 
-Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/research-context.findings.json"`; only it creates digest-bound `status/research_context.done.json`. Validation failure or `blocked` PATCHes issue blocked and stops without completion. Otherwise comment ready, PATCH `00000000-0000-0000-0000-00000000001a` with `mode=daily_qa_verify`, and stop. Never send Telegram or update state/cursors.
+Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/research-context.findings.json"`; only it creates digest-bound `status/research_context.done.json`. Validation failure or `blocked` PATCHes issue blocked and stops without completion. Otherwise comment ready, PATCH `8089992b-8a51-4386-b180-9368b67bbc51` with `mode=daily_qa_verify`, and stop. Never send Telegram or update state/cursors.
 

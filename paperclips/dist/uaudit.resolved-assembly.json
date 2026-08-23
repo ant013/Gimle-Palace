@@ -50,17 +50,17 @@
   },
   "parameters": {
     "paths": {
-      "codexTeamRoot": "/opt/uaa-example/uaudit/runs",
-      "operatorMemoryDir": "~/.claude/projects/-opt-uaa-example-uaudit/memory",
+      "codexTeamRoot": "/Users/Shared/UnstoppableAudit/runs",
+      "operatorMemoryDir": "/Users/ant013/.codex",
       "overlayRoot": "paperclips/projects/uaudit/overlays",
-      "primaryMcpServiceDir": "/opt/uaa-example/uaudit",
-      "primaryRepoRoot": "/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios",
-      "productionCheckout": "/opt/uaa-example/uaudit",
-      "projectRoot": "/opt/uaa-example/uaudit",
+      "primaryMcpServiceDir": "/Users/ant013/Android/Gimle-Palace-serving/services/palace-mcp",
+      "primaryRepoRoot": "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios",
+      "productionCheckout": "/Users/ant013/Android/Gimle-Palace-serving",
+      "projectRoot": "/Users/Shared/UnstoppableAudit",
       "projectRulesFile": "AGENTS.md"
     },
     "project": {
-      "companyId": "00000000-0000-0000-0000-000000000001",
+      "companyId": "8f55e80b-0264-4ab6-9d56-8b2652f18005",
       "displayName": "UnstoppableAudit",
       "integrationBranch": "develop",
       "issuePrefix": "UNS",
@@ -82,272 +82,272 @@
         {
           "agentId": "c430529b-f064-4c5b-8b5b-302c594890b7",
           "agentName": "AUCEO",
-          "bytes": 22514,
+          "bytes": 23054,
           "family": "cto",
-          "lines": 524,
+          "lines": 531,
           "output": "paperclips/dist/uaudit/codex/AUCEO.md",
           "platform": "all",
           "profiles": [
             "cto"
           ],
           "roleId": "codex:cx-cto",
-          "sha256": "48835c416df1f9fdc1b1bfcf783ae136f0ad087125436c0ce1fa67a30b5bc20b",
+          "sha256": "245d1f7a2819d6e4ce6159bf3cd86794e68b7c1b816a0477888db896ed9eea45",
           "source": "paperclips/roles-codex/cx-cto.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "9f0f6fc5-e9ef-4664-ac54-15ffc64069bc",
           "agentName": "UWICTO",
-          "bytes": 5767,
+          "bytes": 5974,
           "family": "dispatcher",
-          "lines": 74,
+          "lines": 70,
           "output": "paperclips/dist/uaudit/codex/UWICTO.md",
           "platform": "ios",
           "profiles": [
             "custom"
           ],
           "roleId": "codex:uwi-platform-dispatcher",
-          "sha256": "e4f352a408715863bab7101723ec028187fda0f5746d1f494c481fd7e02a25e0",
+          "sha256": "16e127a7fafdc5af6564b569194024e51c2163e2a38018620d695442c8b62a95",
           "source": "paperclips/projects/uaudit/roles-codex/uwi-platform-dispatcher.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "e63b7f27-cc4f-41f4-8883-b5b9677984d9",
           "agentName": "UWACTO",
-          "bytes": 5816,
+          "bytes": 5994,
           "family": "dispatcher",
-          "lines": 74,
+          "lines": 70,
           "output": "paperclips/dist/uaudit/codex/UWACTO.md",
           "platform": "android",
           "profiles": [
             "custom"
           ],
           "roleId": "codex:uwa-platform-dispatcher",
-          "sha256": "4bee4b08457d57d1fefe728f793d52c9136cda06f51cc478ed0dde84c2da9b93",
+          "sha256": "aa297f32cc8a8f32a5fcd65f884e69b744f5d3f815f6c30d6d9c634dacfd8536",
           "source": "paperclips/projects/uaudit/roles-codex/uwa-platform-dispatcher.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "a6e2aec6-08d9-43ab-8496-d24ce99ac0de",
           "agentName": "UWISwiftAuditor",
-          "bytes": 24448,
+          "bytes": 25023,
           "family": "reviewer",
-          "lines": 463,
+          "lines": 470,
           "output": "paperclips/dist/uaudit/codex/UWISwiftAuditor.md",
           "platform": "ios",
           "profiles": [
             "reviewer"
           ],
           "roleId": "codex:cx-code-reviewer",
-          "sha256": "2da0e65210c18408710ffa7f3cce8cfc3b43613088c646c9195bd566274e6042",
+          "sha256": "32139d8b0f10bd0c7910799531006f17c152b305d4de98a61a1f00511aac01ae",
           "source": "paperclips/roles-codex/cx-code-reviewer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "18f0ee3e-0fd9-40e7-a3b4-99a4ad3ab400",
           "agentName": "UWAKotlinAuditor",
-          "bytes": 24632,
+          "bytes": 25207,
           "family": "reviewer",
-          "lines": 463,
+          "lines": 470,
           "output": "paperclips/dist/uaudit/codex/UWAKotlinAuditor.md",
           "platform": "android",
           "profiles": [
             "reviewer"
           ],
           "roleId": "codex:cx-code-reviewer",
-          "sha256": "6dc44fb8989ea1e8bfc0757119402fae642532d3b759c482aaeadc29cf32c15d",
+          "sha256": "855e84be5ac8b03d3e8c554c169a507604d6f42fdf09deb1ba0e7962eecebda0",
           "source": "paperclips/roles-codex/cx-code-reviewer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "f9f115e8-2ffb-4efb-8fb1-d8b443a3b829",
           "agentName": "UWICryptoAuditor",
-          "bytes": 18903,
+          "bytes": 19469,
           "family": "implementer",
-          "lines": 419,
+          "lines": 426,
           "output": "paperclips/dist/uaudit/codex/UWICryptoAuditor.md",
           "platform": "ios",
           "profiles": [
             "implementer"
           ],
           "roleId": "codex:cx-blockchain-engineer",
-          "sha256": "e97e8f08039e2fcf975ef28f90d8d0430953dcb49ff471bfbe5926cd03bd31a2",
+          "sha256": "c7e0839765c158e8253683cad128dd1d2c4f6f2479ffdafdeb2d6c589abb9b03",
           "source": "paperclips/roles-codex/cx-blockchain-engineer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "83e44735-7f4f-4673-b5a7-c3667747d21b",
           "agentName": "UWACryptoAuditor",
-          "bytes": 18923,
+          "bytes": 19489,
           "family": "implementer",
-          "lines": 419,
+          "lines": 426,
           "output": "paperclips/dist/uaudit/codex/UWACryptoAuditor.md",
           "platform": "android",
           "profiles": [
             "implementer"
           ],
           "roleId": "codex:cx-blockchain-engineer",
-          "sha256": "040a36e618f495821fbaad32310763b300a28dc0b30faf35df5f41a5391bc910",
+          "sha256": "322803a1c82c4ef614999c3511df5c55c1a4a5cf13c4a1a18ccd61eb1bdd916a",
           "source": "paperclips/roles-codex/cx-blockchain-engineer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "5dd3e733-82c7-472c-8474-8605b916ead2",
           "agentName": "UWISecurityAuditor",
-          "bytes": 18807,
+          "bytes": 19354,
           "family": "reviewer",
-          "lines": 416,
+          "lines": 423,
           "output": "paperclips/dist/uaudit/codex/UWISecurityAuditor.md",
           "platform": "ios",
           "profiles": [
             "reviewer"
           ],
           "roleId": "codex:cx-security-auditor",
-          "sha256": "35bc5314315ead6f399b8a21ea0763e14c8c63b8de63aedee672de628379bada",
+          "sha256": "26ec3099295393b291b4019e0c8727cb21acdfbb573cecb04d288141edbd8a51",
           "source": "paperclips/roles-codex/cx-security-auditor.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "fc30ec70-13a4-440f-b13e-e03e17cb63f4",
           "agentName": "UWASecurityAuditor",
-          "bytes": 18827,
+          "bytes": 19374,
           "family": "reviewer",
-          "lines": 416,
+          "lines": 423,
           "output": "paperclips/dist/uaudit/codex/UWASecurityAuditor.md",
           "platform": "android",
           "profiles": [
             "reviewer"
           ],
           "roleId": "codex:cx-security-auditor",
-          "sha256": "2af871dfece0d29990e0381f20cc5a75ccc97429619b0f49db524027a764bf76",
+          "sha256": "6649b7ebf8bfa904e037b1a2f755609728a6d36e37271b2e3df2ce5694b394d2",
           "source": "paperclips/roles-codex/cx-security-auditor.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "d928e408-ab63-4699-8ec2-c6ac7558c268",
           "agentName": "UWIQAEngineer",
-          "bytes": 21607,
+          "bytes": 22212,
           "family": "qa",
-          "lines": 478,
+          "lines": 486,
           "output": "paperclips/dist/uaudit/codex/UWIQAEngineer.md",
           "platform": "ios",
           "profiles": [
             "qa"
           ],
           "roleId": "codex:cx-qa-engineer",
-          "sha256": "632e84526d3863951964075b5c210c11f493eb952ed5d2fa581847467351e953",
+          "sha256": "60825ab85732927883c6dc5b4fee262008dd261962fe6614a8980e92b9403b21",
           "source": "paperclips/roles-codex/cx-qa-engineer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "8089992b-8a51-4386-b180-9368b67bbc51",
           "agentName": "UWAQAEngineer",
-          "bytes": 21623,
+          "bytes": 22228,
           "family": "qa",
-          "lines": 478,
+          "lines": 486,
           "output": "paperclips/dist/uaudit/codex/UWAQAEngineer.md",
           "platform": "android",
           "profiles": [
             "qa"
           ],
           "roleId": "codex:cx-qa-engineer",
-          "sha256": "f3e5106dbb252c30640d8e54ccc9765f56d63edff7b010d62206e43026077e5f",
+          "sha256": "4127eec2843007385e06b165664a4e672042d170e5c4beeed4a5236f92922343",
           "source": "paperclips/roles-codex/cx-qa-engineer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "339e9d3f-48c0-4348-a8da-5337e6f29491",
           "agentName": "UWIInfraEngineer",
-          "bytes": 25941,
+          "bytes": 25949,
           "family": "implementer",
-          "lines": 462,
+          "lines": 469,
           "output": "paperclips/dist/uaudit/codex/UWIInfraEngineer.md",
           "platform": "ios",
           "profiles": [
             "implementer"
           ],
           "roleId": "codex:cx-infra-engineer",
-          "sha256": "d6e6a7bed146cb911934469b62d48d6c5e5aacad0aa61fbe1bfabfcb4a3a9825",
+          "sha256": "5628bcdc28060ec4f058ae3ea4b69ec3a9701205b75368bccc15edb1104677eb",
           "source": "paperclips/roles-codex/cx-infra-engineer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "5f0709f8-0b05-43e7-8711-6df618b95f69",
           "agentName": "UWAInfraEngineer",
-          "bytes": 25981,
+          "bytes": 25990,
           "family": "implementer",
-          "lines": 461,
+          "lines": 469,
           "output": "paperclips/dist/uaudit/codex/UWAInfraEngineer.md",
           "platform": "android",
           "profiles": [
             "implementer"
           ],
           "roleId": "codex:cx-infra-engineer",
-          "sha256": "aae15c59ddb11ff55664717dedf8095327892d9f1da5ded6e8450d1c85ccb7d0",
+          "sha256": "cad10374f44d47f0aba516457b1caa53a725639c95ebce8deb99d57090495463",
           "source": "paperclips/roles-codex/cx-infra-engineer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "0be9b9c5-de38-45ce-8b33-25bb39434d50",
           "agentName": "UWIResearchAgent",
-          "bytes": 15022,
+          "bytes": 15569,
           "family": "research",
-          "lines": 334,
+          "lines": 341,
           "output": "paperclips/dist/uaudit/codex/UWIResearchAgent.md",
           "platform": "ios",
           "profiles": [
             "research"
           ],
           "roleId": "codex:cx-research-agent",
-          "sha256": "ae9292d0b2fb3d59466a1871044ffc78b75c5818e6a49f9c6c23a78885602976",
+          "sha256": "e4c359c8f138d3a603f953cbd26d2b1c0f4393cc707dce087020f85ca5db9d9e",
           "source": "paperclips/roles-codex/cx-research-agent.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "3891e41b-028e-4348-b4d0-10d57251f600",
           "agentName": "UWAResearchAgent",
-          "bytes": 15038,
+          "bytes": 15585,
           "family": "research",
-          "lines": 334,
+          "lines": 341,
           "output": "paperclips/dist/uaudit/codex/UWAResearchAgent.md",
           "platform": "android",
           "profiles": [
             "research"
           ],
           "roleId": "codex:cx-research-agent",
-          "sha256": "9909b6e427e5ce60fedd2d67a622f6e806f4cc1496bf025d1ef844ced90c49b7",
+          "sha256": "cd195dd58460fe243f2e96bbea933ad77a64246c5022c4f741bceebfb3f1606c",
           "source": "paperclips/roles-codex/cx-research-agent.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "a881b5bd-f1ef-4023-bdd7-5d9b567642d0",
           "agentName": "UWITechnicalWriter",
-          "bytes": 12896,
+          "bytes": 14239,
           "family": "writer",
-          "lines": 311,
+          "lines": 325,
           "output": "paperclips/dist/uaudit/codex/UWITechnicalWriter.md",
           "platform": "ios",
           "profiles": [
             "writer"
           ],
           "roleId": "codex:cx-technical-writer",
-          "sha256": "48790dd89f9403c394795e12ce77ee88edc790c15d38874d69b5ec83f4fa79f5",
+          "sha256": "c4af9f8a2e080457d805496ed2fd1ac5a70c088de5eb3d5aa906d7885505dcd4",
           "source": "paperclips/roles-codex/cx-technical-writer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "ae159ee7-05e2-48af-abf9-5bbeef4017c4",
           "agentName": "UWATechnicalWriter",
-          "bytes": 12908,
+          "bytes": 14251,
           "family": "writer",
-          "lines": 311,
+          "lines": 325,
           "output": "paperclips/dist/uaudit/codex/UWATechnicalWriter.md",
           "platform": "android",
           "profiles": [
             "writer"
           ],
           "roleId": "codex:cx-technical-writer",
-          "sha256": "1b47c5b78f5d4fa03154d20d95cc55ebf56d94d1e6461968e149285fc978d3da",
+          "sha256": "b57b73a0973a8957c87a19644c331a3ba75d4f61666be1740a7703027da00bc8",
           "source": "paperclips/roles-codex/cx-technical-writer.md",
           "workspaceCwd": ""
         }

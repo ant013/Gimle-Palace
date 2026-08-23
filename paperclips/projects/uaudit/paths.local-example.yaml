@@ -2,7 +2,9 @@
 #
 # Committed sanitized example values let CI build uaudit without operator's
 # host-local files. Operator copies this to ~/.paperclip/projects/uaudit/paths.yaml
-# and replaces with their real local paths.
+# and replaces with the iMac paths reached through IMAC_HOST on SSH port 2222
+# (default imac-ssh.ant013.work:2222). UAudit must not be deployed or run on
+# the caller's local machine.
 #
 # Builder precedence: ~/.paperclip/projects/uaudit/paths.yaml (operator) →
 # paperclips/projects/uaudit/paths.local-example.yaml (this file, CI fallback).
@@ -15,3 +17,5 @@ team_workspace_root: /opt/uaa-example/uaudit/runs
 operator_memory_dir: ~/.claude/projects/-opt-uaa-example-uaudit/memory
 overlay_root: paperclips/projects/uaudit/overlays
 project_rules_file: AGENTS.md
+imac_ssh_host: imac-ssh.ant013.work
+imac_ssh_port: "2222"

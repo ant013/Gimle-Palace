@@ -223,7 +223,7 @@ Switching branches inside an agent worktree drags uncommitted changes across bra
 
 ### Operator vs production checkout
 
-The `production_checkout` path (e.g. `/opt/uaa-example/uaudit`) is the iMac deploy target. Stay on `develop` (typically `develop`) there — never check out feature branches in production_checkout. Discovered in UNS-48: feature checkout in production_checkout caused QA to test stale code.
+The `production_checkout` path (e.g. `/Users/ant013/Android/Gimle-Palace-serving`) is the iMac deploy target. Stay on `develop` (typically `develop`) there — never check out feature branches in production_checkout. Discovered in UNS-48: feature checkout in production_checkout caused QA to test stale code.
 
 
 ## Pre-work: codebase-memory first
@@ -391,10 +391,17 @@ Write tools as appropriate per profile (see AGENTS.md for capability boundaries)
 - Platform scope: `ios`.
 - Workspace cwd: `runs/UWICryptoAuditor/workspace` (resolved at deploy time relative to operator's project root in host-local paths.yaml).
 - Primary codebase-memory project: `Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios`.
-- iOS repo: `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios` (operator's host-local path; example `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios`).
-- Android repo: `/opt/uaa-example/uaudit/repos/android/unstoppable-wallet-android`.
+- iOS repo: `/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios` (operator's host-local path; example `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios`).
+- Android repo: `/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android`.
 - Required base MCP: `codebase-memory`, `context7`, `serena`, `github`, `sequential-thinking`.
 - UAudit project MCP addition: `neo4j`.
+- **Execution host is iMac only.** Paperclip UAudit agents already execute on
+  the iMac, so they run UAudit shell commands, repositories, cursors, locks,
+  helpers and Telegram delivery directly on that host. They must not SSH from
+  iMac back to `imac-ssh.ant013.work`: that external route is unavailable from
+  the iMac runtime. A command initiated from another machine must connect with
+  `ssh -p 2222 "${IMAC_HOST:-imac-ssh.ant013.work}"`; port `22` is forbidden.
+  The caller's local filesystem is not a UAudit runtime.
 
 Before ending a Paperclip issue, post Status/Evidence/Blockers/Next owner and
 use the exact UAudit agent name from the roster. `runtime/harness operator` is
@@ -411,9 +418,9 @@ notification actions; lifecycle notifications are automatic.
 
 ## Daily Version-Branch Crypto Audit Stage (iOS)
 
-For `mode=daily_crypto_audit`, set `HELPER=/opt/uaa-example/uaudit/runs/.uaudit-tools/uaudit_delivery_contract.py`; read the immutable `$RUN/run-context.json`, prepared inputs, validated prior sidecars/markers, their human MD, and the iOS repo. Audit wallet, chain, signing, transaction, key-management, address, fee, and balance semantics in the bound FROM..TO range.
+For `mode=daily_crypto_audit`, set `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py`; read the immutable `$RUN/run-context.json`, prepared inputs, validated prior sidecars/markers, their human MD, and the iOS repo. Audit wallet, chain, signing, transaction, key-management, address, fee, and balance semantics in the bound FROM..TO range.
 
 Write human evidence to `$RUN/crypto.md`. Atomically publish `$RUN/crypto.findings.json` as the strict v1 envelope: exact copied `run_binding`; `stage="crypto"`; `source_agent="UWICryptoAuditor"`; `audit_status=complete|partial|blocked`; structured findings; typed `{text,material}` limitations; status-valid `block_reason`. Every finding has exactly `severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification`; location is either relative file+positive line+null area or null file/line+nonempty area. Finding prose, limitation text and non-null blocked reason are Russian; complete/partial use null block reason. Do not count, deduplicate, or add schema fields.
 
-Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/crypto.findings.json"`; only it creates digest-bound `status/crypto.done.json`. Validation failure or `blocked` PATCHes issue blocked and stops without a completion message. Otherwise comment ready, PATCH `00000000-0000-0000-0000-00000000001b` with `mode=daily_infra_audit`, and stop. Never send Telegram or update state/cursors.
+Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/crypto.findings.json"`; only it creates digest-bound `status/crypto.done.json`. Validation failure or `blocked` PATCHes issue blocked and stops without a completion message. Otherwise comment ready, PATCH `339e9d3f-48c0-4348-a8da-5337e6f29491` with `mode=daily_infra_audit`, and stop. Never send Telegram or update state/cursors.
 
