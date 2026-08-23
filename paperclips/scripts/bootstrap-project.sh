@@ -176,7 +176,13 @@ PY
       log ok "UAudit delivery helper already installed: $destination"
       return 0
     fi
+    # The only pre-v1 release accepted for an unattended upgrade.  Its installed
+    # bytes still have to match its adjacent read-only manifest above; any other
+    # generation remains operator-approved only through the explicit variable.
     trusted_previous="${UAUDIT_HELPER_TRUSTED_PREVIOUS_SHA256:-}"
+    if [ -z "$trusted_previous" ] && [ "$manifest_sha" = "d3fe36b8c820f5092cde81ec9a69771a17fffa4d7e7ebfce1be65e68f5ba08b7" ]; then
+      trusted_previous="$manifest_sha"
+    fi
     [[ "$trusted_previous" =~ ^[0-9a-f]{64}$ ]] && \
       [ "$trusted_previous" = "$manifest_sha" ] || \
       die "UAudit helper generation differs from source and is not explicitly trusted for upgrade"
