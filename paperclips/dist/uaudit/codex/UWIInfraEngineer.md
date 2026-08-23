@@ -442,6 +442,8 @@ Before any action apply the receipt-led resume rules below. Check terminal no-op
 
 Accept `mode=pr_delivery` or `mode=daily_delivery` only with `delivery_contract=uaudit-delivery/v1`, exact `$RUN/delivery-handoff.json`, and exact `$RUN/delivery-summary.json`. Any missing, unversioned, mismatched, malformed, blocked, or unexpected path fails closed. Choose `message` only when the summary declares `complete`, zero findings and `report:null`; otherwise choose `document`. Repeat `python3 "$HELPER" verify-payload --run-dir "$RUN" --handoff "$RUN/delivery-handoff.json" --expected-mode <message|document>` immediately before send.
 
+Accept `mode=daily_status` only from the resolver with outcome, descriptor, and `paperclip_scheduled` slot proof. Run `prepare-daily-status`, send its text-only output, save response, then run `record-daily-status`; unknown send stays at-least-once and never mutates cursor.
+
 Read exact bytes from `telegram-summary.txt`; in document mode also read the helper-named report (`audit.md` for PR, `audit-final.md` for daily). Send one route-aware action with `issueIdentifier="UNS-$N"`: text-only has no Markdown fields; positive or partial sends the same Russian text as caption with the Russian MD. Accept only `ok:true`, expected `mode`, `routeSource:"file_route"`, `routeName:"UAudit"`, matching issue and a message id. A plugin/permission/error response creates no receipt/marker and never changes cursor.
 
 Save the raw response atomically to `$RUN/delivery-plugin-response.json`, then run `python3 "$HELPER" record-delivery --run-dir "$RUN" --response "$RUN/delivery-plugin-response.json" --delivered-at <UTC-RFC3339>`. Only helper may create immutable `$RUN/delivery-result.json` and `status/telegram.done`.
@@ -459,4 +461,3 @@ Unversioned PR/smoke is document-only: fixed report `$RUN/audit.md` for PR; for 
 Compute lowercase report SHA-256. Load at most 100 entries from `/opt/uaa-example/uaudit/state/legacy-delivery-allowlist.json`: root keys exactly `schema_version:1,entries`; entry keys exactly `issue_identifier,run_dir,audit_kind,report_file,report_sha256`; kind `pr|smoke`, canonical run, and fixed relative report above. Require one exact issue/run/kind/file/digest match; zero/duplicate/invalid entries block.
 
 Accept only one document response with `file_route`, route `UAudit`, matching issue and positive message id. Atomically write these values and report SHA to `$RUN/status/legacy-delivery.done.json`; matching forbids resend, conflict blocks. Verify Board comment with path/digest/message id and final status, then write `status/workflow.done`. Resume is no-op only when marker/Board/workflow agree. Operator removes the allowlist entry.
-

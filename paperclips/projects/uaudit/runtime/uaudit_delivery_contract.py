@@ -107,6 +107,8 @@ TERMINAL_MARKERS = (
 )
 INSTALL_SCHEMA = "uaudit-helper-install/v1"
 INSTALL_MANIFEST = "uaudit_delivery_contract.manifest.json"
+STATUS_SCHEMA = "uaudit-daily-slot-status/v1"
+STATUS_OUTCOMES = ("no_change", "blocked", "deferred")
 
 
 class ContractError(RuntimeError):
@@ -1633,6 +1635,130 @@ def _path(value: str) -> Path:
     return Path(value)
 
 
+def _status_descriptor(path: Path) -> tuple[dict[str, Any], str]:
+    value = _expect_object(_load_json(path, maximum=64 * 1024), "daily status descriptor")
+    _exact_keys(value, ("schema_version", "app_id", "routine_key", "platform", "config_sha256"), where="daily status descriptor")
+    if value["schema_version"] != STATUS_SCHEMA:
+        _fail("unsupported daily status descriptor schema")
+    value["app_id"] = _bounded_string(value["app_id"], "daily status descriptor.app_id", maximum=128)
+    routine = _bounded_string(value["routine_key"], "daily status descriptor.routine_key", maximum=128)
+    if not ROUTINE_RE.fullmatch(routine):
+        _fail("daily status descriptor.routine_key is invalid")
+    value["routine_key"] = routine
+    if value["platform"] not in {"ios", "android"}:
+        _fail("daily status descriptor.platform is invalid")
+    value["config_sha256"] = _sha(value["config_sha256"], "daily status descriptor.config_sha256")
+    return value, _sha256_path(path)
+
+
+def _status_slot_proof(path: Path, descriptor: Mapping[str, Any], descriptor_sha: str) -> dict[str, Any]:
+    value = _expect_object(_load_json(path, maximum=64 * 1024), "daily status slot proof")
+    _exact_keys(
+        value,
+        ("schema_version", "routine_key", "platform", "scheduled_utc_slot", "descriptor_sha256", "source"),
+        where="daily status slot proof",
+    )
+    if value["schema_version"] != STATUS_SCHEMA:
+        _fail("unsupported daily status slot proof schema")
+    if value["routine_key"] != descriptor["routine_key"] or value["platform"] != descriptor["platform"]:
+        _fail("daily status slot proof routine binding mismatch")
+    if value["descriptor_sha256"] != descriptor_sha:
+        _fail("daily status slot proof descriptor digest mismatch")
+    value["scheduled_utc_slot"] = _iso_utc(value["scheduled_utc_slot"], "daily status slot proof.scheduled_utc_slot")
+    if value["source"] != "paperclip_scheduled":
+        _fail("daily status slot proof source is invalid")
+    return value
+
+
+def _status_dir(state_root: Path, identity: Mapping[str, Any]) -> Path:
+    return state_root.resolve() / "daily-slot-status" / _sha256_bytes(_canonical_bytes(identity))
+
+
+def _status_summary(run_dir: Path) -> tuple[dict[str, Any], str]:
+    summary = _expect_object(_load_json(run_dir / "status-summary.json", maximum=64 * 1024), "daily status summary")
+    _exact_keys(
+        summary,
+        ("schema_version", "identity", "issue_identifier", "telegram_text", "attempt_id", "created_at"),
+        where="daily status summary",
+    )
+    if summary["schema_version"] != STATUS_SCHEMA:
+        _fail("unsupported daily status summary schema")
+    return summary, _sha256_path(run_dir / "status-summary.json")
+
+
+def prepare_daily_status(args: argparse.Namespace) -> dict[str, Any]:
+    descriptor, descriptor_sha = _status_descriptor(args.descriptor.resolve())
+    proof = _status_slot_proof(args.slot_proof.resolve(), descriptor, descriptor_sha)
+    outcome = args.outcome
+    if outcome not in STATUS_OUTCOMES:
+        _fail("daily status outcome is invalid")
+    issue = _bounded_string(args.issue_identifier, "daily status issue_identifier", maximum=64)
+    if not ISSUE_RE.fullmatch(issue):
+        _fail("daily status issue_identifier is invalid")
+    head = None if args.selected_head is None else _sha(args.selected_head, "daily status selected_head", git=True)
+    reason = _bounded_string(args.reason, "daily status reason", maximum=280)
+    attempt_id = _bounded_string(args.attempt_id, "daily status attempt_id", maximum=128)
+    identity = {
+        "app_id": descriptor["app_id"], "routine_key": descriptor["routine_key"], "platform": descriptor["platform"],
+        "scheduled_utc_slot": proof["scheduled_utc_slot"], "outcome": outcome, "selected_head": head,
+        "descriptor_sha256": descriptor_sha,
+    }
+    run_dir = _status_dir(args.state_root, identity)
+    if run_dir.exists():
+        summary, summary_sha = _status_summary(run_dir)
+        if summary["identity"] != identity or summary["issue_identifier"] != issue:
+            _fail("daily status slot conflicts with existing receipt identity")
+        return {"status": "already_prepared", "run_dir": str(run_dir), "summary_sha256": summary_sha}
+    run_dir.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        run_dir.mkdir()
+    except FileExistsError:
+        return prepare_daily_status(args)
+    text = f"UAudit {descriptor['platform']} {outcome}: slot {proof['scheduled_utc_slot']}"
+    if head is not None:
+        text += f", head {head[:12]}"
+    text += f". {reason}"
+    text = _bounded_string(text, "daily status telegram text", maximum=899)
+    _atomic_write(run_dir / "telegram-summary.txt", (text + "\n").encode("utf-8"))
+    summary = {
+        "schema_version": STATUS_SCHEMA,
+        "identity": identity,
+        "issue_identifier": issue,
+        "telegram_text": {"file": "telegram-summary.txt", "sha256": _sha256_path(run_dir / "telegram-summary.txt")},
+        "attempt_id": attempt_id,
+        "created_at": _iso_utc(args.created_at, "daily status created_at"),
+    }
+    _atomic_json(run_dir / "status-summary.json", summary)
+    _atomic_json(run_dir / "status" / "send_started.json", {"schema_version": STATUS_SCHEMA, "attempt_id": attempt_id})
+    return {"status": "ready", "run_dir": str(run_dir), "summary_sha256": _sha256_path(run_dir / "status-summary.json")}
+
+
+def record_daily_status(args: argparse.Namespace) -> dict[str, Any]:
+    run_dir = args.run_dir.resolve()
+    summary, summary_sha = _status_summary(run_dir)
+    receipt_path = run_dir / "delivery-result.json"
+    if receipt_path.exists():
+        receipt = _expect_object(_load_json(receipt_path), "daily status receipt")
+        if receipt.get("summary_sha256") != summary_sha:
+            _fail("daily status receipt summary digest mismatch")
+        return {"status": "already_recorded", "message_id": receipt["message_id"]}
+    data = _plugin_data(_load_json(args.response.resolve()))
+    if data.get("ok") is not True or data.get("mode") != "message" or data.get("routeName") != "UAudit":
+        _fail("daily status plugin response is invalid")
+    if data.get("issueIdentifier") != summary["issue_identifier"]:
+        _fail("daily status plugin response issue mismatch")
+    message_id = data.get("messageId")
+    if not _is_int(message_id) or message_id <= 0:
+        _fail("daily status plugin response messageId is invalid")
+    receipt = {
+        "schema_version": STATUS_SCHEMA, "summary_sha256": summary_sha, "attempt_id": summary["attempt_id"],
+        "message_id": message_id, "delivered_at": _iso_utc(args.delivered_at, "daily status delivered_at"),
+    }
+    _atomic_json(receipt_path, receipt)
+    _atomic_json(run_dir / "status" / "telegram.done", {"schema_version": STATUS_SCHEMA, "delivery_result_sha256": _sha256_path(receipt_path), "summary_sha256": summary_sha})
+    return {"status": "recorded", "message_id": message_id, "summary_sha256": summary_sha}
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -1677,6 +1803,24 @@ def build_parser() -> argparse.ArgumentParser:
     install = subparsers.add_parser("verify-install", help="verify deployed helper against adjacent install manifest")
     install.add_argument("--manifest", type=_path, required=True)
     install.set_defaults(func=verify_install)
+
+    status_prepare = subparsers.add_parser("prepare-daily-status", help="prepare receipt-bound no-change/blocked/deferred status")
+    status_prepare.add_argument("--state-root", type=_path, required=True)
+    status_prepare.add_argument("--descriptor", type=_path, required=True)
+    status_prepare.add_argument("--slot-proof", type=_path, required=True)
+    status_prepare.add_argument("--issue-identifier", required=True)
+    status_prepare.add_argument("--outcome", choices=STATUS_OUTCOMES, required=True)
+    status_prepare.add_argument("--selected-head")
+    status_prepare.add_argument("--reason", required=True)
+    status_prepare.add_argument("--attempt-id", required=True)
+    status_prepare.add_argument("--created-at", required=True)
+    status_prepare.set_defaults(func=prepare_daily_status)
+
+    status_record = subparsers.add_parser("record-daily-status", help="record an already sent daily status receipt")
+    status_record.add_argument("--run-dir", type=_path, required=True)
+    status_record.add_argument("--response", type=_path, required=True)
+    status_record.add_argument("--delivered-at", required=True)
+    status_record.set_defaults(func=record_daily_status)
     return parser
 
 

@@ -76,6 +76,10 @@ def read_json(path: Path) -> dict:
     return json.loads(path.read_text())
 
 
+def sha256_path(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def install_helper(root: Path) -> Path:
     tools = root / ".uaudit-tools"
     tools.mkdir(parents=True)
@@ -92,6 +96,34 @@ def install_helper(root: Path) -> Path:
     )
     helper.chmod(0o444)
     return helper
+
+
+def prepare_daily_status(root: Path, *, outcome: str = "no_change") -> tuple[Path, dict]:
+    helper = install_helper(root)
+    descriptor = root / "descriptor.json"
+    write_json(descriptor, {
+        "schema_version": "uaudit-daily-slot-status/v1",
+        "app_id": "unstoppable_wallet",
+        "routine_key": "uaudit-daily-ios",
+        "platform": "ios",
+        "config_sha256": "a" * 64,
+    })
+    proof = root / "slot-proof.json"
+    write_json(proof, {
+        "schema_version": "uaudit-daily-slot-status/v1",
+        "routine_key": "uaudit-daily-ios",
+        "platform": "ios",
+        "scheduled_utc_slot": CREATED_AT,
+        "descriptor_sha256": sha256_path(descriptor),
+        "source": "paperclip_scheduled",
+    })
+    result = call(
+        helper, "prepare-daily-status", "--state-root", root / "state", "--descriptor", descriptor,
+        "--slot-proof", proof, "--issue-identifier", "UNS-123", "--outcome", outcome,
+        "--selected-head", HEAD_SHA, "--reason", "No new commits.", "--attempt-id", "attempt-1",
+        "--created-at", CREATED_AT,
+    )
+    return helper, result
 
 
 def call(helper: Path, *args: object, ok: bool = True) -> dict:
@@ -887,3 +919,43 @@ def test_summary_is_last_payload_and_receipt_crash_repairs_only_marker(tmp_path:
     assert resumed["status"] == "already_recorded"
     assert (fixture["run"] / "delivery-result.json").read_bytes() == receipt_before
     assert (fixture["run"] / "status/telegram.done").is_file()
+
+
+def test_daily_no_change_status_is_idempotent_and_never_creates_a_cursor(tmp_path: Path):
+    helper, prepared = prepare_daily_status(tmp_path)
+    run = Path(prepared["run_dir"])
+    assert prepared["status"] == "ready"
+    assert "no_change" in (run / "telegram-summary.txt").read_text()
+    assert not (tmp_path / "state/ios-version-audit.json").exists()
+
+    _, duplicate = prepare_daily_status(tmp_path)
+    assert duplicate["status"] == "already_prepared"
+    response = tmp_path / "response.json"
+    write_json(response, {
+        "ok": True, "mode": "message", "routeName": "UAudit", "issueIdentifier": "UNS-123", "messageId": 77,
+    })
+    result = call(helper, "record-daily-status", "--run-dir", run, "--response", response, "--delivered-at", DELIVERED_AT)
+    assert result["message_id"] == 77
+    resumed = call(helper, "record-daily-status", "--run-dir", run, "--response", response, "--delivered-at", DELIVERED_AT)
+    assert resumed["status"] == "already_recorded"
+    assert not (tmp_path / "state/ios-version-audit.json").exists()
+
+
+def test_daily_status_rejects_slot_proof_for_a_different_descriptor(tmp_path: Path):
+    helper = install_helper(tmp_path)
+    descriptor = tmp_path / "descriptor.json"
+    write_json(descriptor, {
+        "schema_version": "uaudit-daily-slot-status/v1", "app_id": "unstoppable_wallet",
+        "routine_key": "uaudit-daily-ios", "platform": "ios", "config_sha256": "a" * 64,
+    })
+    proof = tmp_path / "slot-proof.json"
+    write_json(proof, {
+        "schema_version": "uaudit-daily-slot-status/v1", "routine_key": "uaudit-daily-ios", "platform": "ios",
+        "scheduled_utc_slot": CREATED_AT, "descriptor_sha256": "b" * 64, "source": "paperclip_scheduled",
+    })
+    failure = call(
+        helper, "prepare-daily-status", "--state-root", tmp_path / "state", "--descriptor", descriptor,
+        "--slot-proof", proof, "--issue-identifier", "UNS-123", "--outcome", "no_change",
+        "--reason", "No new commits.", "--attempt-id", "attempt-1", "--created-at", CREATED_AT, ok=False,
+    )
+    assert "descriptor digest mismatch" in failure["error"]

@@ -238,6 +238,55 @@ PY
   log ok "UAudit delivery helper installed read-only: $destination"
 }
 
+install_uaudit_release_resolver() {
+  local team_root="$1"
+  local source="${REPO_ROOT}/paperclips/projects/uaudit/runtime/uaudit_release_resolver.py"
+  local tools_dir="${team_root}/.uaudit-tools"
+  local destination="${tools_dir}/uaudit_release_resolver.py"
+  local manifest="${tools_dir}/uaudit_release_resolver.manifest.json"
+  local pending="${tools_dir}/uaudit_release_resolver.pending.json"
+  local source_sha destination_sha manifest_sha="" trusted_previous tmp manifest_tmp pending_tmp
+
+  [ -f "$source" ] || die "UAudit release resolver source missing: $source"
+  mkdir -p "$tools_dir"
+  [ ! -e "$pending" ] || die "UAudit resolver pending transaction requires operator recovery"
+  source_sha=$(shasum -a 256 "$source" | awk '{print $1}')
+  if [ -e "$destination" ] || [ -e "$manifest" ]; then
+    [ -f "$destination" ] && [ ! -L "$destination" ] && [ -f "$manifest" ] && [ ! -L "$manifest" ] || \
+      die "UAudit resolver install is incomplete"
+    manifest_sha=$(jq -r '.sha256 // ""' "$manifest")
+    [ "$(jq -r '.schema_version // ""' "$manifest")" = "uaudit-release-resolver-install/v1" ] && \
+      [ "$(jq -r '.file // ""' "$manifest")" = "uaudit_release_resolver.py" ] && \
+      [[ "$manifest_sha" =~ ^[0-9a-f]{64}$ ]] || die "UAudit resolver install manifest is invalid"
+    destination_sha=$(shasum -a 256 "$destination" | awk '{print $1}')
+    [ "$destination_sha" = "$manifest_sha" ] || die "UAudit resolver digest mismatch"
+    if [ "$manifest_sha" = "$source_sha" ]; then
+      python3 "$destination" --manifest "$manifest" || die "UAudit resolver rejected install manifest"
+      return 0
+    fi
+    trusted_previous="${UAUDIT_RESOLVER_TRUSTED_PREVIOUS_SHA256:-}"
+    [[ "$trusted_previous" =~ ^[0-9a-f]{64}$ ]] && [ "$trusted_previous" = "$manifest_sha" ] || \
+      die "UAudit resolver generation differs from source and is not explicitly trusted for upgrade"
+  fi
+  tmp=$(mktemp "${tools_dir}/.uaudit_release_resolver.py.XXXXXX")
+  manifest_tmp=$(mktemp "${tools_dir}/.uaudit_release_resolver.manifest.json.XXXXXX")
+  pending_tmp=$(mktemp "${tools_dir}/.uaudit_release_resolver.pending.json.XXXXXX")
+  cp "$source" "$tmp"
+  chmod 444 "$tmp"
+  [ "$(shasum -a 256 "$tmp" | awk '{print $1}')" = "$source_sha" ] || die "UAudit resolver staging digest mismatch"
+  jq -n --arg schema_version "uaudit-release-resolver-install/v1" --arg file "uaudit_release_resolver.py" --arg sha256 "$source_sha" \
+    '{schema_version:$schema_version,file:$file,sha256:$sha256}' > "$manifest_tmp"
+  jq -n --arg target_sha256 "$source_sha" --arg previous_sha256 "$manifest_sha" \
+    '{schema_version:"uaudit-release-resolver-pending/v1",target_sha256:$target_sha256,previous_sha256:(if $previous_sha256 == "" then null else $previous_sha256 end)}' > "$pending_tmp"
+  chmod 444 "$manifest_tmp" "$pending_tmp"
+  mv -f "$pending_tmp" "$pending"
+  mv -f "$tmp" "$destination"
+  mv -f "$manifest_tmp" "$manifest"
+  rm -f "$pending"
+  python3 "$destination" --manifest "$manifest" || die "UAudit resolver post-install verification failed"
+  log ok "UAudit release resolver installed read-only: $destination"
+}
+
 ensure_uaudit_telegram_plugin_binding() {
   local plugins_file="$1" registry_file="${HOME}/.paperclip/host-plugins.yaml" plugin_id plugin
   if [ ! -f "$plugins_file" ] && [ -f "$registry_file" ]; then
@@ -336,6 +385,7 @@ if [ "$project_key" = "uaudit" ]; then
   [ -n "$team_root" ] && [ "$team_root" != "null" ] || \
     die "team_workspace_root required to install UAudit delivery helper"
   install_uaudit_delivery_helper "$team_root"
+  install_uaudit_release_resolver "$team_root"
   ensure_uaudit_telegram_plugin_binding "$plugins_file"
 fi
 
