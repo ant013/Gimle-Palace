@@ -73,6 +73,7 @@ install_uaudit_delivery_helper() {
   # UAudit is executed on the iMac.  Deploy the current helper there directly:
   # an old manifest or an interrupted prior helper update must never prevent a
   # scheduled audit from starting.
+  rm -f "$destination"
   cp "$source" "$destination"
   chmod 555 "$destination"
   rm -f "$install_manifest" "$pending_install"
@@ -266,6 +267,7 @@ install_uaudit_release_resolver() {
   mkdir -p "$tools_dir"
   # See install_uaudit_delivery_helper: routine execution must not wait for a
   # manifest/transaction recovery before it can run on the iMac.
+  rm -f "$destination"
   cp "$source" "$destination"
   chmod 555 "$destination"
   rm -f "$manifest" "$pending"
@@ -619,6 +621,12 @@ for agent_name in $hire_order; do
   read_only_roots='[]'
   adapter_env='{}'
   scratch_dir="${team_root}/${agent_name}/scratch"
+  if [ "$project_key" = "uaudit" ]; then
+    runtime_host=$(yq -r '.imac_ssh_host // "imac-ssh.ant013.work"' "$paths_file")
+    runtime_port=$(yq -r '.imac_ssh_port // "2222"' "$paths_file")
+    adapter_env=$(jq -n --arg host "$runtime_host" --arg port "$runtime_port" \
+      '{IMAC_HOST: $host, IMAC_PORT: $port}')
+  fi
   if [ "$sandbox_mode" = "constrained" ]; then
     project_root=$(yq -r '.project_root // ""' "$paths_file")
     [ -n "$project_root" ] && [ "$project_root" != "null" ] || die "constrained sandbox requires project_root"

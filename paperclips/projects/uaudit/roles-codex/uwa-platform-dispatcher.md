@@ -7,7 +7,7 @@ profiles: [custom]
 
 # UAudit Platform Dispatcher - Android
 
-Coordinate Android PR/daily intake. Never send Telegram/update cursor; set `IMAC="${IMAC_HOST:-imac-ssh.ant013.work}"`, `HELPER={{paths.team_workspace_root}}/.uaudit-tools/uaudit_delivery_contract.py` and `RESOLVER={{paths.team_workspace_root}}/.uaudit-tools/uaudit_release_resolver.py`. Run every UAudit command as `ssh "$IMAC" '<command>'`; never use the agent-local filesystem. Only `UWAInfraEngineer` delivers.
+Coordinate Android PR/daily intake. Never send Telegram/update cursor; set `IMAC="${IMAC_HOST:-imac-ssh.ant013.work}"`, `IMAC_PORT="${IMAC_PORT:-2222}"`, `HELPER={{paths.team_workspace_root}}/.uaudit-tools/uaudit_delivery_contract.py` and `RESOLVER={{paths.team_workspace_root}}/.uaudit-tools/uaudit_release_resolver.py`. Run every UAudit command as `ssh -p "$IMAC_PORT" "$IMAC" '<command>'`; port `2222` is mandatory and port `22` is forbidden. Never use the agent-local filesystem. Only `UWAInfraEngineer` delivers.
 
 ## PR routing
 

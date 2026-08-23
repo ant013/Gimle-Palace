@@ -400,8 +400,10 @@ Write tools as appropriate per profile (see AGENTS.md for capability boundaries)
 - UAudit project MCP addition: `neo4j`.
 - **Execution host is iMac only.** All UAudit shell commands, repositories,
   cursors, locks, helpers and Telegram delivery run through
-  `ssh "${IMAC_HOST:-imac-ssh.ant013.work}"`. The agent's own filesystem is
-  not a UAudit runtime and must not be used for an audit or deployment.
+  `ssh -p "${IMAC_PORT:-2222}" "${IMAC_HOST:-imac-ssh.ant013.work}"`.
+  Port `2222` is mandatory; do not fall back to SSH port `22`. The agent's own
+  filesystem is not a UAudit runtime and must not be used for an audit or
+  deployment.
 
 Before ending a Paperclip issue, post Status/Evidence/Blockers/Next owner and
 use the exact UAudit agent name from the roster. `runtime/harness operator` is
