@@ -99,26 +99,10 @@ def test_generated_dispatcher_bundles_start_staged_daily_chain():
         "required subagent roster",
     ]
     expected = {
-        "UWACTO": (
-            "00000000-0000-0000-0000-000000000014",
-            (
-                "UWAKotlinAuditor",
-                "UWASecurityAuditor",
-                "UWACryptoAuditor",
-                "UWAInfraEngineer",
-            ),
-        ),
-        "UWICTO": (
-            "00000000-0000-0000-0000-000000000013",
-            (
-                "UWISwiftAuditor",
-                "UWISecurityAuditor",
-                "UWICryptoAuditor",
-                "UWIInfraEngineer",
-            ),
-        ),
+        "UWACTO": ("UWAKotlinAuditor", "UWASecurityAuditor", "UWACryptoAuditor", "UWAInfraEngineer"),
+        "UWICTO": ("UWISwiftAuditor", "UWISecurityAuditor", "UWICryptoAuditor", "UWIInfraEngineer"),
     }
-    for name, (code_auditor_id, chain_names) in expected.items():
+    for name, chain_names in expected.items():
         path = REPO / f"paperclips/dist/uaudit/codex/{name}.md"
         assert path.is_file(), f"missing generated bundle {path}"
         text = path.read_text()
@@ -127,11 +111,12 @@ def test_generated_dispatcher_bundles_start_staged_daily_chain():
         for phrase in forbidden:
             assert phrase not in text, f"{name} contains forbidden phrase {phrase!r}"
         assert "daily-version-branch-routines.yaml" in text
-        assert code_auditor_id in text
         assert "Chain:" in text
         assert "mode=daily_code_audit" in text
         assert "mode=daily_aggregate" in text
-        assert "audit-final.md" in text
+        assert "audit-final.ru.md" in text
+        assert "translation-input.json" in text
+        assert "finalize-translation" in text
         assert "do not use `uaudit-*` subagents for daily real-delta audits" in text
         assert "uaudit_delivery_contract.py" in text
         assert "uaudit_release_resolver.py" in text
@@ -248,11 +233,13 @@ def test_infra_bundles_use_staged_daily_delivery_not_subagent_fanout():
         assert "mode=initialize_cursor" in text
         assert "mode=daily_infra_audit" in text
         assert "mode=daily_delivery" in text
-        assert "audit-final.md" in text
+        assert "audit-final.ru.md" in text
+        assert "audit-final.en.md" in text
         assert "delivery_contract=uaudit-delivery/v1" in text
         assert "verify-install --manifest" not in text
         assert "verify-payload --run-dir" in text
         assert "record-delivery --run-dir" in text
+        assert "--english-response" in text
         assert "reconcile-daily --run-dir" in text
         assert 'routeSource:"file_route"' in text
         assert 'routeName:"UAudit"' in text

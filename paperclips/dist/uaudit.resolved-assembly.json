@@ -98,32 +98,32 @@
         {
           "agentId": "9f0f6fc5-e9ef-4664-ac54-15ffc64069bc",
           "agentName": "UWICTO",
-          "bytes": 6457,
+          "bytes": 5974,
           "family": "dispatcher",
-          "lines": 80,
+          "lines": 70,
           "output": "paperclips/dist/uaudit/codex/UWICTO.md",
           "platform": "ios",
           "profiles": [
             "custom"
           ],
           "roleId": "codex:uwi-platform-dispatcher",
-          "sha256": "a7e0011f276bf3a5345d8657a3f6176d787eacac34b2d2296c28ef805f9ea6ff",
+          "sha256": "16e127a7fafdc5af6564b569194024e51c2163e2a38018620d695442c8b62a95",
           "source": "paperclips/projects/uaudit/roles-codex/uwi-platform-dispatcher.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "e63b7f27-cc4f-41f4-8883-b5b9677984d9",
           "agentName": "UWACTO",
-          "bytes": 6506,
+          "bytes": 5994,
           "family": "dispatcher",
-          "lines": 80,
+          "lines": 70,
           "output": "paperclips/dist/uaudit/codex/UWACTO.md",
           "platform": "android",
           "profiles": [
             "custom"
           ],
           "roleId": "codex:uwa-platform-dispatcher",
-          "sha256": "cfd6fe05810e19c6d898679a7c9b316d80c32275d3766d9bff71ad3da74c680c",
+          "sha256": "aa297f32cc8a8f32a5fcd65f884e69b744f5d3f815f6c30d6d9c634dacfd8536",
           "source": "paperclips/projects/uaudit/roles-codex/uwa-platform-dispatcher.md",
           "workspaceCwd": ""
         },
@@ -258,7 +258,7 @@
         {
           "agentId": "339e9d3f-48c0-4348-a8da-5337e6f29491",
           "agentName": "UWIInfraEngineer",
-          "bytes": 26147,
+          "bytes": 26551,
           "family": "implementer",
           "lines": 469,
           "output": "paperclips/dist/uaudit/codex/UWIInfraEngineer.md",
@@ -267,14 +267,14 @@
             "implementer"
           ],
           "roleId": "codex:cx-infra-engineer",
-          "sha256": "f05af56069e545683741d8661ff5832ec71eaea918af645fbbc317ef27c58538",
+          "sha256": "efc7ecf991bd55a098b98dd13c6c4fdb1bfcf190a38b5802f5146dfa74361b0b",
           "source": "paperclips/roles-codex/cx-infra-engineer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "5f0709f8-0b05-43e7-8711-6df618b95f69",
           "agentName": "UWAInfraEngineer",
-          "bytes": 26188,
+          "bytes": 26592,
           "family": "implementer",
           "lines": 469,
           "output": "paperclips/dist/uaudit/codex/UWAInfraEngineer.md",
@@ -283,7 +283,7 @@
             "implementer"
           ],
           "roleId": "codex:cx-infra-engineer",
-          "sha256": "3924741d3f05ba64cbc47ea24e60e4d694aa262a65acb1507ef3396b8dae5367",
+          "sha256": "885e9524aa5cb84e5b14f71ab7c1da9da17de9ad1816c5c92665d9accfbb2850",
           "source": "paperclips/roles-codex/cx-infra-engineer.md",
           "workspaceCwd": ""
         },
@@ -322,32 +322,32 @@
         {
           "agentId": "a881b5bd-f1ef-4023-bdd7-5d9b567642d0",
           "agentName": "UWITechnicalWriter",
-          "bytes": 13436,
+          "bytes": 14239,
           "family": "writer",
-          "lines": 318,
+          "lines": 325,
           "output": "paperclips/dist/uaudit/codex/UWITechnicalWriter.md",
           "platform": "ios",
           "profiles": [
             "writer"
           ],
           "roleId": "codex:cx-technical-writer",
-          "sha256": "73dfda7f46d9df1869373cf6fb6735f366972f32a516ea957136a57537f3fcef",
+          "sha256": "c4af9f8a2e080457d805496ed2fd1ac5a70c088de5eb3d5aa906d7885505dcd4",
           "source": "paperclips/roles-codex/cx-technical-writer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "ae159ee7-05e2-48af-abf9-5bbeef4017c4",
           "agentName": "UWATechnicalWriter",
-          "bytes": 13448,
+          "bytes": 14251,
           "family": "writer",
-          "lines": 318,
+          "lines": 325,
           "output": "paperclips/dist/uaudit/codex/UWATechnicalWriter.md",
           "platform": "android",
           "profiles": [
             "writer"
           ],
           "roleId": "codex:cx-technical-writer",
-          "sha256": "b6aa2baecb17de7a8c059804c763996b1f65024c83fbae599a0e325394700248",
+          "sha256": "b57b73a0973a8957c87a19644c331a3ba75d4f61666be1740a7703027da00bc8",
           "source": "paperclips/roles-codex/cx-technical-writer.md",
           "workspaceCwd": ""
         }
