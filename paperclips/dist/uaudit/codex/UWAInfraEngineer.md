@@ -429,7 +429,7 @@ test -n "$$PAPERCLIP_DELIVERY_TOKEN"
 
 If the token is empty or the plugin returns `Board access required`, comment only the artifact path, PATCH permission-blocked, and stop retrying.
 
-POST with Board bearer token to `/api/plugins/60023916-4b6c-40f5-829f-bc8b98abc4ed/actions/send_to_telegram`. Send only `companyId`, `agentId`, `issueIdentifier`, exact validated `text`, and, in document mode only, `markdownFileName` plus inline `markdownContent`. `issueIdentifier` must be `UNS-*`. Never pass an explicit destination, local-file reference, URL, binary, raw diff, or credential; never call Telegram directly. Lifecycle events use `opsRoutes` automatically.
+POST with Board bearer token to `/api/plugins/60023916-4b6c-40f5-829f-bc8b98abc4ed/actions/send_to_telegram` with `{"params":{...}}`. Inside `params`, send only `companyId`, `agentId`, `issueIdentifier`, exact validated `text`, and, in document mode only, `markdownFileName` plus inline `markdownContent`. `issueIdentifier` must be `UNS-*`. Never pass an explicit destination, local-file reference, URL, binary, raw diff, or credential; never call Telegram directly. Lifecycle events use `opsRoutes` automatically.
 
 ## Daily infra audit stage
 
