@@ -6,7 +6,8 @@ from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "projects/uaudit/runtime"))
-from uaudit_release_resolver import ResolutionError, resolve_json, resolve_release_history  # noqa: E402
+from uaudit_delivery_contract import _validate_source_ref  # noqa: E402
+from uaudit_release_resolver import ResolutionError, Segment, resolve_json, resolve_release_history  # noqa: E402
 
 
 def sha(char: str) -> str:
@@ -40,6 +41,36 @@ class ReleaseResolverTests(unittest.TestCase):
         self.assertEqual(result.kind, "no_change")
         self.assertEqual(result.selected_branch, "version/0.51")
         self.assertEqual(result.segments, ())
+
+    def test_absent_base_recovers_from_master_to_successor(self) -> None:
+        result = resolve_release_history(
+            cursor_sha="3e9a7f427e1f5878738ef21a5b100c56b333ffaa",
+            release_branch="version/0.50", release_head=None,
+            master_anchor_sha="17144d20e352743f3fde74af4abab8d10f57494a",
+            master_head="17144d20e352743f3fde74af4abab8d10f57494a",
+            cursor_is_ancestor_of_release=None, cursor_is_ancestor_of_master=False,
+            master_is_ancestor_of_release=None, next_release_branch="version/0.51",
+            next_release_head="f5284d8761890a788d33fc3bbeb7702d45e5df61",
+            master_is_ancestor_of_next_release=True,
+        )
+        self.assertEqual(result.kind, "full_recovery")
+        self.assertEqual(result.selected_branch, "version/0.51")
+        self.assertEqual(
+            result.segments,
+            (
+                Segment(
+                    "release", "version/0.51",
+                    "17144d20e352743f3fde74af4abab8d10f57494a",
+                    "f5284d8761890a788d33fc3bbeb7702d45e5df61",
+                ),
+            ),
+        )
+        segment = result.segments[0]
+        source_ref = _validate_source_ref({
+            "routine_id": "daily-android-version-0.50", "branch": segment.branch,
+            "from_sha": segment.from_sha, "to_sha": segment.to_sha,
+        }, "forced_full")
+        self.assertNotEqual(source_ref["from_sha"], source_ref["to_sha"])
 
     def test_json_adapter_rejects_unknown_input_and_returns_plain_resolution(self) -> None:
         with self.assertRaises(ResolutionError):
