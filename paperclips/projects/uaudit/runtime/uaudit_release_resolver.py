@@ -124,6 +124,12 @@ def resolve_release_history(
                  Segment("release", next_release_branch or release_branch, master_head, next_release_head)),
                 False, "cursor reached master and the strictly next release contains master",
             )
+        if release_head is None and master_is_ancestor_of_next_release is True:
+            return Resolution(
+                "full_recovery", next_release_branch, next_release_head,
+                (Segment("release", next_release_branch or release_branch, master_head, next_release_head),),
+                True, "configured release is absent; recover from master to its strict successor",
+            )
         if master_is_ancestor_of_next_release is False:
             return Resolution(
                 "split_recovery", next_release_branch, next_release_head,
