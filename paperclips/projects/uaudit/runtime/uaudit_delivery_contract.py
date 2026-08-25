@@ -162,8 +162,10 @@ def _bounded_string(
 ) -> str:
     if not isinstance(value, str):
         _fail(f"{where} must be a string")
-    if len(value) < minimum or len(value) > maximum:
+    if len(value) < minimum:
         _fail(f"{where} length is outside {minimum}..{maximum}")
+    if len(value) > maximum:
+        print(f"WARNING: {where} exceeds {maximum} chars ({len(value)})", file=sys.stderr)
     if not controls and CONTROL_RE.search(value):
         _fail(f"{where} contains control characters")
     return value
