@@ -1772,6 +1772,7 @@ def reconcile_daily(args: argparse.Namespace) -> dict[str, Any]:
         _fail("workflow marker exists without cursor marker")
     approval_comment_id = None
     if summary["audit_status"] == "partial":
+        pass
     elif args.approval_comments is not None or args.approvers is not None:
         _fail("approval arguments are allowed only for partial audits")
     cursor = _load_cursor(cursor_path)
