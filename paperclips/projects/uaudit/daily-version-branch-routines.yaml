@@ -9,12 +9,12 @@ apps:
     report_route: UAudit
 
 routines:
-  - id: daily-android-version-0.50
+  - id: daily-android-version-0.51
     app_id: unstoppable_wallet
     routine_key: uaudit-daily-android
     title: UAudit daily Android version delta audit
     platform: android
-    branch: version/0.50
+    branch: version/0.51
     schedule:
       enabled: true
       cron: "45 10 * * *"

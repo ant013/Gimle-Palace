@@ -1,0 +1,213 @@
+schemaVersion: 2
+
+project:
+  key: uaudit
+  display_name: UnstoppableAudit
+  system_name: UnstoppableAudit
+  issue_prefix: UNS
+  integration_branch: develop
+  specs_dir: docs/superpowers/specs
+  plans_dir: docs/superpowers/plans
+
+domain:
+  wallet_target_short: Unstoppable
+  wallet_target_name: Unstoppable Wallet
+  wallet_target_slug: unstoppable-wallet
+
+evidence:
+  merge_without_smoke_issue: UNS-bootstrap
+  graphiti_mock_issue: UNS-bootstrap
+  release_reset_issue: UNS-bootstrap
+  asyncmock_driver_issue: UNS-bootstrap
+  worktree_discipline_issue_pair: UNS-bootstrap
+  qa_worktree_discipline_issue: UNS-bootstrap
+  mcp_wire_contract_issue: UNS-bootstrap
+  qa_deploy_checklist_issue: UNS-bootstrap
+  review_scope_drift_issue: UNS-bootstrap
+  qa_to_cto_stall_issue: UNS-bootstrap
+  handoff_flake_issue: UNS-bootstrap
+  pre_slim_baseline_issue: UNS-bootstrap
+  cr_to_pe_stall_issue: UNS-bootstrap
+  handoff_misclassified_issue: UNS-bootstrap
+  post_merge_stall_issue: UNS-bootstrap
+
+paths:
+  overlay_root: paperclips/projects/uaudit/overlays
+  project_rules_file: AGENTS.md
+
+mcp:
+  service_name: uaudit
+  package_name: uaudit
+  tool_namespace: uaudit
+  base_required:
+    - codebase-memory
+    - context7
+    - serena
+    - github
+    - sequential-thinking
+  codebase_memory_projects:
+    primary: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
+    ios: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
+    android: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
+  additions:
+    project:
+      - neo4j
+    by_role: {}
+
+# Phase F migration (2026-05-17): telegram_plugin_id moved to host-local
+# ~/.paperclip/projects/uaudit/plugins.yaml. Other fields (issue_prefix,
+# default_owner, ios_owner, android_owner) are safe in repo (routing metadata).
+report_delivery:
+  issue_prefix: UNS
+  default_owner: UWAInfraEngineer
+  android_owner: UWAInfraEngineer
+  ios_owner: UWIInfraEngineer
+
+skills:
+  additions:
+    project: []
+    by_role: {}
+
+subagents:
+  additions:
+    project:
+      - uaudit-swift-audit-specialist
+      - uaudit-kotlin-audit-specialist
+      - uaudit-bug-hunter
+      - uaudit-security-auditor
+      - uaudit-blockchain-auditor
+    by_role: {}
+
+targets:
+  codex:
+    instruction_entry_file: AGENTS.md
+    adapter_type: codex_local
+    deploy_mode: dry-run
+    instructions_bundle_mode: managed
+
+compatibility:
+  legacy_output_paths: false
+
+# Phase F migration (2026-05-17): UUIDs + abs paths + workspace_cwd moved to
+# ~/.paperclip/projects/uaudit/{bindings.yaml,paths.yaml}. Builder reads via
+# resolve_bindings dual-read (Phase D). reportsTo added for topological hire.
+# uaudit is codex-only (no claude agents); 17 agents total.
+agents:
+  - agent_name: AUCEO
+    role_source: paperclips/roles-codex/cx-cto.md
+    profile: cto
+    target: codex
+    platform: all
+    primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
+  - agent_name: UWICTO
+    role_source: paperclips/projects/uaudit/roles-codex/uwi-platform-dispatcher.md
+    profile: custom
+    target: codex
+    reportsTo: AUCEO
+    platform: ios
+    primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
+  - agent_name: UWACTO
+    role_source: paperclips/projects/uaudit/roles-codex/uwa-platform-dispatcher.md
+    profile: custom
+    target: codex
+    reportsTo: AUCEO
+    platform: android
+    primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
+  - agent_name: UWISwiftAuditor
+    role_source: paperclips/roles-codex/cx-code-reviewer.md
+    profile: reviewer
+    target: codex
+    reportsTo: UWICTO
+    platform: ios
+    primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
+  - agent_name: UWAKotlinAuditor
+    role_source: paperclips/roles-codex/cx-code-reviewer.md
+    profile: reviewer
+    target: codex
+    reportsTo: UWACTO
+    platform: android
+    primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
+  - agent_name: UWICryptoAuditor
+    role_source: paperclips/roles-codex/cx-blockchain-engineer.md
+    profile: implementer
+    target: codex
+    reportsTo: UWICTO
+    platform: ios
+    primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
+  - agent_name: UWACryptoAuditor
+    role_source: paperclips/roles-codex/cx-blockchain-engineer.md
+    profile: implementer
+    target: codex
+    reportsTo: UWACTO
+    platform: android
+    primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
+  - agent_name: UWISecurityAuditor
+    role_source: paperclips/roles-codex/cx-security-auditor.md
+    profile: reviewer
+    target: codex
+    reportsTo: UWICTO
+    platform: ios
+    primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
+  - agent_name: UWASecurityAuditor
+    role_source: paperclips/roles-codex/cx-security-auditor.md
+    profile: reviewer
+    target: codex
+    reportsTo: UWACTO
+    platform: android
+    primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
+  - agent_name: UWIQAEngineer
+    role_source: paperclips/roles-codex/cx-qa-engineer.md
+    profile: qa
+    target: codex
+    reportsTo: UWICTO
+    platform: ios
+    primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
+  - agent_name: UWAQAEngineer
+    role_source: paperclips/roles-codex/cx-qa-engineer.md
+    profile: qa
+    target: codex
+    reportsTo: UWACTO
+    platform: android
+    primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
+  - agent_name: UWIInfraEngineer
+    role_source: paperclips/roles-codex/cx-infra-engineer.md
+    profile: implementer
+    target: codex
+    reportsTo: UWICTO
+    platform: ios
+    primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
+  - agent_name: UWAInfraEngineer
+    role_source: paperclips/roles-codex/cx-infra-engineer.md
+    profile: implementer
+    target: codex
+    reportsTo: UWACTO
+    platform: android
+    primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
+  - agent_name: UWIResearchAgent
+    role_source: paperclips/roles-codex/cx-research-agent.md
+    profile: research
+    target: codex
+    reportsTo: UWICTO
+    platform: ios
+    primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
+  - agent_name: UWAResearchAgent
+    role_source: paperclips/roles-codex/cx-research-agent.md
+    profile: research
+    target: codex
+    reportsTo: UWACTO
+    platform: android
+    primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
+  - agent_name: UWITechnicalWriter
+    role_source: paperclips/roles-codex/cx-technical-writer.md
+    profile: writer
+    target: codex
+    reportsTo: UWICTO
+    platform: ios
+    primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
+  - agent_name: UWATechnicalWriter
+    role_source: paperclips/roles-codex/cx-technical-writer.md
+    profile: writer
+    target: codex
+    reportsTo: UWACTO
+    platform: android
+    primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
