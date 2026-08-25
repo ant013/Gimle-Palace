@@ -90,6 +90,7 @@ def resolve_release_history(
     next_release_branch: str | None = None,
     next_release_head: str | None = None,
     master_is_ancestor_of_next_release: bool | None = None,
+    cursor_is_ancestor_of_next_release: bool | None = None,
     old_series_equivalence: Literal["equivalent", "changed", "ambiguous", "unavailable"] = "unavailable",
 ) -> Resolution:
     """Select auditable segments from independently verified Git facts.
@@ -116,6 +117,18 @@ def resolve_release_history(
             return Resolution(
                 "no_change", next_release_branch, next_release_head, (), False,
                 "configured release is absent and proven strict successor head equals cursor",
+            )
+        # NEW: If release is absent but cursor is already in next_release, continue incrementally
+        if release_head is None and cursor_is_ancestor_of_next_release is True:
+            if cursor_sha == next_release_head:
+                return Resolution(
+                    "no_change", next_release_branch, next_release_head, (), False,
+                    "configured release is absent; cursor already at next release head",
+                )
+            return Resolution(
+                "daily", next_release_branch, next_release_head,
+                (Segment("release", next_release_branch, cursor_sha, next_release_head),),
+                False, "configured release is absent; cursor is already in next release, continuing incrementally",
             )
         if master_is_ancestor_of_next_release is True and cursor_is_ancestor_of_master:
             return Resolution(
@@ -188,6 +201,7 @@ def resolve_json(value: Any) -> dict[str, Any]:
         "cursor_sha", "release_branch", "release_head", "master_anchor_sha", "master_head",
         "cursor_is_ancestor_of_release", "cursor_is_ancestor_of_master", "master_is_ancestor_of_release",
         "next_release_branch", "next_release_head", "master_is_ancestor_of_next_release",
+        "cursor_is_ancestor_of_next_release",
         "old_series_equivalence",
     }
     unknown = sorted(set(value) - allowed)
