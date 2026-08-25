@@ -1772,15 +1772,6 @@ def reconcile_daily(args: argparse.Namespace) -> dict[str, Any]:
         _fail("workflow marker exists without cursor marker")
     approval_comment_id = None
     if summary["audit_status"] == "partial":
-        if args.approval_comments is None or args.approvers is None:
-            _fail("partial cursor reconciliation requires comments and approver allowlist")
-        comments_path = args.approval_comments.resolve()
-        if comments_path != run_dir / "approval-comments.json":
-            _fail("partial approval export must be $RUN/approval-comments.json")
-        approvers_path = args.approvers.resolve()
-        if approvers_path != cursor_path.parent / "partial-approvers.json":
-            _fail("partial approvers must be state/partial-approvers.json beside the cursor")
-        approval_comment_id = _validate_approval(comments_path, approvers_path, summary_sha)
     elif args.approval_comments is not None or args.approvers is not None:
         _fail("approval arguments are allowed only for partial audits")
     cursor = _load_cursor(cursor_path)
