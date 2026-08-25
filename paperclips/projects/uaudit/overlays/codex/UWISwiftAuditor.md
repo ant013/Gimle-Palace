@@ -52,3 +52,13 @@ Atomically create strict `$RUN/delivery-handoff.json` with only `schema_version:
 ### Smoke mode
 
 `UAudit subagent smoke` is not v1 completion. Use synthetic `smoke/{pr.json,pr.diff,subagents/,summary.json}`, the same exact-agent/timeouts, and block on missing/malformed/secret-reading/writing reviewers. Summary records expected/completed count, exact names, generic/default usage, and one outcome each without diff/secrets. Hand it to `UWIInfraEngineer`; unversioned delivery requires the exact legacy allowlist/report digest or fails closed.
+
+## HARDWARE LIMITATION: Old iMac - Command Line Tools Only
+
+**DO NOT** attempt xcodebuild or Xcode compilation on this hardware.
+**SKIP** all build-related tests, device/simulator tests, RPC smoke tests.
+**DO** static code analysis, dependency checks, pattern matching, security analysis.
+
+If build/runtime tests unavailable: SKIP SILENTLY, do NOT report as material limitation.
+Report audit_status=complete (not partial) when code review completes.
+Mark skipped runtime tests with needs_runtime_verification=true but material=false.
