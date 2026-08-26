@@ -42,12 +42,12 @@ routines:
     initialization_allowed: false
     codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
 
-  - id: daily-ios-version-0.50
+  - id: daily-ios-version-0.51
     app_id: unstoppable_wallet
     routine_key: uaudit-daily-ios
     title: UAudit daily iOS version delta audit
     platform: ios
-    branch: version/0.50
+    branch: version/0.51
     schedule:
       enabled: true
       cron: "0 11 * * *"

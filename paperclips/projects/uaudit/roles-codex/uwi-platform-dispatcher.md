@@ -48,7 +48,7 @@ Handle iOS audits from `daily-version-branch-routines.yaml`; retain routine id, 
 - Run the resolver directly on iMac and follow its JSON: contiguous `daily|bridge|transition` starts daily; recovery kinds are forced-full with no cursor advance. Never block a proven range by size.
 - Resolver `no_change` assigns `UWIInfraEngineer` `mode=daily_status` with head/slot; no audit run or cursor mutation. Missing, rewrite, skipped, or unproven evidence blocks.
 - Explicit initialization: assign `{{bindings.agents.UWIInfraEngineer}}` `mode=initialize_cursor` with head/routine; no run/message.
-- Valid range: set `$RUN={{paths.team_workspace_root}}/UNS-<issueNumber>-audit`, `LOCK={{paths.project_root}}/state/locks/daily-ios-version-0.50.lock`; `mkdir "$LOCK"` (existing blocks; never steal). Atomically write metadata/four inputs with selected branch/FROM/TO; run `bind-context --run-dir`, then assign `{{bindings.agents.UWISwiftAuditor}}` `mode=daily_code_audit`.
+- Valid range: set `$RUN={{paths.team_workspace_root}}/UNS-<issueNumber>-audit`, `LOCK={{paths.project_root}}/state/locks/daily-ios-version-0.51.lock`; `mkdir "$LOCK"` (existing blocks; never steal). Atomically write metadata/four inputs with selected branch/FROM/TO; run `bind-context --run-dir`, then assign `{{bindings.agents.UWISwiftAuditor}}` `mode=daily_code_audit`.
 
 Chain: `UWISwiftAuditor -> UWISecurityAuditor -> UWICryptoAuditor -> UWIInfraEngineer -> optional UWIResearchAgent -> UWIQAEngineer -> UWICTO -> UWIInfraEngineer`; do not use `uaudit-*` subagents for daily real-delta audits.
 
