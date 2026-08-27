@@ -755,14 +755,14 @@ def _canonicalize(
     for sidecar in sidecars:
         for finding in sidecar["findings"]:
             _, location_key = _finding_location(finding)
-            key = (location_key, _normalize_key(finding["title"]))
+            key = location_key  # PRIMARY dedup: file:line is unique identifier
             finding_groups.setdefault(key, []).append((sidecar, finding))
         for limitation in sidecar["limitations"]:
             key = (_normalize_key(limitation["text"]), limitation["material"])
             limitation_groups.setdefault(key, []).append((sidecar, limitation))
 
     canonical_findings: list[dict[str, Any]] = []
-    for (location_key, normalized_title), candidates in finding_groups.items():
+    for location_key, candidates in finding_groups.items():  # PRIMARY dedup: location only
         candidates.sort(
             key=lambda item: (
                 SEVERITY_RANK[item[1]["severity"]],
@@ -792,7 +792,7 @@ def _canonicalize(
         key=lambda item: (
             SEVERITY_RANK[item["severity"]],
             item["dedup_key"]["location"],
-            item["dedup_key"]["title"],
+            # (title dedup removed - location is unique)
         )
     )
 
