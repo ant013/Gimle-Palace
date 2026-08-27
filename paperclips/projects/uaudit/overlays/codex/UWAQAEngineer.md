@@ -1,3 +1,8 @@
+---
+role: UWAQAEngineer
+kind: agent
+---
+
 ## Daily Version-Branch QA Verification Stage (Android)
 
 For `mode=daily_qa_verify`, set `HELPER={{paths.team_workspace_root}}/.uaudit-tools/uaudit_delivery_contract.py`; read `$RUN/run-context.json`, all validated prior sidecars/markers, human reports, and available tests. Verify high-risk findings when feasible; record unavailable commands as limitations, not findings.
