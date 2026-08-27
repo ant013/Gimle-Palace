@@ -1,8 +1,3 @@
----
-role: UWISwiftAuditor
-kind: agent
----
-
 ## HARDWARE LIMITATION: Old iMac - Command Line Tools Only
 
 **DO NOT attempt xcodebuild or Xcode compilation on this hardware.**
