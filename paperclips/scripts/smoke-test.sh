@@ -194,13 +194,24 @@ stage_7_e2e_handoff() {
   next_uuid=$(yq -r ".agents[\"${next_name}\"]" "$bindings")
   [ -n "$next_uuid" ] && [ "$next_uuid" != "null" ] || die "no implementer/reviewer/qa agent in $project_key"
 
+  project_uuid=$(yq -r '.project_id // ""' "$bindings")
+  cto_workspace_uuid=$(yq -r ".workspaces[\"${cto_name}\"] // \"\"" "$bindings")
+  next_workspace_uuid=$(yq -r ".workspaces[\"${next_name}\"] // \"\"" "$bindings")
+  if [ -n "$project_uuid" ] || [ -n "$cto_workspace_uuid" ] || [ -n "$next_workspace_uuid" ]; then
+    [ -n "$project_uuid" ] && [ -n "$cto_workspace_uuid" ] && [ -n "$next_workspace_uuid" ] || \
+      die "project-aware smoke requires complete project/workspace bindings"
+  fi
+  e2e_timeout=$(yq -r '.smoke.e2e_timeout_seconds // 180' "$manifest")
+
   cto_target=$(yq -r ".agents[] | select(.agent_name == \"${cto_name}\") | .target" "$manifest")
   next_target=$(yq -r ".agents[] | select(.agent_name == \"${next_name}\") | .target" "$manifest")
   if [ "$cto_target" != "$next_target" ]; then
     log info "  mixed-target handoff probe: ${cto_name}[${cto_target}] → ${next_name}[${next_target}]"
   fi
 
-  probe_e2e_handoff "$company_id" "$cto_uuid" "$cto_name" "$next_uuid" "$next_name" || \
+  probe_e2e_handoff \
+    "$company_id" "$cto_uuid" "$cto_name" "$next_uuid" "$next_name" \
+    "$project_uuid" "$cto_workspace_uuid" "$next_workspace_uuid" "$e2e_timeout" || \
     die "stage 7: e2e handoff probe failed"
 
   log ok "[7/7] e2e handoff green"

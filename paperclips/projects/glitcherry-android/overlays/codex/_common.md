@@ -11,14 +11,16 @@ release operations.
 Resolve handoffs only through these host-local bindings; never copy an ID from
 another company:
 
-| Agent | Binding |
-| --- | --- |
-| `GlitcherryCEO` | `{{bindings.agents.GlitcherryCEO}}` |
-| `GlitcherryCTO` | `{{bindings.agents.GlitcherryCTO}}` |
-| `GlitcherryAndroidEngineer` | `{{bindings.agents.GlitcherryAndroidEngineer}}` |
-| `GlitcherryMediaPipelineEngineer` | `{{bindings.agents.GlitcherryMediaPipelineEngineer}}` |
-| `GlitcherryCodeReviewer` | `{{bindings.agents.GlitcherryCodeReviewer}}` |
-| `GlitcherryQAEngineer` | `{{bindings.agents.GlitcherryQAEngineer}}` |
+Paperclip Project: `{{bindings.project_id}}`.
+
+| Agent | Agent binding | Project workspace binding |
+| --- | --- | --- |
+| `GlitcherryCEO` | `{{bindings.agents.GlitcherryCEO}}` | `{{bindings.workspaces.GlitcherryCEO}}` |
+| `GlitcherryCTO` | `{{bindings.agents.GlitcherryCTO}}` | `{{bindings.workspaces.GlitcherryCTO}}` |
+| `GlitcherryAndroidEngineer` | `{{bindings.agents.GlitcherryAndroidEngineer}}` | `{{bindings.workspaces.GlitcherryAndroidEngineer}}` |
+| `GlitcherryMediaPipelineEngineer` | `{{bindings.agents.GlitcherryMediaPipelineEngineer}}` | `{{bindings.workspaces.GlitcherryMediaPipelineEngineer}}` |
+| `GlitcherryCodeReviewer` | `{{bindings.agents.GlitcherryCodeReviewer}}` | `{{bindings.workspaces.GlitcherryCodeReviewer}}` |
+| `GlitcherryQAEngineer` | `{{bindings.agents.GlitcherryQAEngineer}}` | `{{bindings.workspaces.GlitcherryQAEngineer}}` |
 
 ### Execution invariants
 
@@ -27,8 +29,11 @@ another company:
 - Before selection, prove there is no non-terminal direct child, unresolved
   blocker, dirty persistent clone, approved-but-unmerged PR, residual exact ref,
   or orphaned recorded temporary worktree.
-- Create exactly one child with `parentId=<root-id>`, verify it, then PATCH the
-  parent to API status `blocked` with `blockedByIssueIds=[<child-id>]`.
+- Create exactly one child with `parentId=<root-id>`,
+  `projectId={{bindings.project_id}}`, and
+  `projectWorkspaceId={{bindings.workspaces.GlitcherryCTO}}`; verify it, then
+  PATCH the parent to API status `blocked` with
+  `blockedByIssueIds=[<child-id>]`.
 - A completed child may wake the parent through `issue_blockers_resolved` and/or
   `issue_children_completed`. One bounded watchdog recovery wake is allowed; a
   second child is not a recovery mechanism.
@@ -47,6 +52,9 @@ another company:
 - Your runtime cwd is the persistent workspace root under
   `{{paths.team_workspace_root}}`; the generated role prompt is
   `workspace/AGENTS.md`.
+- Every issue must select Paperclip Project `{{bindings.project_id}}` and the
+  workspace binding for its current assignee. A missing or mismatched selection is
+  a stop condition because the installed runtime otherwise falls back to agent-home.
 - The Android checkout is `workspace/repo`; its tracked `AGENTS.md` remains the
   repository-local policy and must never be replaced by the generated prompt.
 - Only `GlitcherryCTO` also uses `workspace/control` for the canonical roadmap
@@ -89,9 +97,10 @@ new authority.
 
 ### Handoff and disposable smoke
 
-Every handoff is `POST evidence` and require 2xx, then PATCH the exact assignee
-and status, perform one read-only verification, and STOP. A 409 permits one
-reload and the documented recovery path only.
+Every handoff is `POST evidence` and require 2xx, then PATCH the exact assignee,
+status, and that same agent's Project workspace binding. Perform one read-only verification
+of all three fields, then STOP. A 409 permits one reload and the
+documented recovery path only.
 
 An issue title beginning exactly with `smoke-probe-` or `smoke-e2e-` is a
 disposable, repository-write-free authority probe. For it, do only the requested

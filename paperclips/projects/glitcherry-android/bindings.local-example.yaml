@@ -2,6 +2,7 @@
 # ~/.paperclip/projects/glitcherry-android/bindings.yaml with mode 600.
 schemaVersion: 2
 company_id: "00000000-0000-0000-0000-000000000004"
+project_id: "00000000-0000-0000-0000-000000000400"
 agents:
   GlitcherryCEO: "00000000-0000-0000-0000-000000000410"
   GlitcherryCTO: "00000000-0000-0000-0000-000000000411"
@@ -9,3 +10,10 @@ agents:
   GlitcherryMediaPipelineEngineer: "00000000-0000-0000-0000-000000000413"
   GlitcherryCodeReviewer: "00000000-0000-0000-0000-000000000414"
   GlitcherryQAEngineer: "00000000-0000-0000-0000-000000000415"
+workspaces:
+  GlitcherryCEO: "00000000-0000-0000-0000-000000000420"
+  GlitcherryCTO: "00000000-0000-0000-0000-000000000421"
+  GlitcherryAndroidEngineer: "00000000-0000-0000-0000-000000000422"
+  GlitcherryMediaPipelineEngineer: "00000000-0000-0000-0000-000000000423"
+  GlitcherryCodeReviewer: "00000000-0000-0000-0000-000000000424"
+  GlitcherryQAEngineer: "00000000-0000-0000-0000-000000000425"

@@ -89,5 +89,6 @@ identity/capability probe. Do not inspect media or modify repositories.
 
 ## Atomic handoff
 
-Push the exact task head, POST evidence and require 2xx, PATCH the reviewer and
-status, perform one read-only verification, then STOP.
+Push the exact task head, POST evidence and require 2xx, PATCH the reviewer,
+status, and reviewer's bound `projectWorkspaceId`, perform one read-only
+verification of all fields, then STOP.

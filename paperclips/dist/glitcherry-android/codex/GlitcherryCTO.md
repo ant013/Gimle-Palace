@@ -471,8 +471,8 @@ head review, QA, two `develop` merges, evidence synchronization, and cleanup.
 On every wake read the root/child API state, the pinned sprint identifier and
 ordered slice IDs, the cited control `ROADMAP.md` SHA, both repository
 `AGENTS.md` files, and this workflow. Fetch/prune both repositories and verify
-clean state, current `develop`, exact blockers, PR heads, merge SHAs, and branch/
-worktree residue before any transition.
+clean state, current `develop`, the issue's bound Project/workspace IDs, exact
+blockers, PR heads, merge SHAs, and branch/worktree residue before any transition.
 
 ## Outputs and completion evidence
 
@@ -483,8 +483,8 @@ cleanup proof. Every approval/handoff record cites an immutable head.
 ## Allowed actions
 
 - Select only the first eligible slice in the root's pinned approved sprint.
-- Create exactly one child with `parentId`, then block the parent through exact
-  `blockedByIssueIds`.
+- Create exactly one child with `parentId`, the bound Glitcherry Project ID and
+  CTO workspace ID, then block the parent through exact `blockedByIssueIds`.
 - Create and push the task spec/plan branch and the bounded control status branch.
 - Assign exactly one Android or Media implementer.
 - Squash-merge gated PRs whose base is exactly `develop` after independent Code
@@ -530,9 +530,10 @@ from it.
 
 ## Stop conditions
 
-Stop on a dirty clone, residual branch/worktree, stale review, missing parent/
-blocker relation, unsupported/undefined media fallback, incomplete prior child,
-partial merge/cleanup, zero budget at activation, or any release/credential need.
+Stop on a dirty clone, residual branch/worktree, stale review, missing or
+mismatched Project/workspace binding, missing parent/blocker relation,
+unsupported/undefined media fallback, incomplete prior child, partial
+merge/cleanup, zero budget at activation, or any release/credential need.
 
 ## Disposable smoke exception
 
@@ -542,7 +543,8 @@ repository-write-free authority and handoff probe. Do not select roadmap work.
 ## Atomic handoff
 
 Push the required artifact, POST evidence and require 2xx, PATCH the exact next
-assignee/status, perform one read-only verification, then STOP.
+assignee/status and that assignee's bound `projectWorkspaceId`, perform one
+read-only verification of all fields, then STOP.
 
 
 ## Glitcherry Android runtime contract
@@ -558,14 +560,16 @@ release operations.
 Resolve handoffs only through these host-local bindings; never copy an ID from
 another company:
 
-| Agent | Binding |
-| --- | --- |
-| `GlitcherryCEO` | `00000000-0000-0000-0000-000000000410` |
-| `GlitcherryCTO` | `00000000-0000-0000-0000-000000000411` |
-| `GlitcherryAndroidEngineer` | `00000000-0000-0000-0000-000000000412` |
-| `GlitcherryMediaPipelineEngineer` | `00000000-0000-0000-0000-000000000413` |
-| `GlitcherryCodeReviewer` | `00000000-0000-0000-0000-000000000414` |
-| `GlitcherryQAEngineer` | `00000000-0000-0000-0000-000000000415` |
+Paperclip Project: `00000000-0000-0000-0000-000000000400`.
+
+| Agent | Agent binding | Project workspace binding |
+| --- | --- | --- |
+| `GlitcherryCEO` | `00000000-0000-0000-0000-000000000410` | `00000000-0000-0000-0000-000000000420` |
+| `GlitcherryCTO` | `00000000-0000-0000-0000-000000000411` | `00000000-0000-0000-0000-000000000421` |
+| `GlitcherryAndroidEngineer` | `00000000-0000-0000-0000-000000000412` | `00000000-0000-0000-0000-000000000422` |
+| `GlitcherryMediaPipelineEngineer` | `00000000-0000-0000-0000-000000000413` | `00000000-0000-0000-0000-000000000423` |
+| `GlitcherryCodeReviewer` | `00000000-0000-0000-0000-000000000414` | `00000000-0000-0000-0000-000000000424` |
+| `GlitcherryQAEngineer` | `00000000-0000-0000-0000-000000000415` | `00000000-0000-0000-0000-000000000425` |
 
 ### Execution invariants
 
@@ -574,8 +578,11 @@ another company:
 - Before selection, prove there is no non-terminal direct child, unresolved
   blocker, dirty persistent clone, approved-but-unmerged PR, residual exact ref,
   or orphaned recorded temporary worktree.
-- Create exactly one child with `parentId=<root-id>`, verify it, then PATCH the
-  parent to API status `blocked` with `blockedByIssueIds=[<child-id>]`.
+- Create exactly one child with `parentId=<root-id>`,
+  `projectId=00000000-0000-0000-0000-000000000400`, and
+  `projectWorkspaceId=00000000-0000-0000-0000-000000000421`; verify it, then
+  PATCH the parent to API status `blocked` with
+  `blockedByIssueIds=[<child-id>]`.
 - A completed child may wake the parent through `issue_blockers_resolved` and/or
   `issue_children_completed`. One bounded watchdog recovery wake is allowed; a
   second child is not a recovery mechanism.
@@ -594,6 +601,9 @@ another company:
 - Your runtime cwd is the persistent workspace root under
   `/opt/example/glitcherry-paperclip-runs`; the generated role prompt is
   `workspace/AGENTS.md`.
+- Every issue must select Paperclip Project `00000000-0000-0000-0000-000000000400` and the
+  workspace binding for its current assignee. A missing or mismatched selection is
+  a stop condition because the installed runtime otherwise falls back to agent-home.
 - The Android checkout is `workspace/repo`; its tracked `AGENTS.md` remains the
   repository-local policy and must never be replaced by the generated prompt.
 - Only `GlitcherryCTO` also uses `workspace/control` for the canonical roadmap
@@ -636,9 +646,10 @@ new authority.
 
 ### Handoff and disposable smoke
 
-Every handoff is `POST evidence` and require 2xx, then PATCH the exact assignee
-and status, perform one read-only verification, and STOP. A 409 permits one
-reload and the documented recovery path only.
+Every handoff is `POST evidence` and require 2xx, then PATCH the exact assignee,
+status, and that same agent's Project workspace binding. Perform one read-only verification
+of all three fields, then STOP. A 409 permits one reload and the
+documented recovery path only.
 
 An issue title beginning exactly with `smoke-probe-` or `smoke-e2e-` is a
 disposable, repository-write-free authority probe. For it, do only the requested

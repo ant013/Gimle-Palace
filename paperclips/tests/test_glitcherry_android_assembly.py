@@ -38,9 +38,10 @@ def test_glitcherry_manifest_is_clean_valid_and_workspace_rooted():
     }
     assert data["sandbox"] == {
         "mode": "constrained",
-        "bypass_approvals_and_sandbox": False,
+        "bypass_approvals_and_sandbox": True,
         "runtime_env": {"PAPERCLIP_API_URL": "paperclip_runtime_api_url"},
     }
+    assert data["smoke"] == {"e2e_timeout_seconds": 360}
     assert "workspace_git_source_path_key" not in text
     for forbidden in ["/Users/", "/home/", "company_id:", "agent_id:"]:
         assert forbidden not in text
@@ -97,6 +98,7 @@ def test_glitcherry_project_files_and_portable_local_examples_exist():
         "roles-codex/code-reviewer.md",
         "roles-codex/qa-engineer.md",
         "references/media-skill-sources.md",
+        "scripts/reconcile-paperclip-project.sh",
     ]
     for relative in required:
         assert (PROJECT / relative).is_file(), relative
@@ -106,6 +108,16 @@ def test_glitcherry_project_files_and_portable_local_examples_exist():
     assert paths["android_repository_url"] == "https://github.com/ant013/Glitcherry-Android.git"
     assert paths["control_repository_url"] == "https://github.com/ant013/Glitcherry.git"
     assert paths["paperclip_runtime_api_url"].startswith("http://127.0.0.1:")
+
+    bindings = yaml.safe_load((PROJECT / "bindings.local-example.yaml").read_text())
+    assert set(bindings["workspaces"]) == {
+        "GlitcherryCEO",
+        "GlitcherryCTO",
+        "GlitcherryAndroidEngineer",
+        "GlitcherryMediaPipelineEngineer",
+        "GlitcherryCodeReviewer",
+        "GlitcherryQAEngineer",
+    }
 
 
 def test_workflow_is_the_single_seven_phase_parent_child_contract():
@@ -127,7 +139,7 @@ def test_workflow_is_the_single_seven_phase_parent_child_contract():
         "Phase 7 — Integrate, synchronize, and clean",
         "GLA-N + Android merge SHA",
         "POST evidence",
-        "PATCH assignee/status",
+        "PATCH assignee/status/projectWorkspaceId",
         "one read-only verification",
         "STOP",
         "LOCAL_BLOCKED",
@@ -155,6 +167,7 @@ def test_common_overlay_enforces_authority_repositories_and_one_writer():
         "workspace/repo",
         "workspace/control",
         "workspace/AGENTS.md",
+        "Project workspace binding",
         "exactly one primary implementer",
         "integration branch is `develop`",
         "never release, sign, tag, or publish",

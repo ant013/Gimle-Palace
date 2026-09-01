@@ -213,21 +213,37 @@ probe_agent_for_profile() {
 }
 
 # probe_e2e_handoff <company> <cto_uuid> <cto_name> <next_uuid> <next_name>
+#   [project_uuid] [cto_workspace_uuid] [next_workspace_uuid] [timeout_seconds]
 probe_e2e_handoff() {
   local company="$1"; local cto_uuid="$2"; local cto_name="$3"; local next_uuid="$4"; local next_name="$5"
-  local question="POST an evidence comment to /api/issues/{id}/comments ending with @${next_name}; require 2xx. Then PATCH /api/issues/{id} to assign ${next_name} (uuid ${next_uuid}) and keep status todo. Perform exactly one read-only verification of assignee/status, ask them to reply exactly 'cross-target ack', then STOP."
+  local project_uuid="${6:-}"; local cto_workspace_uuid="${7:-}"; local next_workspace_uuid="${8:-}"
+  local timeout="${9:-180}"
+  [[ "$timeout" =~ ^[0-9]+$ ]] && [ "$timeout" -ge 30 ] && [ "$timeout" -le 900 ] || {
+    log err "invalid e2e timeout"; return 1;
+  }
+  local question="POST an evidence comment to /api/issues/{id}/comments ending with @${next_name}; require 2xx. Then PATCH /api/issues/{id} to assign ${next_name} (uuid ${next_uuid}) and keep status todo."
+  if [ -n "$project_uuid" ]; then
+    [ -n "$cto_workspace_uuid" ] && [ -n "$next_workspace_uuid" ] || {
+      log err "project-aware e2e probe requires both workspace bindings"; return 1;
+    }
+    question="${question} In the same PATCH keep projectId ${project_uuid} and set projectWorkspaceId ${next_workspace_uuid}."
+  fi
+  question="${question} Perform exactly one read-only verification of assignee/status/project/workspace, ask them to reply exactly 'cross-target ack', then STOP."
 
   local title
   title="smoke-e2e-$(date -u +%Y%m%dT%H%M%SZ)"
   local body
-  body=$(jq -n --arg c "$company" --arg a "$cto_uuid" --arg t "$title" --arg q "$question" \
-    '{companyId: $c, title: $t, description: $q, status: "todo", assigneeAgentId: $a}')
+  body=$(jq -n \
+    --arg c "$company" --arg a "$cto_uuid" --arg t "$title" --arg q "$question" \
+    --arg p "$project_uuid" --arg w "$cto_workspace_uuid" \
+    '{companyId: $c, title: $t, description: $q, status: "todo", assigneeAgentId: $a}
+     + (if $p == "" then {} else {projectId: $p, projectWorkspaceId: $w} end)')
   local issue_id
   issue_id=$(paperclip_post "/api/companies/${company}/issues" "$body" | jq -r .id)
   [ -n "$issue_id" ] && [ "$issue_id" != "null" ] || { log err "e2e issue create failed"; return 1; }
   _record_smoke_issue "$issue_id" || return 1
 
-  local timeout=180; local elapsed=0
+  local elapsed=0
   while [ "$elapsed" -lt "$timeout" ]; do
     sleep 10; elapsed=$((elapsed + 10))
     local issue
