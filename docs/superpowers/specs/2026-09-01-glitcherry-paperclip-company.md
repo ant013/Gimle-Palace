@@ -10,6 +10,8 @@ Implementation branch: `feature/glitcherry-paperclip-company`
 
 Control-plane baseline: `Glitcherry@f3e49439d098b2e818f8beed2b53a4432cc3dd95`
 
+Control-plane design sync: `docs/paperclip-company-agent-roster@9fc67b7d0a1c7d3d4431e6161c69549aac9041b7`
+
 ## 1. Outcome
 
 Add a reusable non-release Walker prompt profile, a complete project-specific
@@ -67,7 +69,8 @@ The Human Engineering Lead remains the only owner of:
 - product and architecture decisions not already resolved by a slice;
 - stage acceptance, budgets and company administration;
 - release builds, signing, Play Console and publication;
-- release credentials, SSH administration and destructive Git operations.
+- release credentials, SSH administration and destructive Git operations outside the
+  exact, proven-merged task/status branch cleanup defined by this workflow.
 
 The CEO is not a roadmap author, outer Walker, technical planner, merger, or release
 manager. The CEO is absent from the normal slice handoff chain. The CTO escalates to
@@ -99,6 +102,11 @@ product/roadmap/human-only decision.
 - The current Gimle/Palace MCP was unavailable in this design session and the existing
   codebase-memory Gimle index points to a stale checkout. Every load-bearing framework
   claim was therefore rechecked with Serena and targeted `rg` at the exact baseline.
+- Current Paperclip behavior was rechecked in the local fork at
+  `paperclip@584cb258c844a90db4ebfbd8fc09418572d26ae7`: supported issue statuses include
+  `blocked`; `parentId` and replace-all `blockedByIssueIds` are first-class; completed
+  blockers/direct children emit `issue_blockers_resolved` and
+  `issue_children_completed`; monthly legacy enforcement applies only above zero.
 
 ## 4. Scope
 
@@ -114,13 +122,19 @@ The profile extends `reviewer` and adds existing fragments for:
 - `worktree/active.md`;
 - `pre-work/existing-field-semantics.md`;
 - `universal/cto-merge-authority.md`;
-- `handoff/phase-orchestration.md`;
 - `plan/producer.md`.
 
 It deliberately excludes `git/release-cut.md`. Project role craft and common overlay
 further restrict its merge authority to PRs whose base is exactly
 `{{project.integration_branch}}`. It cannot approve its own spec, implementation, or
 QA evidence even though the inherited reviewer capability teaches review mechanics.
+
+The reusable profile deliberately does **not** include
+`handoff/phase-orchestration.md`. That fragment hard-codes the older Gimle
+plan-first flow, a separate architect reviewer and a release-cut handoff. The
+project's `WORKFLOW.md` and CTO role craft are the only phase authority for
+Glitcherry. Rendered-prompt tests reject the conflicting `Plan-first review`,
+`architect reviewer`, `Phase 3.2` and `release-cut planned` markers.
 
 `bootstrap-project.sh` gains a `walker` profile dispatch case. Runtime smoke gains:
 
@@ -147,19 +161,21 @@ After the implementation is merged to Gimle-Palace `develop`:
 2. create a fresh Gimle deploy worktree from the merged `origin/develop`;
 3. create mode-`600` host-local `paths.yaml` and generated `bindings.yaml` under
    `~/.paperclip/projects/glitcherry-android/`;
-4. validate, build, bootstrap, normalize every generated Android workspace `origin`
-   from the verified source clone's GitHub upstream, prepare the CTO's secondary
-   control checkout, and run quick smoke and a disposable end-to-end canary;
+4. validate, build and bootstrap with each agent rooted at its persistent workspace;
+   run the project workspace preparer to clone the verified GitHub Android upstream
+   into each `workspace/repo` and the control upstream into CTO
+   `workspace/control`, then run quick smoke and a disposable end-to-end canary;
 5. verify exact API state and leave the company with no feature/root roadmap issue;
 6. remove the fresh deploy worktree after it is clean and no longer needed.
 
 ### Control-plane documentation sync
 
-After bundle implementation is approved, update the Glitcherry control documentation
-to replace the provisional topology with the exact six-role roster, record why the
-Media Rendering and Pipeline Engineer is permanent, list beta/release on-demand roles, and
-replace bootstrap placeholders with the tested company/project commands. Resolve
-owner decision 4 only after the real company and canary are verified.
+The Glitcherry review branch already synchronizes the provisional design with the exact
+six-role roster, the permanent Media Rendering and Pipeline Engineer rationale,
+beta/release on-demand roles, and the corrected Walker/workspace contracts. After the
+bundle is implemented and the live canary passes, replace only the remaining bootstrap
+placeholders with tested evidence and then resolve owner decision 4. Company existence
+or roadmap execution must not be claimed before that verification.
 
 ## 5. Non-scope
 
@@ -189,7 +205,12 @@ execution roles; the Walker, media specialist and adversarial Code Reviewer use
 | `GlitcherryAndroidEngineer` | `implementer` | `engineer` / `code` | `platform_implementer` | `high` | CTO | Compose/app scaffold, import, state, MediaStore/share, platform integration, build/tooling | Own GPU/effect/codec design without Media review, self-review, merge/release |
 | `GlitcherryMediaPipelineEngineer` | `implementer` | `engineer` / `atom` | `media_implementer` | `xhigh` | CTO | 3D/spatial and temporal rendering, GLSL/AGSL/OpenGL effects, presets, Media3/MediaCodec, audio sync, deterministic export/performance | Change product visual contract, platform scope outside plan, self-review, merge/release |
 | `GlitcherryCodeReviewer` | `reviewer` | `engineer` / `eye` | `reviewer` | `xhigh` | CTO | Independent spec/plan review plus exact-head code review, Android/media architecture boundaries, Kotlin correctness, lifecycle/concurrency, regression and test quality | Implement fixes, approve hidden product decisions, review a stale head, merge, release |
-| `GlitcherryQAEngineer` | `qa` | `qa` / `bug` | `qa` | `high` | CTO | Acceptance evidence, unit/lint, sequential AVD, Compose UI, Maestro, media fixtures and physical-device gate | Fix production code, waive failures, run concurrent emulators, merge/release |
+| `GlitcherryQAEngineer` | `reviewer` | `qa` / `bug` | `qa` | `high` | CTO | Acceptance evidence, unit/lint, sequential AVD, Compose UI, Maestro, media fixtures and physical-device gate | Commit/push/fix production code, waive failures, run concurrent emulators, merge/release |
+
+QA intentionally composes the non-writing `reviewer` capability profile and receives
+its smoke/evidence contract from the Glitcherry QA role craft. The established `qa`
+profile extends `implementer` and explicitly advertises `commit push`; using it while
+claiming that QA cannot push would create two contradictory authority layers.
 
 ### Why the custom permanent Media role is required
 
@@ -264,20 +285,20 @@ agent bundle:
   [Media3 release notes](https://developer.android.com/jetpack/androidx/releases/media3)
   complete the required baseline for preview stability, API-floor guards, format/HDR
   policy, and current dependency versioning.
-- [`sunnat629/android-media-pack`](https://github.com/sunnat629/android-media-pack)
+- [`sunnat629/android-media-pack@1d74b495`](https://github.com/sunnat629/android-media-pack/tree/1d74b4953d21ee31a3acf61eff68972e100c2ac3)
   skills `media3-transformer-editing`,
   `media3-video-effects-lottie-muxer`, `media3-inspector-metadata-thumbnails` and
   `media3-test-utils-robolectric` are useful workflow/checklist inputs, but the
   repository currently advertises Media3 `1.10.1` while the official stable release is
-  `1.11.0` (2026-08-05). Treat it as a checklist/reference source only, never as the
-  version baseline.
-- [`MiniMax-AI/skills@shader-dev`](https://github.com/MiniMax-AI/skills/tree/main/skills/shader-dev)
+  `1.11.0` (2026-08-05). The pinned source is Apache-2.0. Treat it as a
+  checklist/reference source only, never as the version baseline.
+- [`MiniMax-AI/skills@60aaae52/shader-dev`](https://github.com/MiniMax-AI/skills/tree/60aaae52bb2af8162732751a4332f62a5fef518b/skills/shader-dev)
   is a useful MIT-licensed GLSL technique library for
   SDF, ray marching, procedural effects, multipass buffers and post-processing. Its
   ShaderToy/WebGL assumptions must be adapted and verified for the selected Android
   OpenGL ES, AGSL or Media3 Effect surface. The upstream repository is explicitly
   marked beta, so only pinned snippets/checklists are acceptable inputs.
-- [`krutikjain/android-agent-skills@android-media-files-sharing`](https://github.com/krutikJain/android-agent-skills/tree/main/skills/android-media-files-sharing)
+- [`krutikJain/android-agent-skills@c5bf6731/android-media-files-sharing`](https://github.com/krutikJain/android-agent-skills/tree/c5bf6731b8441019418784484cca1578413e6ad3/skills/android-media-files-sharing)
   informs the Android
   Engineer's import/export URI and share boundary; it is not the Media agent's core
   render skill and must not drag in unrelated release/CI authority from the broader
@@ -292,6 +313,11 @@ implementation records repository URL, immutable revision, license, selected fil
 Android adaptation delta, allowed responsibility area, and a current official-
 documentation freshness check. No role may execute vendor install/update scripts during
 normal slice work.
+
+No third-party skill is installed, vendored or invoked by the runtime company in this
+change. The pinned files are design evidence from which a small project-owned contract
+is distilled. Installing a real external skill later requires its own reviewed spec,
+license/source diff and rendered-authority test.
 
 ## 7. Roles that are intentionally not permanent
 
@@ -332,6 +358,11 @@ Narrower instructions do not override a higher authority boundary. An issue cann
 grant release permission, make the CEO a Walker, let an implementer self-review, or
 turn a `DRAFT` slice into executable work.
 
+Within the project layer, `paperclips/projects/glitcherry-android/WORKFLOW.md` is the
+single lifecycle authority. Common overlays and all six role crafts link to that file
+and explicitly supersede conflicting phase names inherited from reusable fragments.
+The rendered bundle must contain one phase graph, not a collection of prose overrides.
+
 Every custom role file uses the same sections:
 
 - identity and single-sentence mission;
@@ -361,73 +392,97 @@ Bindings and host paths are rendered from mode-`600` host-local files.
 
 CEO is not part of the normal chain.
 
-1. **Activation and parent — CTO.** Only after a Human Engineering Lead root command,
-   claim one long-lived parent Walker issue for the approved sprint. Fetch the control
-   repo and select the first `READY` slice with all dependencies `DONE`. Before child
-   creation, prove there is no non-terminal prior child, task branch/worktree residue
-   or dirty reusable workspace. Any ambiguity or residue enters recovery and stops
-   selection; it never permits a second child.
-2. **One child and materialized spec — CTO.** Create exactly one child issue for the
-   selected slice and one Android branch/worktree from current
-   `origin/develop`; write and push the spec-only commit. The spec cannot expand the
-   human slice.
-3. **Spec review — Code Reviewer.** Independently review feasibility, Android/media
-   boundaries, hidden product decisions and testability. Findings return to CTO.
-   Approval is an evidence comment on the exact spec head.
-4. **Plan and plan review — CTO -> Code Reviewer.** CTO writes the concrete plan. The
-   Code Reviewer verifies traceability and architecture without choosing or performing
-   implementation. Maximum two revision rounds; unresolved disagreement goes to the
-   Human Engineering Lead.
-5. **Implementation — exactly one engineer.** CTO routes platform/app/tooling work to
-   `GlitcherryAndroidEngineer` and render/effect/codec/export work to
-   `GlitcherryMediaPipelineEngineer`. Cross-domain slices pick one primary owner by
-   acceptance risk and may request one bounded read-only finding from the other. The
-   assigned engineer implements and pushes tests and code on the approved task branch
-   and opens or updates its PR. Implementers may push only the assigned task branch;
-   reviewers and QA do not push; only CTO merges.
-6. **Exact-head code and architecture review — Code Reviewer.** Review the exact PR
-   head and run the specified mechanical checks. For render/codec/shader, module,
-   persistence/permission, concurrency or dependency changes, apply an explicit fresh
-   architecture/media lens using current official documentation and the routed domain
-   sources above. Verify that unstable Media3 APIs are explicitly opted into, that
-   `CompositionPlayer` use is justified and single-thread-safe, that AGSL paths are
-   API-gated, and that unsupported format/HDR behavior is explicit rather than silent.
-   Findings return to the same implementer; plan/scope gaps return to CTO. Maximum two
-   implementation review loops before escalation.
-7. **QA — QA Engineer.** Run risk-scaled gates, never two AVDs concurrently. Product
-   defects return to the implementer; spec/acceptance gaps return to CTO; physical
-   device or owner-only blockers go to the Human Engineering Lead. Media slices must
-   cover at least one normal path and one degraded path among unsupported import,
-   permission denial, background/foreground during export, optimization fallback, or
-   device-specific codec/GPU rejection.
-8. **Android integration — CTO.** Verify PR base is exactly `develop`, exact reviewed
-   head, required checks, Code Reviewer approval and QA PASS. Squash-merge
-   automatically; never target `main`. Record the immutable Android merge SHA on the
-   active child before any control-repository change.
-9. **Control status integration — CTO.** In the CTO's separate control checkout,
-    create a status branch from current control `origin/develop`, change only status,
-    evidence and required ADR index, push and squash-merge to control `develop` after
-    immutable Android evidence is verified. No product-scope change is allowed.
-10. **Cleanup — CTO.** Verify both merge SHAs, remove every exact slice worktree,
-    delete merged local and remote task/status branches, prune, switch reusable agent
-    workspaces back to current `develop`, and verify clean source and runtime
-    checkouts. Cleanup evidence is posted to the active child.
-11. **Terminal and next-child gate — CTO.** Mark the child `DONE` only after both
-    merges and cleanup. Only a subsequent parent wake may then select and create the
-    next first eligible `READY` child. `LOCAL_BLOCKED`, partial merge, dirty workspace,
-    undeleted worktree/branch or missing evidence keeps the current child active and
-    stops the Walker; it never permits parking the child and starting another. Never
-    close a sprint or stage without the human gate.
+### Parent Walker loop
 
-If Android merged but control integration or cleanup failed, the child enters a
-bounded recovery path using the recorded Android merge SHA. Recovery completes only
-the missing control/cleanup steps, does not recreate or re-merge implementation, and
-does not scan the roadmap for another slice.
+The Human Engineering Lead creates or explicitly activates one root issue whose
+description pins the approved sprint identifier, ordered slice IDs and control
+`ROADMAP.md` head SHA. The CTO may execute only that pinned set; it cannot silently
+continue into another sprint.
 
-Paperclip status and assignee changes use the current atomic protocol. A comment or
-mention without the PATCH is not a handoff. A PATCH without a successful evidence POST
-is forbidden. On HTTP 409, reload once and stop/escalate instead of retrying a wake
-loop.
+On every parent wake, CTO fetches the control repository and verifies all of these
+before selection: no non-terminal direct child, no unresolved `blockedBy`, no task or
+status branch residue, no approved-but-unmerged PR, no dirty persistent repository and
+no orphaned temporary worktree. It then selects the first pinned `READY` slice whose
+dependencies are `DONE`.
+
+For a selected slice CTO creates exactly one issue with `parentId=<root-id>`, verifies
+the parent/child relation, then PATCHes the parent to `status=blocked` with
+`blockedByIssueIds=[<child-id>]`. This uses the current Paperclip dependency contract,
+not Trading's old prose-only `relatedWork.outbound` convention. When the child reaches
+`done`, Paperclip wakes the parent with `issue_blockers_resolved` and/or
+`issue_children_completed`; CTO clears the resolved blocker, verifies cleanup again and
+performs the next scan. If the automatic wake is absent, watchdog may issue one bounded
+recovery wake and CTO polls the exact child once. It never creates a second child as a
+recovery mechanism.
+
+If all pinned sprint slices are `DONE`, CTO posts the sprint execution summary and
+marks the root `done`; this does not accept the product stage or start the next sprint.
+If unfinished pinned work exists but no slice is eligible, the root becomes
+`blocked` with reason code `ROADMAP_BLOCKED`, the exact Human Engineering Lead action,
+and no autonomous selection outside the pinned sprint.
+
+### Seven child phases
+
+1. **Spec — CTO.** From a clean persistent Android clone, fetch/prune, fast-forward
+   local `develop`, create `feature/GLA-N-<slug>`, write only the materialized technical
+   spec and push the spec-only commit. Set the child `in_review` and assign Code
+   Reviewer. The spec may narrow but never expand the human slice.
+2. **Independent spec review — Code Reviewer.** In a fresh wake, fetch the exact spec
+   head, review feasibility, Android/media boundaries, hidden product decisions and
+   testability, then restore the reviewer clone to clean current `develop`. Approval is
+   evidence tied to the immutable head; findings return to CTO.
+3. **Plan plus independent plan review — CTO -> Code Reviewer.** CTO writes and pushes
+   the traceable test/implementation/commit plan. Code Reviewer checks the exact head
+   without implementing. Maximum two spec/plan revision rounds; unresolved disagreement
+   blocks the child for the Human Engineering Lead.
+4. **Implementation — exactly one engineer.** CTO chooses Android or Media by primary
+   acceptance risk. The assigned engineer fetches the approved branch, implements,
+   runs tests, pushes only that task branch and opens/updates its PR. Before handing
+   off, the engineer switches its persistent clone back to clean `develop` but retains
+   the local task ref until the squash merge is proven. The other implementer remains
+   on `develop`; reviewers and QA never push; only CTO merges.
+5. **Exact-head code and architecture review — Code Reviewer.** In a fresh wake, review
+   the exact PR head and mechanical checks. High-risk media/platform changes receive
+   the explicit architecture/media lens, including experimental API, AGSL API-floor,
+   codec/HDR/fallback and preview/export parity checks. Code defects return to the same
+   implementer; plan/scope gaps return to CTO. Every new head invalidates prior review.
+   Maximum two implementation review loops.
+6. **QA — QA Engineer.** Fetch the exact reviewed head in detached read-only state,
+   run risk-scaled gates and only one AVD at a time, post command/result/artifact
+   evidence, then restore the clone to clean current `develop`. Media slices cover one
+   normal and one approved degraded path.
+7. **Integrate, synchronize and clean — CTO.** Verify the exact head, PR base
+   `develop`, required checks, Code Reviewer approval and QA PASS; squash-merge Android
+   and record its immutable merge SHA on the child. In the persistent control clone,
+   first search `origin/develop` for the unique `GLA-N + Android merge SHA` marker. If
+   absent, create one status branch, change only status/evidence/required ADR index,
+   push and squash-merge it; if present, skip duplicate control work. After both merge
+   SHAs are proven, run the bounded cleanup handoff to the primary implementer, clean
+   CTO's two clones, verify all phase-owner evidence, and only then mark the child
+   `done`.
+
+QA routing is deterministic:
+
+| Observation | Child transition |
+| --- | --- |
+| All required checks and acceptance evidence pass on the exact head | `in_progress` -> CTO for Phase 7 |
+| Reproducible implementation/build/test/device defect | `in_progress` -> the same implementer; prior review/QA invalid |
+| Scope drift, missing acceptance, spec/plan mismatch or undefined fallback | `in_progress` -> CTO; revise spec/plan and repeat independent gates |
+| Physical-device-only, owner-decision or credential/capability blocker | `blocked` with named Human Engineering Lead action; no next child |
+| Local infrastructure residue or transient iMac failure | `blocked` with reason `LOCAL_BLOCKED`; bounded recovery on the same child |
+
+`LOCAL_BLOCKED` and `ROADMAP_BLOCKED` are evidence reason codes, not invented
+Paperclip statuses; the API status is `blocked`. Neither reason permits parking the
+child and starting another.
+
+If Android merged but control integration or cleanup failed, recovery starts from the
+recorded Android SHA, checks whether the unique control marker already landed, and
+finishes only the missing control/cleanup/finalization steps. It never recreates or
+re-merges implementation and never scans for another slice.
+
+Every handoff is evidence POST -> require 2xx -> PATCH assignee/status -> exactly one
+read-only verification -> STOP. A mention is decoration, not a wake contract. On HTTP
+409, reload once and enter the explicit recovery path instead of retrying a wake loop.
 
 ## 10. Workspace, repositories and runtime policy
 
@@ -441,8 +496,10 @@ Expected live layout after approval:
 /Users/anton/Android/Glitcherry                      clean control source clone
 /Users/anton/Android/glitcherry-paperclip-runtime    non-repository runtime root
 /Users/anton/Android/glitcherry-paperclip-runs/
-  <Agent>/workspace/repo                             isolated Android clone
-  GlitcherryCTO/workspace/control                    CTO-only control clone
+  <Agent>/workspace/AGENTS.md                        generated role instructions
+  <Agent>/workspace/repo/AGENTS.md                   tracked Android repo rules
+  <Agent>/workspace/repo                             persistent Android clone
+  GlitcherryCTO/workspace/control                    persistent CTO-only control clone
 ```
 
 Assembly sandbox contract:
@@ -450,7 +507,14 @@ Assembly sandbox contract:
 - `mode: constrained`;
 - `bypass_approvals_and_sandbox: false` unless live canary proves required GitHub and
   local tool operations cannot work; any change to `true` requires a revised spec;
-- `workspace_git_source_path_key: android_source_root`;
+- do **not** set `workspace_git_source_path_key`: current bootstrap would make
+  `workspace/repo` the runtime cwd and overwrite its tracked `AGENTS.md` with the
+  per-agent prompt, making every Glitcherry-Android clone dirty before work begins;
+- runtime cwd stays the persistent `workspace` root and generated role instructions
+  stay at `workspace/AGENTS.md`; project Git commands operate only in `workspace/repo`;
+- after dormant bootstrap and before any agent wake, the idempotent project workspace
+  preparer clones the allowlisted GitHub upstream directly into `workspace/repo` and
+  never uses a local path as `origin`;
 - only `PAPERCLIP_API_URL` is injected and must be loopback HTTP;
 - the default per-agent workspace and scratch are writable;
 - the source clone and other reference roots are not shared writable workspaces;
@@ -459,6 +523,19 @@ Assembly sandbox contract:
 - all other agents use the Android checkout and GitHub/codebase-memory for read-only
   control context;
 - emulator execution is globally sequential on the 4-core iMac.
+
+Persistent `workspace`, `workspace/repo` and CTO `workspace/control` directories are
+never removed between slices. Normal slice execution rotates branches inside these
+clones and does not create an ephemeral `git worktree`. If an approved recovery step
+does create an exact temporary worktree, its absolute path and owning branch are
+recorded first and that temporary path alone is removed after merge.
+
+Reviewers and QA fetch an immutable head in detached state and restore current clean
+`develop` before handoff. The primary implementer also restores `develop` before
+review, but keeps the local task ref until merge. After squash merge, cleanup verifies
+the recorded PR head, absence of unpushed work and remote deletion before force-
+deleting that exact local task ref; this exception is necessary because squash commits
+are not ancestors of `develop`. No broad branch glob or workspace deletion is allowed.
 
 If constrained mode blocks a required operation, the canary fails. The implementation
 must first narrow the missing writable/read-only root or command. It must not silently
@@ -469,13 +546,16 @@ switch to unrestricted execution.
 - Model: `gpt-5.6-sol` for all six agents.
 - Reasoning: exact efforts in the roster table.
 - One product parent issue and at most one non-terminal child slice may be active.
-- One implementation owner and one writable Android task worktree may be active.
+- One implementation owner may have the task branch checked out writable at a time;
+  all other persistent clones remain clean `develop` or detached read-only review.
 - Review agents run after a pushed checkpoint; they do not write concurrently.
 - One Android emulator workload runs at a time; AVD 29, 34 and 36 are sequential.
 - CEO wakes only for an escalation or explicit governance check.
-- A monthly monetary budget is not guessed in the manifest. The Human Engineering
-  Lead sets and records it before activating the first `READY` slice. Missing budget
-  does not block dormant company creation but does block autonomous roadmap launch.
+- Bootstrap currently creates company/agent `budgetMonthlyCents: 0`; current Paperclip
+  enforces legacy monthly limits only when the value is greater than zero. Therefore
+  zero means no hard cap, not a safe zero-spend pause. Dormant creation may retain zero,
+  but first root activation requires verified positive company and per-agent caps plus
+  an alert threshold recorded by the Human Engineering Lead.
 
 ## 12. Files and areas affected
 
@@ -507,34 +587,36 @@ or canary agent selection.
 - `paperclips/projects/glitcherry-android/roles-codex/qa-engineer.md`
 - `paperclips/projects/glitcherry-android/references/media-skill-sources.md` — immutable
   upstream revisions, licenses, selected guidance and Android adaptation deltas.
-- `paperclips/projects/glitcherry-android/scripts/normalize-workspace-origins.sh` —
-  replace clone-local origins with the verified upstream of the clean Android seed.
+- `paperclips/projects/glitcherry-android/scripts/prepare-runtime-workspaces.sh` —
+  idempotently clone/verify direct GitHub Android repos under every persistent
+  workspace plus the CTO control repo without overwriting tracked `AGENTS.md`.
 - `paperclips/tests/test_glitcherry_android_assembly.py`
-- `paperclips/tests/test_glitcherry_android_workspace_origins.py`
+- `paperclips/tests/test_glitcherry_android_runtime_workspaces.py`
 - generated `paperclips/dist/glitcherry-android.resolved-assembly.json`
 - generated six files under `paperclips/dist/glitcherry-android/codex/`.
 
-No custom Codex subagent TOML files are planned. The Media role craft may route to
-audited domain `SKILL.md` references, but those skills add knowledge rather than hidden
-workers or authority. Permanent Paperclip roles keep exact ownership visible.
+No custom Codex subagent TOML files and no installed third-party skills are planned.
+The project-owned Media role craft cites the audited source record; it does not depend
+on hidden workers, vendor installers or ambient skill availability.
 
-### Glitcherry control repository after design approval
+### Glitcherry control repository design sync
 
 - `docs/runbooks/paperclip-android-team.md`
 - `docs/runbooks/walker-lifecycle.md` only where the exact routing/loop contract needs
   synchronization
 - `docs/research/paperclip/instruction-layering.md` for the final layer table and custom
   role authoring checklist
-- `ROADMAP.md` owner decision 4 and evidence log only after live canary succeeds
+- `ROADMAP.md` execution-state clarification is already on the review branch; owner
+  decision 4 and the evidence log change only after live canary succeeds
 - `README.md` only if links/status text requires synchronization.
 
 ## 13. Component analog and delta matrix
 
 | Behavioral slice | Primary spine | Supporting/counterexample | Preserved | Deliberate Glitcherry delta | Test before code |
 | --- | --- | --- | --- | --- | --- |
-| Non-release CTO Walker profile | `reviewer.yaml` plus current profile composer | Bootstrap/smoke profile dispatch; reject `cto.yaml` release-cut | Universal safety, discovery, review/plan mechanics, handoff, merge gates | New `walker` adds commit/push/worktree/merge/orchestration/plan, excludes release-cut; project overlay restricts merge to `develop` | Add failing profile inventory/chain/includes/no-release tests and failing runtime marker assertions before profile/script edits |
-| Glitcherry Android company bundle | ThorChain assembly, custom role files, workflow and exact project test | Trading parent/child and single Code Reviewer flow; fullAudit constrained workspace/tests; reject Trading/Wallet Radar CEO/CTO and legacy handoff | Portable manifest, host-local bindings, explicit identity, generated prompts, one active child, atomic handoff, dormant bootstrap | CEO governance rather than outer Walker; CTO sole Walker; six Android roles including custom Media implementer; two repos; `develop`; one implementer and one emulator | Add failing exact roster/files/authority/dormancy/render assertions, then create bundle until green |
-| Dormant bootstrap and canary | Journaled `bootstrap-project.sh` create-or-reuse lifecycle | Smoke/rollback disposable issue family and ThorChain dormancy; quarantine dirty shared iMac checkout | Prefix collision guard, idempotent bindings, per-agent workspaces, managed config reconciliation, disposable issue cleanup | Fresh deploy worktree, dedicated source clones, normalize local-seed clones to verified GitHub origins, CTO secondary control checkout, GLA prefix, no root issue and no autonomous activation | Run static bootstrap/smoke tests locally; then live preflight, bootstrap, exact API/origin assertions, disposable CTO->CodeReviewer handoff and post-canary zero-feature-issue check |
+| Non-release CTO Walker profile | `reviewer.yaml` plus current profile composer | Bootstrap/smoke profile dispatch; reject `cto.yaml` release-cut and generic phase-orchestration | Universal safety, discovery, review/plan mechanics, handoff, merge gates | New `walker` adds commit/push/worktree/merge/plan, excludes release-cut and hard-coded project phases; Glitcherry workflow restricts merge to `develop` | Add failing inventory/includes/no-release/no-legacy-phase tests and runtime marker assertions before profile/script edits |
+| Glitcherry Android company bundle | ThorChain assembly, custom role files, workflow and exact project test | Trading single Code Reviewer idea; current Paperclip `parentId`/`blockedByIssueIds`; fullAudit constrained sandbox; reject legacy relatedWork and release-capable CEO/CTO | Portable manifest, host-local bindings, explicit identity, generated prompts, one active child, atomic handoff, dormant bootstrap | CEO governance; CTO sole Walker; six roles including Media; QA uses non-writing reviewer profile; seven child phases; two repos; `develop`; one writer/emulator | Add failing exact roster/authority/phase/wake/QA-routing/dormancy/render assertions, then create bundle until green |
+| Dormant bootstrap and canary | Journaled `bootstrap-project.sh` create-or-reuse lifecycle | Smoke/rollback disposable issue family; tracked Android `AGENTS.md` is a counterexample to cwd=`workspace/repo`; quarantine dirty shared iMac checkout | Prefix collision guard, idempotent bindings, persistent per-agent workspaces, managed config reconciliation, disposable issue cleanup | Keep cwd and generated role prompt at workspace root; direct GitHub clones under `./repo`; tracked repo `AGENTS.md` untouched; CTO control clone; no root issue | Run static bootstrap/smoke/workspace-preparer tests; then live exact cwd/clean/origin/API assertions and disposable CTO->CodeReviewer handoff |
 
 ## 14. Verification plan
 
@@ -547,10 +629,10 @@ python3 -m pytest \
   paperclips/tests/test_phase_b_profiles.py \
   paperclips/tests/test_phase_c_smoke_test.py \
   paperclips/tests/test_glitcherry_android_assembly.py \
-  paperclips/tests/test_glitcherry_android_workspace_origins.py
+  paperclips/tests/test_glitcherry_android_runtime_workspaces.py
 bash -n paperclips/scripts/bootstrap-project.sh
 bash -n paperclips/scripts/lib/_smoke_probes.sh
-bash -n paperclips/projects/glitcherry-android/scripts/normalize-workspace-origins.sh
+bash -n paperclips/projects/glitcherry-android/scripts/prepare-runtime-workspaces.sh
 bash paperclips/scripts/validate-manifest.sh glitcherry-android
 bash paperclips/build.sh --project glitcherry-android --target codex
 python3 -m paperclips.scripts.validate_instructions --repo-root .
@@ -561,19 +643,25 @@ Project tests assert:
 - exact six names, reports-to graph, model, effort, profile, icon and workflow role;
 - CEO `minimal`, CTO `walker`, exactly one `inner_orchestrator`;
 - no `outer_walker`, no second CTO/Walker and no release/profile authority on CEO;
-- constrained sandbox and host path key contract;
+- constrained sandbox, workspace-root cwd and host path contract;
 - both codebase-memory project IDs render and no `{{...}}` remains;
 - required role/overlay/workflow/example files exist;
 - the media source record pins revision/license and the custom role routes each source
   without inheriting external authority or executable scripts;
 - the rendered media role contains an ownership classifier, version/license/source
   lockbox, `CompositionPlayer` experimental guard, and AGSL API-33 guard;
-- local-seed workspace clones are normalized to the verified GitHub upstream before
-  any product issue can activate;
+- the assembly omits `workspace_git_source_path_key`; generated role `AGENTS.md` stays
+  outside the repo; tracked Android `AGENTS.md` is byte-identical and Git status clean;
+- the workspace preparer is idempotent, refuses unmanaged/dirty/wrong-origin targets,
+  and clones only the verified GitHub upstream before any agent wake;
 - normal workflow excludes CEO, has one Code Reviewer for spec/plan/code, and has one
   implementation owner;
-- parent/child state machine forbids a second non-terminal child and forbids advancing
-  after `LOCAL_BLOCKED`, partial merge or incomplete cleanup;
+- QA composes `reviewer`, cannot commit/push, and has an exact routing table;
+- parent/child state uses `parentId` plus `blockedByIssueIds`, handles both current wake
+  reasons, forbids a second non-terminal child and forbids advancing after blocker,
+  partial merge or incomplete cleanup;
+- rendered CTO/reviewer prompts contain no plan-first, architect-reviewer, Phase 3.2 or
+  release-cut-planned state machine;
 - POST -> PATCH -> one verification -> STOP and bounded review loops are present;
 - bootstrap creates no roadmap/product issue and activation is human-only;
 - rendered CEO lacks merge/plan/release instructions;
@@ -606,11 +694,16 @@ workspace, but CI and the approved spec remain mandatory. Confirm the squash SHA
    actual host UUID/path/secret.
 5. Build and inspect all rendered prompts before API mutation.
 6. Run bootstrap without a feature activation command.
-7. Create the CTO sibling control checkout inside its workspace and verify both origins
-   and `develop` branches.
-8. Verify every generated Android workspace `origin` equals the source clone's
-   allowlisted GitHub upstream, run `git fetch` and a non-mutating push-auth probe, then
-   run quick smoke and a disposable cross-agent canary from CTO to Code Reviewer.
+7. Run the workspace preparer before any agent wake. Verify every adapter cwd is the
+   workspace root, every generated role prompt is outside the repo, every Android clone
+   has the allowlisted GitHub origin/current `develop`/clean status, and the tracked
+   Android `AGENTS.md` hash matches the source repository. Verify the CTO control clone
+   the same way.
+8. From the same host credential context, run `git ls-remote` against both private
+   origins and query GitHub repository permission showing `push=true`; do not create a
+   remote branch merely to test auth. Then run `smoke-test.sh glitcherry-android
+   --quick --cleanup-issues` and the disposable `--canary-stage=2 --cleanup-issues`
+   CTO-to-CodeReviewer handoff.
 9. Delete every disposable issue and verify no feature/root roadmap issue exists.
 10. Query the API and assert exactly one `Glitcherry Android` company with prefix `GLA`,
     exactly six agents, exact hierarchy/adapter/model/effort/cwd, and no forbidden env.
@@ -630,6 +723,10 @@ source clone or dirty checkout.
 - The committed Glitcherry manifest and generated artifacts contain exactly the six
   approved agents and no host-specific path, secret, live UUID or unresolved template.
 - The role graph and workflow match sections 6 and 9 exactly.
+- QA is display/workflow role `qa` but composes non-writing `reviewer`; its rendered
+  `Can` section contains no commit or push.
+- Every adapter cwd is its persistent workspace root, generated instructions remain
+  outside the Git checkout, and every tracked repository `AGENTS.md` stays unchanged.
 - The company is created once, prefix `GLA` is unique and bootstrap re-run is idempotent.
 - Each live agent answers its profile/workflow smoke within the bounded timeout.
 - The disposable CTO -> Code Reviewer handoff has successful evidence POST,
@@ -650,16 +747,20 @@ source clone or dirty checkout.
 | Existing company name with different bindings | Stop; inspect exact company and journal, never attach by name alone |
 | CEO prompt contains merge/plan/Walker/release markers | Fail build/test; fix composition before deploy |
 | CTO prompt contains release-cut, tag, `main` merge, signing or publish authority | Fail build/test; no live bootstrap |
-| Two agents claim implementation or one shared worktree | Set `ROADMAP_BLOCKED`, preserve evidence and stop both writers |
+| Rendered prompt contains plan-first/architect-reviewer/Phase 3.2 legacy flow | Fail build/test; remove the conflicting reusable phase source before deploy |
+| Two agents claim implementation or two clones have the task branch writable | Set API status `blocked` with reason `ROADMAP_BLOCKED`, preserve evidence and stop both writers |
 | Prior child is non-terminal or any task branch/worktree/workspace is dirty | Keep the prior child active, enter bounded recovery and do not create the next child |
-| Android merge exists but control merge or cleanup is incomplete | Resume from the recorded Android merge SHA; never re-implement, re-merge or select another slice |
+| Parent/child lacks `parentId` or exact `blockedByIssueIds` link | Block activation/advance; repair and verify the current relation, never infer it from prose |
+| Android merge exists but control merge or cleanup is incomplete | Resume from the recorded Android merge SHA; first search the control marker, never duplicate/re-implement/re-merge/select another slice |
 | Review/QA is performed on a stale PR head | Invalidate approval and rerun on the exact head |
 | More than two review/fix loops | Stop and escalate with evidence; do not recurse indefinitely |
-| Android/control source or generated workspace is dirty or has a local-path/wrong remote/branch | Stop; create/repair a dedicated clean source or normalize the verified upstream without deleting user work |
+| Generated role prompt overwrites tracked repo `AGENTS.md` or makes clone dirty | Stop before agent wake; restore from the clean clone and fix workspace-root layout |
+| Android/control source or runtime clone is dirty or has local-path/wrong remote/branch | Stop; preserve evidence and repair only the exact managed clone without deleting user work |
 | Constrained sandbox blocks a required action | Narrow and review the missing capability; do not enable broad bypass silently |
 | Paperclip 409/duplicate wake/agent error | Reload once, stop the current run and follow recovery; no blind retry |
 | Disposable issue cannot be deleted/terminalized | Company remains dormant and activation is blocked |
 | Disk below operator threshold or AVD already running | Stop emulator work and record blocker |
+| Company or any agent budget remains `0` at root activation | Block activation; set and verify positive hard caps and alerts because zero is uncapped |
 | codebase-memory ID absent/stale | Reindex and verify, or explicitly fall back to Serena/rg in a revised rendered prompt |
 | Any release/operator secret appears in prompt/config/log | Stop, revoke/rotate as applicable and treat as security incident |
 
@@ -687,14 +788,14 @@ The following challenges must be recorded in durable run state before approval:
 6. **Do two implementers create concurrency risk?** Only if ownership is ambiguous.
    Workflow makes one primary writer mandatory; the other may return read-only findings
    and never writes the same branch.
-7. **Should QA use reviewer instead of `qa` because QA must not fix code?** Keep `qa` to
-   preserve existing test/worktree/tool capability. The custom role forbids production
-   fixes and routes failures back. Runtime behavior, not the display role alone, is
-   tested.
-8. **Can the CTO operate two repositories in the current constrained bootstrap?** Yes
-   without a framework abstraction: Android is the generated per-agent clone and the
-   CTO owns a sibling control clone inside its already writable workspace. The exact
-   second checkout is created and verified before live canary/activation.
+7. **Should QA use the reusable `qa` profile?** No. It extends `implementer` and the
+   current runtime probe requires `commit push`, directly contradicting the approved
+   no-push QA authority. Glitcherry QA uses `reviewer` plus a project-owned QA
+   smoke/evidence role craft; display and workflow identity remain `qa`.
+8. **Can the CTO operate two repositories without overwriting repo instructions?** Yes.
+   Runtime cwd and generated role `AGENTS.md` remain at the persistent workspace root;
+   direct GitHub Android and control clones live below it and retain their tracked
+   repository `AGENTS.md` files.
 9. **Should all agents be `xhigh`?** No. Quality-critical judgment roles use `xhigh`;
    bounded governance/platform/QA use `high`. Cost ceiling remains a human gate before
    activation.
@@ -714,10 +815,17 @@ The following challenges must be recorded in durable run state before approval:
     child would reuse state while the prior branch/worktree/evidence is unresolved.
     The current child remains active and the parent stops until bounded recovery or a
     Human Engineering Lead decision completes it.
-14. **Can a generated agent clone retain the local seed path as `origin`?** No. That
-    makes a successful push land in the seed clone rather than GitHub. Before
-    activation, every generated clone is normalized to the source clone's verified,
-    allowlisted upstream and passes fetch plus non-mutating push-auth verification.
+14. **Can generic constrained Git bootstrap create the Android clones?** Not safely for
+    this repository. It sets cwd to `workspace/repo` and copies the per-agent prompt to
+    `repo/AGENTS.md`, which is already tracked by Glitcherry-Android. The project omits
+    that key and prepares direct GitHub clones below workspace root before any wake.
+15. **Should Trading `relatedWork.outbound` drive the parent?** No. Current Paperclip
+    exposes `parentId`, `blockedByIssueIds`, `issue_blockers_resolved` and
+    `issue_children_completed`. Those first-class links are verified and the old prose
+    reference is only historical evidence.
+16. **Can bootstrap budget `0` act as a safety pause?** No. Current enforcement creates
+    budget policy only above zero. Dormant creation is safe because no root exists, but
+    autonomous activation requires positive company and agent caps.
 
 ## 18. Open questions
 
