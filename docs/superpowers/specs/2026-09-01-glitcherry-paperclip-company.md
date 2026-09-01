@@ -214,6 +214,39 @@ profile. It composes the reusable `implementer` profile with a Glitcherry role c
 The role craft owns Android media editing and export rather than generic playback, and
 routes platform-only import/storage/share work to the Android Engineer.
 
+### Android vs Media ownership boundary
+
+The split must be decided by the slice's primary acceptance risk, not by who touched a
+screen last:
+
+- `GlitcherryAndroidEngineer` owns picker/import flows, file validation, permissions,
+  URI persistence, app lifecycle, preview screen state, save/share integration,
+  repository wiring, and build/tooling changes.
+- `GlitcherryMediaPipelineEngineer` owns `EditedMediaItem`/`Composition` shape,
+  effect graph order, custom OpenGL effects, audio processors, encoder/export
+  settings, tone-mapping/export policy inside the approved slice, and deterministic
+  render/export performance.
+- Single-asset preview defaults to `ExoPlayer.setVideoEffects()` or the equivalent
+  stable preview path. `CompositionPlayer` is allowed only when the slice truly needs
+  multi-asset or shared-`Composition` preview and the spec explicitly accepts its
+  early-preview `@ExperimentalApi` status and single-thread access requirement.
+- AGSL is an optional Android 13+ (`RuntimeShader`) path for preview or narrowly
+  scoped image processing. The baseline prototype/export path must not depend solely on
+  AGSL because the product floor is broader than API 33.
+- If a slice simultaneously changes import/permission/storage behavior and effect/
+  codec/export behavior, the CTO still assigns one primary owner and requests a bounded
+  read-only boundary finding from the other specialist before exact-head code review.
+
+The media role stops and escalates instead of guessing when:
+
+- the required preview/export path depends on an unstable API not accepted in the spec;
+- the chosen effect path only works on API 33+ but the slice did not declare that
+  boundary;
+- the input/output format, HDR behavior, or codec compatibility policy is not defined
+  by the slice acceptance criteria;
+- deterministic fallback is unknown for unsupported hardware, import rejection, or
+  export optimization failure.
+
 ### External skill/source strategy for the Media role
 
 No single public skill covers the complete Android 3D, effect, codec, audio and export
@@ -224,21 +257,31 @@ agent bundle:
 - Android's official [Media3 Transformer](https://developer.android.com/media/media3/transformer)
   and [transformations](https://developer.android.com/media/media3/transformer/transformations)
   documentation is the source of truth for editing, effects, MediaCodec/OpenGL
-  integration and export.
+  integration and export. Official
+  [CompositionPlayer](https://developer.android.com/media/media3/transformer/compositionplayer),
+  [supported formats](https://developer.android.com/media/platform/supported-formats),
+  [AGSL](https://developer.android.com/develop/ui/views/graphics/agsl), and
+  [Media3 release notes](https://developer.android.com/jetpack/androidx/releases/media3)
+  complete the required baseline for preview stability, API-floor guards, format/HDR
+  policy, and current dependency versioning.
 - [`sunnat629/android-media-pack`](https://github.com/sunnat629/android-media-pack)
   skills `media3-transformer-editing`,
   `media3-video-effects-lottie-muxer`, `media3-inspector-metadata-thumbnails` and
-  `media3-test-utils-robolectric` are useful workflow/checklist inputs, but their
-  pinned Media3 version must be replaced by the repository-approved current version.
+  `media3-test-utils-robolectric` are useful workflow/checklist inputs, but the
+  repository currently advertises Media3 `1.10.1` while the official stable release is
+  `1.11.0` (2026-08-05). Treat it as a checklist/reference source only, never as the
+  version baseline.
 - [`MiniMax-AI/skills@shader-dev`](https://github.com/MiniMax-AI/skills/tree/main/skills/shader-dev)
   is a useful MIT-licensed GLSL technique library for
   SDF, ray marching, procedural effects, multipass buffers and post-processing. Its
   ShaderToy/WebGL assumptions must be adapted and verified for the selected Android
-  OpenGL ES, AGSL or Media3 Effect surface.
+  OpenGL ES, AGSL or Media3 Effect surface. The upstream repository is explicitly
+  marked beta, so only pinned snippets/checklists are acceptable inputs.
 - [`krutikjain/android-agent-skills@android-media-files-sharing`](https://github.com/krutikJain/android-agent-skills/tree/main/skills/android-media-files-sharing)
   informs the Android
   Engineer's import/export URI and share boundary; it is not the Media agent's core
-  render skill.
+  render skill and must not drag in unrelated release/CI authority from the broader
+  repository.
 - Generic FFmpeg command collections may inform host-side fixture inspection, but no
   unlicensed command pack is vendored and FFmpeg never substitutes for the on-device
   Media3/MediaCodec implementation.
@@ -246,7 +289,9 @@ agent bundle:
 External material contributes domain guidance only. It cannot grant Git, Paperclip,
 roadmap, merge or release authority. Before any upstream text or asset is copied, the
 implementation records repository URL, immutable revision, license, selected files,
-Android adaptation delta and a current official-documentation freshness check.
+Android adaptation delta, allowed responsibility area, and a current official-
+documentation freshness check. No role may execute vendor install/update scripts during
+normal slice work.
 
 ## 7. Roles that are intentionally not permanent
 
@@ -296,6 +341,15 @@ Every custom role file uses the same sections:
 - explicit forbidden actions;
 - accepted inbound state and exact next owner(s);
 - retry/review ceiling and escalation destination;
+- ownership classifier: route to Android owner when the primary risk is lifecycle,
+  permissions, import, storage/share, app state, or build wiring; route to Media owner
+  when the primary risk is effect graph, codec, export, audio processing, HDR/format
+  policy, or deterministic rendering;
+- source lockbox: official source URLs, last-reviewed date, pinned upstream revision,
+  license, selected excerpts/files, and Android adaptation notes for any borrowed
+  public skill;
+- explicit stop conditions for unstable APIs, unsupported media formats, API-floor
+  mismatches, hardware capability gaps, and undefined fallback behavior;
 - disposable `smoke-probe-*` / `smoke-e2e-*` exception that forbids product work;
 - atomic handoff: POST evidence -> require 2xx -> PATCH assignee/status -> one GET
   verification -> STOP.
@@ -326,18 +380,26 @@ CEO is not part of the normal chain.
    Human Engineering Lead.
 5. **Implementation — exactly one engineer.** CTO routes platform/app/tooling work to
    `GlitcherryAndroidEngineer` and render/effect/codec/export work to
-   `GlitcherryMediaPipelineEngineer`. The assigned engineer implements and pushes tests
-   and code on the approved task branch and opens or updates its PR. Implementers may
-   push only the assigned task branch; reviewers and QA do not push; only CTO merges.
+   `GlitcherryMediaPipelineEngineer`. Cross-domain slices pick one primary owner by
+   acceptance risk and may request one bounded read-only finding from the other. The
+   assigned engineer implements and pushes tests and code on the approved task branch
+   and opens or updates its PR. Implementers may push only the assigned task branch;
+   reviewers and QA do not push; only CTO merges.
 6. **Exact-head code and architecture review — Code Reviewer.** Review the exact PR
    head and run the specified mechanical checks. For render/codec/shader, module,
    persistence/permission, concurrency or dependency changes, apply an explicit fresh
    architecture/media lens using current official documentation and the routed domain
-   sources above. Findings return to the same implementer; plan/scope gaps return to
-   CTO. Maximum two implementation review loops before escalation.
+   sources above. Verify that unstable Media3 APIs are explicitly opted into, that
+   `CompositionPlayer` use is justified and single-thread-safe, that AGSL paths are
+   API-gated, and that unsupported format/HDR behavior is explicit rather than silent.
+   Findings return to the same implementer; plan/scope gaps return to CTO. Maximum two
+   implementation review loops before escalation.
 7. **QA — QA Engineer.** Run risk-scaled gates, never two AVDs concurrently. Product
    defects return to the implementer; spec/acceptance gaps return to CTO; physical
-   device or owner-only blockers go to the Human Engineering Lead.
+   device or owner-only blockers go to the Human Engineering Lead. Media slices must
+   cover at least one normal path and one degraded path among unsupported import,
+   permission denial, background/foreground during export, optimization fallback, or
+   device-specific codec/GPU rejection.
 8. **Android integration — CTO.** Verify PR base is exactly `develop`, exact reviewed
    head, required checks, Code Reviewer approval and QA PASS. Squash-merge
    automatically; never target `main`. Record the immutable Android merge SHA on the
@@ -504,6 +566,8 @@ Project tests assert:
 - required role/overlay/workflow/example files exist;
 - the media source record pins revision/license and the custom role routes each source
   without inheriting external authority or executable scripts;
+- the rendered media role contains an ownership classifier, version/license/source
+  lockbox, `CompositionPlayer` experimental guard, and AGSL API-33 guard;
 - local-seed workspace clones are normalized to the verified GitHub upstream before
   any product issue can activate;
 - normal workflow excludes CEO, has one Code Reviewer for spec/plan/code, and has one

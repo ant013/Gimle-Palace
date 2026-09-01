@@ -427,19 +427,8 @@
       "recorded_at": "2026-09-01T07:56:55+00:00",
       "revision": 1,
       "sha256": "bf2a3d7a4149eb639a8a5868278cb97ea56a29dcb664f08f597d88f4f3bdff6b"
-    }
-  ],
-  "artifacts": {
-    "delta_matrix": {
-      "absolute_path": "/Users/ant013/Data/AI/audit/worktrees/gimle-palace-glitcherry-company/docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
-      "kind": "delta_matrix",
-      "path": "docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
-      "recorded_at": "2026-09-01T09:18:28+00:00",
-      "revision": 1,
-      "sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2"
     },
-    "report": null,
-    "spec": {
+    {
       "absolute_path": "/Users/ant013/Data/AI/audit/worktrees/gimle-palace-glitcherry-company/docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
       "kind": "spec",
       "path": "docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
@@ -447,15 +436,36 @@
       "revision": 1,
       "sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2"
     },
-    "supporting_design": [],
-    "test_plan": {
+    {
+      "absolute_path": "/Users/ant013/Data/AI/audit/worktrees/gimle-palace-glitcherry-company/docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
+      "kind": "delta_matrix",
+      "path": "docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
+      "recorded_at": "2026-09-01T09:18:28+00:00",
+      "revision": 1,
+      "sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2"
+    },
+    {
       "absolute_path": "/Users/ant013/Data/AI/audit/worktrees/gimle-palace-glitcherry-company/docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
       "kind": "test_plan",
       "path": "docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
       "recorded_at": "2026-09-01T09:18:29+00:00",
       "revision": 1,
       "sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2"
+    }
+  ],
+  "artifacts": {
+    "delta_matrix": null,
+    "report": null,
+    "spec": {
+      "absolute_path": "/Users/ant013/Data/AI/audit/worktrees/gimle-palace-glitcherry-company/docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
+      "kind": "spec",
+      "path": "/Users/ant013/Data/AI/audit/worktrees/gimle-palace-glitcherry-company/docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
+      "recorded_at": "2026-09-01T09:31:22+00:00",
+      "revision": 1,
+      "sha256": "9a596bd710313a1710768255fc21b589085f92b9c49da9a87ee1f74f4d2ae262"
     },
+    "supporting_design": [],
+    "test_plan": null,
     "verification_results": null
   },
   "behavioral_slices": [
@@ -587,6 +597,26 @@
       "title": "Indexed Gimle-Palace checkout does not match target worktree",
       "tool": "codebase-memory",
       "workaround": "Use codebase-memory only as a hint; verify every kept analog with Serena and rg at 25e531cd."
+    },
+    {
+      "actual": "Runtime returned ok=false with missing_projects=[Users-ant013-Data-AI-trading]",
+      "anchors": [],
+      "bug_id": "B-TRADING-PROJECT-NOT-REGISTERED",
+      "classification": "environment_drift",
+      "confidence": "confirmed",
+      "expected": "Registered trading project or an explicit coverage envelope",
+      "forces_red": false,
+      "impact": "Palace cannot act as the load-bearing source for Trading analog confirmation in this run.",
+      "minimal_repro": "palace_code_semantic_search(project=Users-ant013-Data-AI-trading, query=cleanup/authority analog) returned project_not_registered",
+      "recorded_at": "2026-09-01T09:31:16+00:00",
+      "related_claim_ids": [],
+      "related_event_ids": [],
+      "revision": 1,
+      "severity": "medium",
+      "status": "workaround",
+      "title": "Trading Palace project unavailable in current runtime",
+      "tool": "palace_code_semantic_search",
+      "workaround": "Use current-tree rg/Serena evidence plus official Android docs; keep Palace result out of design decisions."
     }
   ],
   "checks": [],
@@ -1390,6 +1420,31 @@
       "warnings": [
         "No Gimle or Palace MCP tools are exposed in this session; no call could be issued."
       ]
+    },
+    {
+      "args_hash": "8284558d1e412ffd",
+      "args_keys": [
+        "limit",
+        "project",
+        "query"
+      ],
+      "duration_ms": null,
+      "event_id": "E-0002",
+      "intent": "Check whether registered Palace trading project can confirm legacy cleanup/authority analogs for current roster review",
+      "outcome": "error",
+      "phase": "design",
+      "protocol_status": "ok",
+      "recorded_at": "2026-09-01T09:31:16+00:00",
+      "response_bytes": null,
+      "returned": 0,
+      "seq": 2,
+      "tool": "palace_code_semantic_search",
+      "total": null,
+      "truncated": false,
+      "used": false,
+      "warnings": [
+        "Requested trading project is not registered in current Palace runtime."
+      ]
     }
   ],
   "gimle_snapshot": {
@@ -1397,7 +1452,7 @@
     "indexed_commit": null,
     "runtime_id": null
   },
-  "phase": "awaiting_approval",
+  "phase": "design",
   "phase_history": [
     {
       "at": "2026-09-01T07:30:37+00:00",
@@ -1453,6 +1508,11 @@
       "at": "2026-09-01T09:19:29+00:00",
       "phase": "awaiting_approval",
       "reason": "Revised spec has current-hash adversarial decisions for six-agent roster, Code Reviewer consolidation, custom Media skill sources, strict one-child lifecycle, recovery, and GitHub origin normalization."
+    },
+    {
+      "at": "2026-09-01T09:31:16+00:00",
+      "phase": "design",
+      "reason": "Post-approval review found new Media-role boundary/version/experimental-API clarifications; reopening design before any implementation."
     }
   ],
   "projects": {
@@ -1474,7 +1534,7 @@
     "worktree_fingerprint": "54589404e794c358"
   },
   "repository_change": true,
-  "revision": 87,
+  "revision": 91,
   "run_id": "glitcherry-paperclip-company-20260901",
   "schema_version": "2.1",
   "skill_versions": {
@@ -1486,6 +1546,6 @@
   },
   "task_id": "GLITCHERRY-PAPERCLIP-COMPANY",
   "trust": "YELLOW",
-  "updated_at": "2026-09-01T09:19:29+00:00",
+  "updated_at": "2026-09-01T09:31:22+00:00",
   "workflow": "analog_change"
 }
