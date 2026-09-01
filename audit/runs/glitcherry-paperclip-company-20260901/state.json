@@ -1,0 +1,1551 @@
+{
+  "analog_candidates": [
+    {
+      "callers": [
+        "paperclips/scripts/compose_agent_prompt.py profile resolution"
+      ],
+      "candidate_id": "C-WALKER-REVIEWER-BASE",
+      "counterevidence": [],
+      "dimensions": [
+        "boundary",
+        "dependencies",
+        "responsibility"
+      ],
+      "disposition": "kept",
+      "fact_id": "F-REVIEWER-BASE",
+      "freshness": "known_current",
+      "material_differences": [
+        "Walker must add commit/push, worktree, merge, phase orchestration and plan production while retaining the no-release boundary."
+      ],
+      "path": "paperclips/fragments/profiles/reviewer.yaml",
+      "qualified_name": "profile:reviewer",
+      "recorded_at": "2026-09-01T07:46:34+00:00",
+      "revision": 1,
+      "roles": [
+        "contract",
+        "implementation"
+      ],
+      "slice_id": "S-WALKER-PROFILE",
+      "source_range": "1-13",
+      "source_scope": "project",
+      "tests": [
+        "paperclips/tests/test_phase_b_profiles.py"
+      ]
+    },
+    {
+      "callers": [
+        "paperclips/scripts/smoke-test.sh"
+      ],
+      "candidate_id": "C-WALKER-BOOTSTRAP-SMOKE",
+      "counterevidence": [],
+      "dimensions": [
+        "lifecycle",
+        "state_errors",
+        "tests",
+        "trust"
+      ],
+      "disposition": "supporting",
+      "fact_id": "F-BOOTSTRAP-IDENTITY-SMOKE",
+      "freshness": "known_current",
+      "material_differences": [
+        "Add walker fallback identity and positive commit/push/merge plus negative release-cut runtime markers."
+      ],
+      "path": "paperclips/scripts/bootstrap-project.sh",
+      "qualified_name": "bootstrap profile dispatch and runtime probes",
+      "recorded_at": "2026-09-01T07:46:34+00:00",
+      "revision": 1,
+      "roles": [
+        "composition",
+        "consumer",
+        "lifecycle_error",
+        "test"
+      ],
+      "slice_id": "S-WALKER-PROFILE",
+      "source_range": "595-609; _smoke_probes.sh:131-203",
+      "source_scope": "project",
+      "tests": [
+        "paperclips/tests/test_phase_c_smoke_test.py"
+      ]
+    },
+    {
+      "callers": [],
+      "candidate_id": "C-WALKER-CTO-RELEASE",
+      "counterevidence": [
+        "Unconditional git/release-cut.md conflicts with the human-only release boundary."
+      ],
+      "dimensions": [
+        "boundary",
+        "lifecycle"
+      ],
+      "disposition": "rejected",
+      "fact_id": "F-CTO-RELEASE-CONFLICT",
+      "freshness": "known_current",
+      "material_differences": [],
+      "path": "paperclips/fragments/profiles/cto.yaml",
+      "qualified_name": "profile:cto",
+      "recorded_at": "2026-09-01T07:46:34+00:00",
+      "revision": 1,
+      "roles": [
+        "counterexample"
+      ],
+      "slice_id": "S-WALKER-PROFILE",
+      "source_range": "1-12",
+      "source_scope": "project",
+      "tests": [
+        "paperclips/scripts/lib/_smoke_probes.sh:23"
+      ]
+    },
+    {
+      "callers": [
+        "paperclips/build.sh; bootstrap-project.sh"
+      ],
+      "candidate_id": "C-BUNDLE-THORCHAIN",
+      "counterevidence": [],
+      "dimensions": [
+        "boundary",
+        "dependencies",
+        "lifecycle",
+        "responsibility"
+      ],
+      "disposition": "kept",
+      "fact_id": "F-THORCHAIN-BUNDLE",
+      "freshness": "known_current",
+      "material_differences": [
+        "Glitcherry uses CEO governance only, CTO as sole Walker, seven Android-specialized roles, develop integration and two product repositories."
+      ],
+      "path": "paperclips/projects/thorchain",
+      "qualified_name": "project:thorchain Paperclip bundle",
+      "recorded_at": "2026-09-01T07:46:35+00:00",
+      "revision": 1,
+      "roles": [
+        "composition",
+        "contract",
+        "implementation"
+      ],
+      "slice_id": "S-PROJECT-BUNDLE",
+      "source_range": "assembly 1-138; WORKFLOW 1-70",
+      "source_scope": "project",
+      "tests": [
+        "paperclips/tests/test_phase_f_thorchain_assembly.py"
+      ]
+    },
+    {
+      "callers": [
+        "paperclips/scripts/bootstrap-project.sh"
+      ],
+      "candidate_id": "C-BUNDLE-FULLAUDIT",
+      "counterevidence": [],
+      "dimensions": [
+        "state_errors",
+        "tests",
+        "trust"
+      ],
+      "disposition": "supporting",
+      "fact_id": "F-FULLAUDIT-SANDBOX",
+      "freshness": "known_current",
+      "material_differences": [
+        "Glitcherry needs writable per-agent Android clones and only CTO needs a second control checkout; emulator execution remains sequential."
+      ],
+      "path": "paperclips/projects/fullaudit",
+      "qualified_name": "project:fullaudit constrained assembly contract",
+      "recorded_at": "2026-09-01T07:46:35+00:00",
+      "revision": 1,
+      "roles": [
+        "consumer",
+        "lifecycle_error",
+        "test"
+      ],
+      "slice_id": "S-PROJECT-BUNDLE",
+      "source_range": "assembly 1-189; tests 1-149",
+      "source_scope": "project",
+      "tests": [
+        "paperclips/tests/test_fullaudit_assembly.py"
+      ]
+    },
+    {
+      "callers": [],
+      "candidate_id": "C-BUNDLE-LEGACY",
+      "counterevidence": [
+        "CEO reusing cto and single-PATCH handoff cause authority bleed and lost evidence/wake ordering."
+      ],
+      "dimensions": [
+        "boundary",
+        "lifecycle"
+      ],
+      "disposition": "rejected",
+      "fact_id": "F-LEGACY-COUNTEREXAMPLES",
+      "freshness": "known_current",
+      "material_differences": [],
+      "path": "paperclips/projects/trading/WORKFLOW.md",
+      "qualified_name": "legacy Trading/Wallet Radar authority and handoff",
+      "recorded_at": "2026-09-01T07:46:35+00:00",
+      "revision": 1,
+      "roles": [
+        "counterexample"
+      ],
+      "slice_id": "S-PROJECT-BUNDLE",
+      "source_range": "186-197; wallet-radar WORKFLOW 116-126",
+      "source_scope": "project",
+      "tests": []
+    },
+    {
+      "callers": [
+        "operator bootstrap command"
+      ],
+      "candidate_id": "C-BOOTSTRAP-JOURNALED",
+      "counterevidence": [],
+      "dimensions": [
+        "dependencies",
+        "lifecycle",
+        "responsibility"
+      ],
+      "disposition": "kept",
+      "fact_id": "F-BOOTSTRAP-LIFECYCLE",
+      "freshness": "known_current",
+      "material_differences": [
+        "Use GLA prefix, two dedicated source clones, constrained Android workspaces and no feature/root issue during bootstrap."
+      ],
+      "path": "paperclips/scripts/bootstrap-project.sh",
+      "qualified_name": "bootstrap-project journaled create-or-reuse lifecycle",
+      "recorded_at": "2026-09-01T07:46:35+00:00",
+      "revision": 1,
+      "roles": [
+        "composition",
+        "contract",
+        "implementation"
+      ],
+      "slice_id": "S-BOOTSTRAP-CANARY",
+      "source_range": "337-944",
+      "source_scope": "project",
+      "tests": [
+        "paperclips/tests/test_phase_c_acceptance.py"
+      ]
+    },
+    {
+      "callers": [
+        "paperclips/scripts/bootstrap-project.sh --canary; operator smoke command"
+      ],
+      "candidate_id": "C-BOOTSTRAP-SMOKE",
+      "counterevidence": [],
+      "dimensions": [
+        "state_errors",
+        "tests",
+        "trust"
+      ],
+      "disposition": "supporting",
+      "fact_id": "F-SMOKE-ROLLBACK",
+      "freshness": "known_current",
+      "material_differences": [
+        "Canary must exercise GlitcherryCTO to AndroidArchitectReviewer without repository mutation and clean every disposable issue."
+      ],
+      "path": "paperclips/scripts/smoke-test.sh",
+      "qualified_name": "smoke and rollback disposable lifecycle",
+      "recorded_at": "2026-09-01T07:46:35+00:00",
+      "revision": 1,
+      "roles": [
+        "consumer",
+        "lifecycle_error",
+        "test"
+      ],
+      "slice_id": "S-BOOTSTRAP-CANARY",
+      "source_range": "76-224; rollback 84-285",
+      "source_scope": "project",
+      "tests": [
+        "paperclips/tests/test_phase_c_smoke_test.py"
+      ]
+    },
+    {
+      "callers": [],
+      "candidate_id": "C-BOOTSTRAP-DORMANT",
+      "counterevidence": [],
+      "dimensions": [
+        "boundary"
+      ],
+      "disposition": "supporting",
+      "fact_id": "F-THORCHAIN-BUNDLE",
+      "freshness": "known_current",
+      "material_differences": [
+        "Glitcherry activation is a Human Engineering Lead root command; CEO does not select roadmap work."
+      ],
+      "path": "paperclips/projects/thorchain/WORKFLOW.md",
+      "qualified_name": "ThorChain dormant activation boundary",
+      "recorded_at": "2026-09-01T07:46:35+00:00",
+      "revision": 1,
+      "roles": [
+        "consumer",
+        "contract"
+      ],
+      "slice_id": "S-BOOTSTRAP-CANARY",
+      "source_range": "1-17",
+      "source_scope": "project",
+      "tests": []
+    },
+    {
+      "callers": [],
+      "candidate_id": "C-BOOTSTRAP-DIRTY-LIVE",
+      "counterevidence": [
+        "Deploying or cloning into this checkout risks overwriting 15 unrelated dirty entries and does not provide the two Glitcherry sources."
+      ],
+      "dimensions": [
+        "lifecycle",
+        "state_errors"
+      ],
+      "disposition": "quarantined",
+      "fact_id": "F-LIVE-BOOTSTRAP-PREFLIGHT",
+      "freshness": "known_current",
+      "material_differences": [],
+      "path": "/Users/Shared/Ios/Gimle-Palace",
+      "qualified_name": "dirty shared iMac checkout and absent product sources",
+      "recorded_at": "2026-09-01T07:46:35+00:00",
+      "revision": 1,
+      "roles": [
+        "counterexample"
+      ],
+      "slice_id": "S-BOOTSTRAP-CANARY",
+      "source_range": "live SSH audit 2026-09-01",
+      "source_scope": "project",
+      "tests": []
+    }
+  ],
+  "analog_history": [],
+  "analog_mode": {
+    "evidence": "All three high-risk slices have a current primary analog, independent supporting analog, dispositioned counterexample, full role/dimension coverage, and current-tree verification at 25e531cd; Gimle MCP remained unavailable so trust stays YELLOW.",
+    "recorded_at": "2026-09-01T07:46:35+00:00",
+    "status": "verified"
+  },
+  "analog_selections": [
+    {
+      "conflict_resolutions": [
+        "Create a separate walker profile extending reviewer, add commit-and-push/worktree/merge/orchestration/plan fragments, exclude release-cut, and test both positive and negative authority."
+      ],
+      "conflicts": [
+        "The cto profile contains the desired merge/plan/orchestration features but also release-cut and lacks explicit commit/push authority needed for spec/plan branches."
+      ],
+      "counterexample_candidate_ids": [
+        "C-WALKER-CTO-RELEASE"
+      ],
+      "depth_waiver": null,
+      "greenfield_reason": null,
+      "primary_candidate_id": "C-WALKER-REVIEWER-BASE",
+      "recorded_at": "2026-09-01T07:46:34+00:00",
+      "revision": 1,
+      "search_evidence": [],
+      "slice_id": "S-WALKER-PROFILE",
+      "supporting_candidate_ids": [
+        "C-WALKER-BOOTSTRAP-SMOKE"
+      ]
+    },
+    {
+      "conflict_resolutions": [
+        "Reuse ThorChain bundle shape, atomic handoffs, dormancy and exact tests; set CEO to minimal/governance and CTO to the new walker profile, with Glitcherry-specific role crafts and seven-role roster."
+      ],
+      "conflicts": [
+        "ThorChain assigns the outer Walker to CEO and uses profile cto for both CEO and CTO, while Glitcherry explicitly assigns roadmap walking to CTO and forbids CEO technical execution."
+      ],
+      "counterexample_candidate_ids": [
+        "C-BUNDLE-LEGACY"
+      ],
+      "depth_waiver": null,
+      "greenfield_reason": null,
+      "primary_candidate_id": "C-BUNDLE-THORCHAIN",
+      "recorded_at": "2026-09-01T07:46:35+00:00",
+      "revision": 1,
+      "search_evidence": [],
+      "slice_id": "S-PROJECT-BUNDLE",
+      "supporting_candidate_ids": [
+        "C-BUNDLE-FULLAUDIT"
+      ]
+    },
+    {
+      "conflict_resolutions": [
+        "After approval, clone both private repos into dedicated /Users/anton/Android sources, deploy from a fresh Gimle worktree, run bootstrap without autonomous roadmap activation, then disposable smoke/canary and leave no feature issue."
+      ],
+      "conflicts": [
+        "The live iMac lacks both product source clones and its shared Gimle checkout is dirty, so in-place deploy/bootstrap is unsafe."
+      ],
+      "counterexample_candidate_ids": [
+        "C-BOOTSTRAP-DIRTY-LIVE"
+      ],
+      "depth_waiver": null,
+      "greenfield_reason": null,
+      "primary_candidate_id": "C-BOOTSTRAP-JOURNALED",
+      "recorded_at": "2026-09-01T07:46:35+00:00",
+      "revision": 1,
+      "search_evidence": [],
+      "slice_id": "S-BOOTSTRAP-CANARY",
+      "supporting_candidate_ids": [
+        "C-BOOTSTRAP-SMOKE",
+        "C-BOOTSTRAP-DORMANT"
+      ]
+    }
+  ],
+  "artifact_history": [
+    {
+      "absolute_path": "/Users/ant013/Data/AI/audit/worktrees/gimle-palace-glitcherry-company/docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
+      "kind": "spec",
+      "path": "docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
+      "recorded_at": "2026-09-01T07:54:40+00:00",
+      "revision": 1,
+      "sha256": "cecfbfdebb500e4221940209770c2ea2ffd61f7e96cb95f842a34ccd83c26afb"
+    },
+    {
+      "absolute_path": "/Users/ant013/Data/AI/audit/worktrees/gimle-palace-glitcherry-company/docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
+      "kind": "delta_matrix",
+      "path": "docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
+      "recorded_at": "2026-09-01T07:54:40+00:00",
+      "revision": 1,
+      "sha256": "cecfbfdebb500e4221940209770c2ea2ffd61f7e96cb95f842a34ccd83c26afb"
+    },
+    {
+      "absolute_path": "/Users/ant013/Data/AI/audit/worktrees/gimle-palace-glitcherry-company/docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
+      "kind": "test_plan",
+      "path": "docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
+      "recorded_at": "2026-09-01T07:54:40+00:00",
+      "revision": 1,
+      "sha256": "cecfbfdebb500e4221940209770c2ea2ffd61f7e96cb95f842a34ccd83c26afb"
+    },
+    {
+      "absolute_path": "/Users/ant013/Data/AI/audit/worktrees/gimle-palace-glitcherry-company/docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
+      "kind": "spec",
+      "path": "docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
+      "recorded_at": "2026-09-01T07:56:55+00:00",
+      "revision": 1,
+      "sha256": "bf2a3d7a4149eb639a8a5868278cb97ea56a29dcb664f08f597d88f4f3bdff6b"
+    },
+    {
+      "absolute_path": "/Users/ant013/Data/AI/audit/worktrees/gimle-palace-glitcherry-company/docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
+      "kind": "delta_matrix",
+      "path": "docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
+      "recorded_at": "2026-09-01T07:56:55+00:00",
+      "revision": 1,
+      "sha256": "bf2a3d7a4149eb639a8a5868278cb97ea56a29dcb664f08f597d88f4f3bdff6b"
+    },
+    {
+      "absolute_path": "/Users/ant013/Data/AI/audit/worktrees/gimle-palace-glitcherry-company/docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
+      "kind": "test_plan",
+      "path": "docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
+      "recorded_at": "2026-09-01T07:56:55+00:00",
+      "revision": 1,
+      "sha256": "bf2a3d7a4149eb639a8a5868278cb97ea56a29dcb664f08f597d88f4f3bdff6b"
+    },
+    {
+      "absolute_path": "/Users/ant013/Data/AI/audit/worktrees/gimle-palace-glitcherry-company/docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
+      "kind": "spec",
+      "path": "docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
+      "recorded_at": "2026-09-01T09:18:28+00:00",
+      "revision": 1,
+      "sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2"
+    },
+    {
+      "absolute_path": "/Users/ant013/Data/AI/audit/worktrees/gimle-palace-glitcherry-company/docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
+      "kind": "delta_matrix",
+      "path": "docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
+      "recorded_at": "2026-09-01T09:18:28+00:00",
+      "revision": 1,
+      "sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2"
+    },
+    {
+      "absolute_path": "/Users/ant013/Data/AI/audit/worktrees/gimle-palace-glitcherry-company/docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
+      "kind": "test_plan",
+      "path": "docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
+      "recorded_at": "2026-09-01T09:18:29+00:00",
+      "revision": 1,
+      "sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2"
+    }
+  ],
+  "artifacts": {
+    "delta_matrix": null,
+    "report": null,
+    "spec": {
+      "absolute_path": "/Users/ant013/Data/AI/audit/worktrees/gimle-palace-glitcherry-company/docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
+      "kind": "spec",
+      "path": "/Users/ant013/Data/AI/audit/worktrees/gimle-palace-glitcherry-company/docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
+      "recorded_at": "2026-09-01T09:31:22+00:00",
+      "revision": 1,
+      "sha256": "9a596bd710313a1710768255fc21b589085f92b9c49da9a87ee1f74f4d2ae262"
+    },
+    "supporting_design": [],
+    "test_plan": null,
+    "verification_results": null
+  },
+  "behavioral_slices": [
+    {
+      "name": "Non-release CTO Walker profile",
+      "recorded_at": "2026-09-01T07:35:17+00:00",
+      "required_dimensions": [
+        "boundary",
+        "dependencies",
+        "lifecycle",
+        "responsibility",
+        "state_errors",
+        "tests",
+        "trust"
+      ],
+      "required_roles": [
+        "composition",
+        "consumer",
+        "contract",
+        "counterexample",
+        "implementation",
+        "lifecycle_error",
+        "test"
+      ],
+      "responsibility": "Compose a CTO instruction capability set that can spec, plan, orchestrate, merge to develop and update evidence but cannot author the product roadmap or cut releases.",
+      "revision": 1,
+      "risk": "high",
+      "role_waivers": {},
+      "slice_id": "S-WALKER-PROFILE"
+    },
+    {
+      "name": "Glitcherry Android company bundle",
+      "recorded_at": "2026-09-01T07:35:17+00:00",
+      "required_dimensions": [
+        "boundary",
+        "dependencies",
+        "lifecycle",
+        "responsibility",
+        "state_errors",
+        "tests",
+        "trust"
+      ],
+      "required_roles": [
+        "composition",
+        "consumer",
+        "contract",
+        "counterexample",
+        "implementation",
+        "lifecycle_error",
+        "test"
+      ],
+      "responsibility": "Define the exact seven-agent roster, custom role crafts, workflow, assembly, host-local examples, overlays and project contract without secrets or host paths.",
+      "revision": 1,
+      "risk": "high",
+      "role_waivers": {},
+      "slice_id": "S-PROJECT-BUNDLE"
+    },
+    {
+      "name": "Dormant company bootstrap and canary",
+      "recorded_at": "2026-09-01T07:35:17+00:00",
+      "required_dimensions": [
+        "boundary",
+        "dependencies",
+        "lifecycle",
+        "responsibility",
+        "state_errors",
+        "tests",
+        "trust"
+      ],
+      "required_roles": [
+        "composition",
+        "consumer",
+        "contract",
+        "counterexample",
+        "implementation",
+        "lifecycle_error",
+        "test"
+      ],
+      "responsibility": "Create the real Paperclip company and agents idempotently from a fresh deploy worktree, validate instructions and handoffs, and leave autonomous roadmap execution dormant.",
+      "revision": 1,
+      "risk": "high",
+      "role_waivers": {},
+      "slice_id": "S-BOOTSTRAP-CANARY"
+    }
+  ],
+  "bugs": [
+    {
+      "actual": "No palace/gimle tool is registered.",
+      "anchors": [
+        "tool catalog 2026-09-01"
+      ],
+      "bug_id": "GIMLE-ENV-001",
+      "classification": "environment_drift",
+      "confidence": "confirmed",
+      "expected": "A read-only health endpoint and project-discovery tools are callable.",
+      "forces_red": false,
+      "impact": "Semantic Gimle discovery and freshness metadata cannot contribute to analog selection.",
+      "minimal_repro": "Inspect enabled MCP tool catalog for palace or gimle namespaces.",
+      "recorded_at": "2026-09-01T07:35:03+00:00",
+      "related_claim_ids": [],
+      "related_event_ids": [
+        "E-0001"
+      ],
+      "revision": 1,
+      "severity": "medium",
+      "status": "workaround",
+      "title": "Gimle/Palace MCP unavailable in current session",
+      "tool": "palace.health.status",
+      "workaround": "Use codebase-memory only for candidate discovery, then rely exclusively on Serena and targeted rg in the fresh worktree."
+    },
+    {
+      "actual": "Index root HEAD c62cef3 is on another branch, is not an ancestor of target 25e531cd, and bounded searches missed current ThorChain/fullAudit files.",
+      "anchors": [
+        "paperclips/projects/thorchain; paperclips/scripts/bootstrap-project.sh"
+      ],
+      "bug_id": "CBM-MAP-001",
+      "classification": "stale_index",
+      "confidence": "confirmed",
+      "expected": "Indexed checkout maps to the current origin/develop ancestry and contains current ThorChain/fullAudit project sources.",
+      "forces_red": false,
+      "impact": "Indexed locations and absence results cannot be load-bearing for this design.",
+      "minimal_repro": "Compare codebase-memory project root Users-ant013-Android-Gimle-Palace and its Git HEAD with the task worktree HEAD.",
+      "recorded_at": "2026-09-01T07:35:03+00:00",
+      "related_claim_ids": [],
+      "related_event_ids": [],
+      "revision": 1,
+      "severity": "high",
+      "status": "workaround",
+      "title": "Indexed Gimle-Palace checkout does not match target worktree",
+      "tool": "codebase-memory",
+      "workaround": "Use codebase-memory only as a hint; verify every kept analog with Serena and rg at 25e531cd."
+    },
+    {
+      "actual": "Runtime returned ok=false with missing_projects=[Users-ant013-Data-AI-trading]",
+      "anchors": [],
+      "bug_id": "B-TRADING-PROJECT-NOT-REGISTERED",
+      "classification": "environment_drift",
+      "confidence": "confirmed",
+      "expected": "Registered trading project or an explicit coverage envelope",
+      "forces_red": false,
+      "impact": "Palace cannot act as the load-bearing source for Trading analog confirmation in this run.",
+      "minimal_repro": "palace_code_semantic_search(project=Users-ant013-Data-AI-trading, query=cleanup/authority analog) returned project_not_registered",
+      "recorded_at": "2026-09-01T09:31:16+00:00",
+      "related_claim_ids": [],
+      "related_event_ids": [],
+      "revision": 1,
+      "severity": "medium",
+      "status": "workaround",
+      "title": "Trading Palace project unavailable in current runtime",
+      "tool": "palace_code_semantic_search",
+      "workaround": "Use current-tree rg/Serena evidence plus official Android docs; keep Palace result out of design decisions."
+    }
+  ],
+  "checks": [],
+  "context_history": [],
+  "created_at": "2026-09-01T07:30:37+00:00",
+  "decisions": [
+    {
+      "challenge": "Could the provisional six-role team cover the prototype with one generic Android implementer?",
+      "decision_id": "ADR-ROSTER-7",
+      "evidence": [
+        "The core product risk is deterministic render/codec/audio/export; separating it from platform ownership preserves specialty and independent boundary review while one-writer-per-slice prevents concurrency."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T07:55:27+00:00",
+      "required_changes": [],
+      "revision": 1,
+      "spec_revision": 1,
+      "spec_sha256": "cecfbfdebb500e4221940209770c2ea2ffd61f7e96cb95f842a34ccd83c26afb",
+      "summary": "Keep seven permanent agents, including a dedicated Media Pipeline Engineer."
+    },
+    {
+      "challenge": "Could CEO reuse profile cto like ThorChain and rely on prose not to execute?",
+      "decision_id": "ADR-CEO-MINIMAL",
+      "evidence": [
+        "Explicit Paperclip identity does not change composed capability; cto contains merge/release/plan authority that conflicts with the human-approved CEO boundary."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T07:55:27+00:00",
+      "required_changes": [],
+      "revision": 1,
+      "spec_revision": 1,
+      "spec_sha256": "cecfbfdebb500e4221940209770c2ea2ffd61f7e96cb95f842a34ccd83c26afb",
+      "summary": "Use profile minimal plus explicit Paperclip CEO identity and a custom governance role craft."
+    },
+    {
+      "challenge": "Could CTO keep cto and ignore release-cut through project instructions?",
+      "decision_id": "ADR-WALKER-PROFILE",
+      "evidence": [
+        "cto includes git/release-cut.md and runtime smoke expects release-cut. walker creates a testable negative capability boundary while retaining required integration work."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T07:55:27+00:00",
+      "required_changes": [],
+      "revision": 1,
+      "spec_revision": 1,
+      "spec_sha256": "cecfbfdebb500e4221940209770c2ea2ffd61f7e96cb95f842a34ccd83c26afb",
+      "summary": "Add a reusable walker profile rather than reuse cto."
+    },
+    {
+      "challenge": "Would project-only custom fragments be a smaller change?",
+      "decision_id": "ADR-NO-CUSTOM-INCLUDES",
+      "evidence": [
+        "Current manifest object parsing is not a verified nested custom_includes contract; a profile is the established composition unit with validation and runtime probes."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T07:55:27+00:00",
+      "required_changes": [],
+      "revision": 1,
+      "spec_revision": 1,
+      "spec_sha256": "cecfbfdebb500e4221940209770c2ea2ffd61f7e96cb95f842a34ccd83c26afb",
+      "summary": "Use a tested global profile instead of a project manifest custom include list."
+    },
+    {
+      "challenge": "Does extending reviewer collapse independent review?",
+      "decision_id": "ADR-CTO-NO-SELF-REVIEW",
+      "evidence": [
+        "Capability composition teaches plan feedback/merge readiness; assignment authority remains in role craft, exact handoffs and tests, which route spec/plan to Architect and code to CodeReviewer."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T07:55:27+00:00",
+      "required_changes": [],
+      "revision": 1,
+      "spec_revision": 1,
+      "spec_sha256": "cecfbfdebb500e4221940209770c2ea2ffd61f7e96cb95f842a34ccd83c26afb",
+      "summary": "Allow reviewer mechanics in Walker profile but prohibit CTO self-approval by workflow and exact-owner tests."
+    },
+    {
+      "challenge": "Will Platform and Media implementers race on the same branch?",
+      "decision_id": "ADR-ONE-WRITER",
+      "evidence": [
+        "CTO assigns one owner; the other may provide bounded read-only findings only. Dual claims are a ROADMAP_BLOCKED stop condition."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T07:55:27+00:00",
+      "required_changes": [],
+      "revision": 1,
+      "spec_revision": 1,
+      "spec_sha256": "cecfbfdebb500e4221940209770c2ea2ffd61f7e96cb95f842a34ccd83c26afb",
+      "summary": "Retain two specialized implementers with exactly one primary writer per slice."
+    },
+    {
+      "challenge": "Should QA use reviewer to avoid commit capability?",
+      "decision_id": "ADR-QA-PROFILE",
+      "evidence": [
+        "QA needs established test/worktree tooling; role craft forbids production fixes and routes failures back. Live prompt behavior and exact workflow are tested."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T07:55:27+00:00",
+      "required_changes": [],
+      "revision": 1,
+      "spec_revision": 1,
+      "spec_sha256": "cecfbfdebb500e4221940209770c2ea2ffd61f7e96cb95f842a34ccd83c26afb",
+      "summary": "Use established qa profile with a custom no-fix role boundary."
+    },
+    {
+      "challenge": "Does the current constrained bootstrap require a new generic multi-repository abstraction?",
+      "decision_id": "ADR-TWO-REPO-WORKSPACE",
+      "evidence": [
+        "The whole per-agent workspace is already writable. A sibling clone satisfies the two-repo contract without changing framework schema or sharing a writable control checkout."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T07:55:27+00:00",
+      "required_changes": [],
+      "revision": 1,
+      "spec_revision": 1,
+      "spec_sha256": "cecfbfdebb500e4221940209770c2ea2ffd61f7e96cb95f842a34ccd83c26afb",
+      "summary": "Use Android as the generated cwd and a CTO-only sibling control clone inside the writable workspace."
+    },
+    {
+      "challenge": "Should every role use xhigh because quality outranks schedule?",
+      "decision_id": "ADR-MODEL-EFFORT",
+      "evidence": [
+        "Quality-critical Walker/architecture/media/code review retain xhigh; bounded roles remain high. A human budget gate is required before activation."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T07:55:27+00:00",
+      "required_changes": [],
+      "revision": 1,
+      "spec_revision": 1,
+      "spec_sha256": "cecfbfdebb500e4221940209770c2ea2ffd61f7e96cb95f842a34ccd83c26afb",
+      "summary": "Use gpt-5.6-sol xhigh for judgment-heavy roles and high for bounded CEO/platform/QA roles."
+    },
+    {
+      "challenge": "Should company creation start TP-001 automatically?",
+      "decision_id": "ADR-DORMANT",
+      "evidence": [
+        "All roadmap slices are DRAFT and only the Human Engineering Lead can promote READY. Disposable repository-write-free canary proves mechanics without violating authority."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T07:55:28+00:00",
+      "required_changes": [],
+      "revision": 1,
+      "spec_revision": 1,
+      "spec_sha256": "cecfbfdebb500e4221940209770c2ea2ffd61f7e96cb95f842a34ccd83c26afb",
+      "summary": "Bootstrap and canary leave the company dormant with no product/root issue."
+    },
+    {
+      "challenge": "fullAudit uses bypass=true; will Glitcherry GitHub/Gradle/Maestro operations work under false?",
+      "decision_id": "ADR-CONSTRAINED",
+      "evidence": [
+        "The design grants per-agent workspace writes and loopback Paperclip only. Live canary and preflight are explicit gates; any required broadening materially revises the spec instead of silently weakening it."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T07:55:28+00:00",
+      "required_changes": [],
+      "revision": 1,
+      "spec_revision": 1,
+      "spec_sha256": "cecfbfdebb500e4221940209770c2ea2ffd61f7e96cb95f842a34ccd83c26afb",
+      "summary": "Start with constrained sandbox and false bypass; treat missing capability as a failed canary."
+    },
+    {
+      "challenge": "Could the provisional six-role team cover the prototype with one generic Android implementer?",
+      "decision_id": "ADR-ROSTER-7",
+      "evidence": [
+        "The core product risk is deterministic render/codec/audio/export; separating it from platform ownership preserves specialty and independent boundary review while one-writer-per-slice prevents concurrency."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T07:57:22+00:00",
+      "required_changes": [],
+      "revision": 2,
+      "spec_revision": 1,
+      "spec_sha256": "bf2a3d7a4149eb639a8a5868278cb97ea56a29dcb664f08f597d88f4f3bdff6b",
+      "summary": "Keep seven permanent agents, including a dedicated Media Pipeline Engineer."
+    },
+    {
+      "challenge": "Could CEO reuse profile cto like ThorChain and rely on prose not to execute?",
+      "decision_id": "ADR-CEO-MINIMAL",
+      "evidence": [
+        "Explicit Paperclip identity does not change composed capability; cto contains merge/release/plan authority that conflicts with the human-approved CEO boundary."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T07:57:22+00:00",
+      "required_changes": [],
+      "revision": 2,
+      "spec_revision": 1,
+      "spec_sha256": "bf2a3d7a4149eb639a8a5868278cb97ea56a29dcb664f08f597d88f4f3bdff6b",
+      "summary": "Use profile minimal plus explicit Paperclip CEO identity and a custom governance role craft."
+    },
+    {
+      "challenge": "Could CTO keep cto and ignore release-cut through project instructions?",
+      "decision_id": "ADR-WALKER-PROFILE",
+      "evidence": [
+        "cto includes git/release-cut.md and runtime smoke expects release-cut. walker creates a testable negative capability boundary while retaining required integration work."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T07:57:22+00:00",
+      "required_changes": [],
+      "revision": 2,
+      "spec_revision": 1,
+      "spec_sha256": "bf2a3d7a4149eb639a8a5868278cb97ea56a29dcb664f08f597d88f4f3bdff6b",
+      "summary": "Add a reusable walker profile rather than reuse cto."
+    },
+    {
+      "challenge": "Would project-only custom fragments be a smaller change?",
+      "decision_id": "ADR-NO-CUSTOM-INCLUDES",
+      "evidence": [
+        "Current manifest object parsing is not a verified nested custom_includes contract; a profile is the established composition unit with validation and runtime probes."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T07:57:23+00:00",
+      "required_changes": [],
+      "revision": 2,
+      "spec_revision": 1,
+      "spec_sha256": "bf2a3d7a4149eb639a8a5868278cb97ea56a29dcb664f08f597d88f4f3bdff6b",
+      "summary": "Use a tested global profile instead of a project manifest custom include list."
+    },
+    {
+      "challenge": "Does extending reviewer collapse independent review?",
+      "decision_id": "ADR-CTO-NO-SELF-REVIEW",
+      "evidence": [
+        "Capability composition teaches plan feedback/merge readiness; assignment authority remains in role craft, exact handoffs and tests, which route spec/plan to Architect and code to CodeReviewer."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T07:57:23+00:00",
+      "required_changes": [],
+      "revision": 2,
+      "spec_revision": 1,
+      "spec_sha256": "bf2a3d7a4149eb639a8a5868278cb97ea56a29dcb664f08f597d88f4f3bdff6b",
+      "summary": "Allow reviewer mechanics in Walker profile but prohibit CTO self-approval by workflow and exact-owner tests."
+    },
+    {
+      "challenge": "Will Platform and Media implementers race on the same branch?",
+      "decision_id": "ADR-ONE-WRITER",
+      "evidence": [
+        "CTO assigns one owner; the other may provide bounded read-only findings only. Dual claims are a ROADMAP_BLOCKED stop condition."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T07:57:23+00:00",
+      "required_changes": [],
+      "revision": 2,
+      "spec_revision": 1,
+      "spec_sha256": "bf2a3d7a4149eb639a8a5868278cb97ea56a29dcb664f08f597d88f4f3bdff6b",
+      "summary": "Retain two specialized implementers with exactly one primary writer per slice."
+    },
+    {
+      "challenge": "Should QA use reviewer to avoid commit capability?",
+      "decision_id": "ADR-QA-PROFILE",
+      "evidence": [
+        "QA needs established test/worktree tooling; role craft forbids production fixes and routes failures back. Live prompt behavior and exact workflow are tested."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T07:57:23+00:00",
+      "required_changes": [],
+      "revision": 2,
+      "spec_revision": 1,
+      "spec_sha256": "bf2a3d7a4149eb639a8a5868278cb97ea56a29dcb664f08f597d88f4f3bdff6b",
+      "summary": "Use established qa profile with a custom no-fix role boundary."
+    },
+    {
+      "challenge": "Does the current constrained bootstrap require a new generic multi-repository abstraction?",
+      "decision_id": "ADR-TWO-REPO-WORKSPACE",
+      "evidence": [
+        "The whole per-agent workspace is already writable. A sibling clone satisfies the two-repo contract without changing framework schema or sharing a writable control checkout."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T07:57:23+00:00",
+      "required_changes": [],
+      "revision": 2,
+      "spec_revision": 1,
+      "spec_sha256": "bf2a3d7a4149eb639a8a5868278cb97ea56a29dcb664f08f597d88f4f3bdff6b",
+      "summary": "Use Android as the generated cwd and a CTO-only sibling control clone inside the writable workspace."
+    },
+    {
+      "challenge": "Should every role use xhigh because quality outranks schedule?",
+      "decision_id": "ADR-MODEL-EFFORT",
+      "evidence": [
+        "Quality-critical Walker/architecture/media/code review retain xhigh; bounded roles remain high. A human budget gate is required before activation."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T07:57:23+00:00",
+      "required_changes": [],
+      "revision": 2,
+      "spec_revision": 1,
+      "spec_sha256": "bf2a3d7a4149eb639a8a5868278cb97ea56a29dcb664f08f597d88f4f3bdff6b",
+      "summary": "Use gpt-5.6-sol xhigh for judgment-heavy roles and high for bounded CEO/platform/QA roles."
+    },
+    {
+      "challenge": "Should company creation start TP-001 automatically?",
+      "decision_id": "ADR-DORMANT",
+      "evidence": [
+        "All roadmap slices are DRAFT and only the Human Engineering Lead can promote READY. Disposable repository-write-free canary proves mechanics without violating authority."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T07:57:23+00:00",
+      "required_changes": [],
+      "revision": 2,
+      "spec_revision": 1,
+      "spec_sha256": "bf2a3d7a4149eb639a8a5868278cb97ea56a29dcb664f08f597d88f4f3bdff6b",
+      "summary": "Bootstrap and canary leave the company dormant with no product/root issue."
+    },
+    {
+      "challenge": "fullAudit uses bypass=true; will Glitcherry GitHub/Gradle/Maestro operations work under false?",
+      "decision_id": "ADR-CONSTRAINED",
+      "evidence": [
+        "The design grants per-agent workspace writes and loopback Paperclip only. Live canary and preflight are explicit gates; any required broadening materially revises the spec instead of silently weakening it."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T07:57:23+00:00",
+      "required_changes": [],
+      "revision": 2,
+      "spec_revision": 1,
+      "spec_sha256": "bf2a3d7a4149eb639a8a5868278cb97ea56a29dcb664f08f597d88f4f3bdff6b",
+      "summary": "Start with constrained sandbox and false bypass; treat missing capability as a failed canary."
+    },
+    {
+      "challenge": "Can five agents cover the prototype by folding media into generic Android ownership?",
+      "decision_id": "ADR-ROSTER-7",
+      "evidence": [
+        "Current reviewer fragments already cover spec, plan and architecture compliance, while deterministic 3D render, shader, codec, audio and export work remains a distinct implementation specialty."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T09:19:12+00:00",
+      "required_changes": [],
+      "revision": 3,
+      "spec_revision": 1,
+      "spec_sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2",
+      "summary": "Keep six permanent agents, including a dedicated Media Pipeline Engineer and no duplicative Android Architect."
+    },
+    {
+      "challenge": "Could CEO reuse profile cto and rely on prose not to execute?",
+      "decision_id": "ADR-CEO-MINIMAL",
+      "evidence": [
+        "The cto profile composes plan, merge and release capability that conflicts with the approved governance-only CEO boundary."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T09:19:12+00:00",
+      "required_changes": [],
+      "revision": 3,
+      "spec_revision": 1,
+      "spec_sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2",
+      "summary": "Use profile minimal plus explicit Paperclip CEO identity and a custom governance role craft."
+    },
+    {
+      "challenge": "Could CTO keep cto and ignore release-cut through project instructions?",
+      "decision_id": "ADR-WALKER-PROFILE",
+      "evidence": [
+        "The cto profile includes release-cut and its runtime probe expects release behavior; walker retains task integration while excluding release instructions."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T09:19:13+00:00",
+      "required_changes": [],
+      "revision": 3,
+      "spec_revision": 1,
+      "spec_sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2",
+      "summary": "Add a reusable walker profile rather than reuse cto."
+    },
+    {
+      "challenge": "Would project-only custom fragments be a smaller Walker change?",
+      "decision_id": "ADR-NO-CUSTOM-INCLUDES",
+      "evidence": [
+        "Current manifest nested custom include behavior is not an established contract; profiles are the validated reusable composition unit."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T09:19:13+00:00",
+      "required_changes": [],
+      "revision": 3,
+      "spec_revision": 1,
+      "spec_sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2",
+      "summary": "Use a tested global Walker profile instead of an unverified project custom include list."
+    },
+    {
+      "challenge": "Does walker extending reviewer collapse independent review?",
+      "decision_id": "ADR-CTO-NO-SELF-REVIEW",
+      "evidence": [
+        "Capability composition gives CTO plan feedback and merge-readiness interpretation, while exact role assignment and handoffs prohibit CTO self-approval."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T09:19:13+00:00",
+      "required_changes": [],
+      "revision": 3,
+      "spec_revision": 1,
+      "spec_sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2",
+      "summary": "Allow reviewer mechanics in Walker but route every independent spec, plan and code approval to Code Reviewer."
+    },
+    {
+      "challenge": "Will Platform and Media implementers race on the same branch?",
+      "decision_id": "ADR-ONE-WRITER",
+      "evidence": [
+        "CTO assigns one task-branch writer; the other specialist may provide bounded read-only findings only, and any dual claim stops the child."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T09:19:13+00:00",
+      "required_changes": [],
+      "revision": 3,
+      "spec_revision": 1,
+      "spec_sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2",
+      "summary": "Retain Android and Media implementers with exactly one primary writer per slice."
+    },
+    {
+      "challenge": "Should QA use reviewer to avoid commit capability?",
+      "decision_id": "ADR-QA-PROFILE",
+      "evidence": [
+        "QA needs test, emulator and worktree tooling; the role craft forbids production fixes and routes failures back."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T09:19:14+00:00",
+      "required_changes": [],
+      "revision": 3,
+      "spec_revision": 1,
+      "spec_sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2",
+      "summary": "Use the established qa profile with a custom no-fix role boundary."
+    },
+    {
+      "challenge": "Does two-repository status integration require a new generic workspace abstraction?",
+      "decision_id": "ADR-TWO-REPO-WORKSPACE",
+      "evidence": [
+        "The existing writable per-agent workspace can contain the CTO control sibling without sharing control ownership with other roles."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T09:19:14+00:00",
+      "required_changes": [],
+      "revision": 3,
+      "spec_revision": 1,
+      "spec_sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2",
+      "summary": "Use Android as generated cwd and a CTO-owned sibling control clone."
+    },
+    {
+      "challenge": "Should every role use xhigh because quality outranks schedule?",
+      "decision_id": "ADR-MODEL-EFFORT",
+      "evidence": [
+        "Judgment-heavy orchestration, media and adversarial review retain xhigh; bounded roles remain high and activation still requires a human budget."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T09:19:14+00:00",
+      "required_changes": [],
+      "revision": 3,
+      "spec_revision": 1,
+      "spec_sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2",
+      "summary": "Use gpt-5.6-sol xhigh for Walker, Media and Code Reviewer and high for CEO, Android and QA."
+    },
+    {
+      "challenge": "Should company creation start TP-001 automatically?",
+      "decision_id": "ADR-DORMANT",
+      "evidence": [
+        "Roadmap slices remain human-controlled and disposable repository-write-free canary proves workflow mechanics without product activation."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T09:19:14+00:00",
+      "required_changes": [],
+      "revision": 3,
+      "spec_revision": 1,
+      "spec_sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2",
+      "summary": "Bootstrap and canary leave the company dormant with no product or root issue."
+    },
+    {
+      "challenge": "Will GitHub, Gradle and Maestro work under constrained sandbox?",
+      "decision_id": "ADR-CONSTRAINED",
+      "evidence": [
+        "Workspace writes and loopback Paperclip are explicit; origin, fetch, push-auth, Gradle and device probes must succeed before activation or the spec is revised."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T09:19:14+00:00",
+      "required_changes": [],
+      "revision": 3,
+      "spec_revision": 1,
+      "spec_sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2",
+      "summary": "Start constrained with false bypass and treat missing capability as a failed canary."
+    },
+    {
+      "challenge": "Is a permanent Android Architect needed beside Code Reviewer?",
+      "decision_id": "ADR-NO-PERMANENT-ARCHITECT",
+      "evidence": [
+        "The base reviewer and Code Reviewer role already cover plan and architectural compliance; a second permanent reviewer duplicates ownership and canary routing."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T09:19:15+00:00",
+      "required_changes": [],
+      "revision": 1,
+      "spec_revision": 1,
+      "spec_sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2",
+      "summary": "Use one permanent Code Reviewer for independent spec, plan, architecture-aware code review."
+    },
+    {
+      "challenge": "Can a public media skill replace the custom Media role?",
+      "decision_id": "ADR-MEDIA-SKILL-SOURCES",
+      "evidence": [
+        "Public skills are partial or platform-mismatched; official Media3 remains authoritative and selected shader, Transformer and file-sharing sources contribute knowledge only."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T09:19:15+00:00",
+      "required_changes": [],
+      "revision": 1,
+      "spec_revision": 1,
+      "spec_sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2",
+      "summary": "Build one Glitcherry Media role craft from audited official and revision-pinned domain sources."
+    },
+    {
+      "challenge": "Can LOCAL_BLOCKED park one child while Walker starts another?",
+      "decision_id": "ADR-STRICT-CHILD-LIFECYCLE",
+      "evidence": [
+        "A second child can inherit dirty branch, worktree or evidence state; the current child must recover or await the Human Engineering Lead before parent advancement."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T09:19:15+00:00",
+      "required_changes": [],
+      "revision": 1,
+      "spec_revision": 1,
+      "spec_sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2",
+      "summary": "Keep exactly one non-terminal child and stop on blocker, partial merge or incomplete cleanup."
+    },
+    {
+      "challenge": "Can generated workspaces retain the local seed path as origin?",
+      "decision_id": "ADR-WORKSPACE-GITHUB-ORIGIN",
+      "evidence": [
+        "A local-path origin makes a successful push update the seed clone instead of GitHub; fetch and non-mutating push-auth probes must verify the normalized upstream."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T09:19:15+00:00",
+      "required_changes": [],
+      "revision": 1,
+      "spec_revision": 1,
+      "spec_sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2",
+      "summary": "Normalize every generated clone from local seed origin to the verified GitHub upstream before activation."
+    }
+  ],
+  "evidence_claims": [
+    {
+      "accepted": true,
+      "anchors": [
+        "paperclips/fragments/profiles/reviewer.yaml:1",
+        "paperclips/tests/test_phase_b_profiles.py:83"
+      ],
+      "bug_ids": [],
+      "claim": "The reviewer profile is the closest non-release capability base: universal safety, codebase discovery, merge-readiness, plan review, approval, and atomic handoff, but no commit/push or release-cut.",
+      "decision_basis": "serena+rg",
+      "fact_id": "F-REVIEWER-BASE",
+      "fallback_claim_id": null,
+      "fallback_used": false,
+      "freshness": "known_current",
+      "gimle_event_ids": [],
+      "gimle_evidence": null,
+      "load_bearing": true,
+      "location_validity": "valid",
+      "recorded_at": "2026-09-01T07:45:41+00:00",
+      "repository_head": "25e531cd91e7b60375801583626b46357f032557",
+      "revision": 1,
+      "rg_result": "Fresh rg/sed at HEAD 25e531cd confirms reviewer.yaml lines 1-13 and profile tests; description explicitly excludes commit-and-push and release-cut.",
+      "serena_result": "Fresh Serena target inspection found reviewer.yaml extends no profile and includes merge-readiness, merge-state, approve, plan review, and handoff.",
+      "verdict": "MATCH",
+      "worktree_fingerprint": "54589404e794c358"
+    },
+    {
+      "accepted": true,
+      "anchors": [
+        "paperclips/scripts/bootstrap-project.sh:595",
+        "paperclips/scripts/lib/_smoke_probes.sh:131",
+        "paperclips/scripts/smoke-test.sh:145"
+      ],
+      "bug_ids": [],
+      "claim": "Bootstrap accepts explicit Paperclip role/icon independently from prompt profile, routes workflow identity separately, and smoke probes Git authority by profile and orchestration by workflow_role.",
+      "decision_basis": "rg",
+      "fact_id": "F-BOOTSTRAP-IDENTITY-SMOKE",
+      "fallback_claim_id": null,
+      "fallback_used": false,
+      "freshness": "known_current",
+      "gimle_event_ids": [],
+      "gimle_evidence": null,
+      "load_bearing": true,
+      "location_validity": "valid",
+      "recorded_at": "2026-09-01T07:45:41+00:00",
+      "repository_head": "25e531cd91e7b60375801583626b46357f032557",
+      "revision": 1,
+      "rg_result": "bootstrap-project.sh:595-609 applies paperclip_role/paperclip_icon overrides; smoke-test.sh:145-159 passes profile and workflow_role separately; _smoke_probes.sh:131-203 separates Git and phase checks.",
+      "serena_result": null,
+      "verdict": "MATCH",
+      "worktree_fingerprint": "54589404e794c358"
+    },
+    {
+      "accepted": true,
+      "anchors": [
+        "paperclips/fragments/profiles/cto.yaml:1",
+        "paperclips/scripts/lib/_smoke_probes.sh:23"
+      ],
+      "bug_ids": [],
+      "claim": "The current cto profile is unsafe for Glitcherry Walker authority because it inherits reviewer and unconditionally includes release-cut in addition to merge and plan/orchestration capabilities.",
+      "decision_basis": "serena+rg",
+      "fact_id": "F-CTO-RELEASE-CONFLICT",
+      "fallback_claim_id": null,
+      "fallback_used": false,
+      "freshness": "known_current",
+      "gimle_event_ids": [],
+      "gimle_evidence": null,
+      "load_bearing": true,
+      "location_validity": "valid",
+      "recorded_at": "2026-09-01T07:45:41+00:00",
+      "repository_head": "25e531cd91e7b60375801583626b46357f032557",
+      "revision": 1,
+      "rg_result": "Fresh sed confirms cto.yaml lines 1-12; _smoke_probes.sh:23 requires merge and release-cut for profile cto.",
+      "serena_result": "Fresh Serena inspection found cto.yaml extends reviewer and includes universal/cto-merge-authority.md, git/release-cut.md, handoff/phase-orchestration.md, and plan/producer.md.",
+      "verdict": "MATCH",
+      "worktree_fingerprint": "54589404e794c358"
+    },
+    {
+      "accepted": true,
+      "anchors": [
+        "paperclips/projects/thorchain/WORKFLOW.md:14",
+        "paperclips/projects/thorchain/paperclip-agent-assembly.yaml:86",
+        "paperclips/tests/test_phase_f_thorchain_assembly.py:18"
+      ],
+      "bug_ids": [],
+      "claim": "ThorChain is the strongest project-bundle analog: custom role crafts, explicit Paperclip/workflow identities, exact-roster tests, a dormant bootstrap boundary, one active child, and POST-comment then PATCH assignment then one verification then STOP.",
+      "decision_basis": "serena+rg",
+      "fact_id": "F-THORCHAIN-BUNDLE",
+      "fallback_claim_id": null,
+      "fallback_used": false,
+      "freshness": "known_current",
+      "gimle_event_ids": [],
+      "gimle_evidence": null,
+      "load_bearing": true,
+      "location_validity": "valid",
+      "recorded_at": "2026-09-01T07:45:41+00:00",
+      "repository_head": "25e531cd91e7b60375801583626b46357f032557",
+      "revision": 1,
+      "rg_result": "ThorChain WORKFLOW.md:14-17,45-49; assembly:90-136; test_phase_f_thorchain_assembly.py asserts exact roster/files/dormancy markers/rendered templates.",
+      "serena_result": "Fresh Serena inspection found explicit CEO/CTO/reviewer/implementer/QA identities in the assembly, exactly-one-child orchestration in CTO craft, and the atomic workflow handoff.",
+      "verdict": "MATCH",
+      "worktree_fingerprint": "54589404e794c358"
+    },
+    {
+      "accepted": true,
+      "anchors": [
+        "paperclips/projects/fullaudit/paperclip-agent-assembly.yaml:44",
+        "paperclips/tests/test_fullaudit_assembly.py:17"
+      ],
+      "bug_ids": [],
+      "claim": "fullAudit is the strongest sandbox/composition analog: constrained per-agent Git workspaces cloned from a host-local source, loopback-only Paperclip URL, minimal writable roots, exact-role tests, and rendered-bundle checks.",
+      "decision_basis": "serena+rg",
+      "fact_id": "F-FULLAUDIT-SANDBOX",
+      "fallback_claim_id": null,
+      "fallback_used": false,
+      "freshness": "known_current",
+      "gimle_event_ids": [],
+      "gimle_evidence": null,
+      "load_bearing": true,
+      "location_validity": "valid",
+      "recorded_at": "2026-09-01T07:45:41+00:00",
+      "repository_head": "25e531cd91e7b60375801583626b46357f032557",
+      "revision": 1,
+      "rg_result": "fullAudit assembly:44-48,115-117,173-177; bootstrap-project.sh:630-707; test_fullaudit_assembly.py:17-149 asserts constrained roots, clone isolation, loopback env and exact roster.",
+      "serena_result": "Fresh Serena inspection found explicit identities plus constrained writable paths in the fullAudit assembly.",
+      "verdict": "MATCH",
+      "worktree_fingerprint": "54589404e794c358"
+    },
+    {
+      "accepted": true,
+      "anchors": [
+        "paperclips/projects/trading/paperclip-agent-assembly.yaml:84",
+        "paperclips/projects/wallet-radar/WORKFLOW.md:116"
+      ],
+      "bug_ids": [],
+      "claim": "Trading and Wallet Radar are useful negative examples for Glitcherry authority and handoff: both bind CEO-like roles to the cto profile, and their older workflows use a single PATCH/decorative mention instead of the current POST-PATCH-verify-STOP contract.",
+      "decision_basis": "rg",
+      "fact_id": "F-LEGACY-COUNTEREXAMPLES",
+      "fallback_claim_id": null,
+      "fallback_used": false,
+      "freshness": "known_current",
+      "gimle_event_ids": [],
+      "gimle_evidence": null,
+      "load_bearing": true,
+      "location_validity": "valid",
+      "recorded_at": "2026-09-01T07:45:42+00:00",
+      "repository_head": "25e531cd91e7b60375801583626b46357f032557",
+      "revision": 1,
+      "rg_result": "trading assembly:84-90 and wallet-radar assembly:76-84 use cto roles/profiles; trading WORKFLOW.md:186-197 and wallet-radar WORKFLOW.md:116-126 describe legacy single-PATCH/decorative mention semantics.",
+      "serena_result": null,
+      "verdict": "MATCH",
+      "worktree_fingerprint": "54589404e794c358"
+    },
+    {
+      "accepted": true,
+      "anchors": [
+        "paperclips/scripts/bootstrap-project.sh:337",
+        "paperclips/scripts/bootstrap-project.sh:879",
+        "paperclips/scripts/bootstrap-project.sh:901"
+      ],
+      "bug_ids": [],
+      "claim": "The current bootstrap is journaled and idempotent: it validates manifest/host roots/prefix, creates or reuses company and agents, reconciles managed config, clones isolated workspaces, deploys instructions, boots watchdog, and selects inner_orchestrator first for canary.",
+      "decision_basis": "rg",
+      "fact_id": "F-BOOTSTRAP-LIFECYCLE",
+      "fallback_claim_id": null,
+      "fallback_used": false,
+      "freshness": "known_current",
+      "gimle_event_ids": [],
+      "gimle_evidence": null,
+      "load_bearing": true,
+      "location_validity": "valid",
+      "recorded_at": "2026-09-01T07:45:42+00:00",
+      "repository_head": "25e531cd91e7b60375801583626b46357f032557",
+      "revision": 1,
+      "rg_result": "bootstrap-project.sh:337-408 validates and journals paths; 410 onward create-or-reuse; 630-707 constrains workspaces/env; 879 selects inner_orchestrator; 901-944 deploys per-agent workspace instructions.",
+      "serena_result": null,
+      "verdict": "MATCH",
+      "worktree_fingerprint": "54589404e794c358"
+    },
+    {
+      "accepted": true,
+      "anchors": [
+        "paperclips/scripts/smoke-test.sh:76",
+        "paperclips/scripts/lib/_smoke_probes.sh:44",
+        "paperclips/scripts/rollback.sh:84"
+      ],
+      "bug_ids": [],
+      "claim": "Runtime smoke covers identity/config, workspace, profile Git boundaries, workflow responsibility and cross-agent handoff using disposable issues, while rollback tracks and compensates created companies, agents, files and issues.",
+      "decision_basis": "rg",
+      "fact_id": "F-SMOKE-ROLLBACK",
+      "fallback_claim_id": null,
+      "fallback_used": false,
+      "freshness": "known_current",
+      "gimle_event_ids": [],
+      "gimle_evidence": null,
+      "load_bearing": true,
+      "location_validity": "valid",
+      "recorded_at": "2026-09-01T07:45:42+00:00",
+      "repository_head": "25e531cd91e7b60375801583626b46357f032557",
+      "revision": 1,
+      "rg_result": "smoke-test.sh:76-191 and _smoke_probes.sh:44-224 create tracked disposable issues, check profiles/workflow and perform handoff; rollback.sh records/deletes exact resources with path and UUID guards.",
+      "serena_result": null,
+      "verdict": "MATCH",
+      "worktree_fingerprint": "54589404e794c358"
+    },
+    {
+      "accepted": true,
+      "anchors": [
+        "/Users/ant013/Data/AI/Glitcherry/docs/runbooks/human-engineering-lead.md:3",
+        "/Users/ant013/Data/AI/Glitcherry/docs/runbooks/walker-lifecycle.md:1"
+      ],
+      "bug_ids": [],
+      "claim": "The current Glitcherry control repo assigns roadmap authorship and releases to the Human Engineering Lead, CEO to governance only, CTO to the single Walker, and requires separate Android/control develop merges with full cleanup.",
+      "decision_basis": "rg",
+      "fact_id": "F-GLITCHERRY-CONTROL-CONTRACT",
+      "fallback_claim_id": null,
+      "fallback_used": false,
+      "freshness": "known_current",
+      "gimle_event_ids": [],
+      "gimle_evidence": null,
+      "load_bearing": true,
+      "location_validity": "valid",
+      "recorded_at": "2026-09-01T07:45:42+00:00",
+      "repository_head": "25e531cd91e7b60375801583626b46357f032557",
+      "revision": 1,
+      "rg_result": "Glitcherry at f3e4943: human-engineering-lead.md:3-18, walker-lifecycle.md:1-52, two-repository-git-workflow.md:1-66, and ROADMAP.md:1-57 define these boundaries.",
+      "serena_result": null,
+      "verdict": "MATCH",
+      "worktree_fingerprint": "54589404e794c358"
+    },
+    {
+      "accepted": true,
+      "anchors": [
+        "Paperclip GET /api/companies 2026-09-01",
+        "iMac SSH path audit 2026-09-01"
+      ],
+      "bug_ids": [],
+      "claim": "Live Paperclip has no Glitcherry company and no GLA prefix allocation; the iMac has neither Glitcherry repo clone at the proposed Android paths, while the shared Gimle checkout is dirty and must not be used for deployment.",
+      "decision_basis": "rg",
+      "fact_id": "F-LIVE-BOOTSTRAP-PREFLIGHT",
+      "fallback_claim_id": null,
+      "fallback_used": false,
+      "freshness": "known_current",
+      "gimle_event_ids": [],
+      "gimle_evidence": null,
+      "load_bearing": true,
+      "location_validity": "valid",
+      "recorded_at": "2026-09-01T07:45:42+00:00",
+      "repository_head": "25e531cd91e7b60375801583626b46357f032557",
+      "revision": 1,
+      "rg_result": "Authenticated API check on 2026-09-01 listed prefixes STA,TRD,FUL,TEL,WR,MED,GIM,UNS only. SSH path check found proposed Glitcherry paths absent and /Users/Shared/Ios/Gimle-Palace at 6d736a4e develop with 15 dirty entries.",
+      "serena_result": null,
+      "verdict": "MATCH",
+      "worktree_fingerprint": "54589404e794c358"
+    }
+  ],
+  "final_context": null,
+  "gimle_events": [
+    {
+      "args_hash": "44136fa355b3678a",
+      "args_keys": [],
+      "duration_ms": null,
+      "event_id": "E-0001",
+      "intent": "Resolve Gimle/Palace runtime identity before analog discovery",
+      "outcome": "error",
+      "phase": "evidence",
+      "protocol_status": "unavailable",
+      "recorded_at": "2026-09-01T07:35:03+00:00",
+      "response_bytes": null,
+      "returned": null,
+      "seq": 1,
+      "tool": "palace.health.status",
+      "total": null,
+      "truncated": false,
+      "used": false,
+      "warnings": [
+        "No Gimle or Palace MCP tools are exposed in this session; no call could be issued."
+      ]
+    },
+    {
+      "args_hash": "8284558d1e412ffd",
+      "args_keys": [
+        "limit",
+        "project",
+        "query"
+      ],
+      "duration_ms": null,
+      "event_id": "E-0002",
+      "intent": "Check whether registered Palace trading project can confirm legacy cleanup/authority analogs for current roster review",
+      "outcome": "error",
+      "phase": "design",
+      "protocol_status": "ok",
+      "recorded_at": "2026-09-01T09:31:16+00:00",
+      "response_bytes": null,
+      "returned": 0,
+      "seq": 2,
+      "tool": "palace_code_semantic_search",
+      "total": null,
+      "truncated": false,
+      "used": false,
+      "warnings": [
+        "Requested trading project is not registered in current Palace runtime."
+      ]
+    }
+  ],
+  "gimle_snapshot": {
+    "commits_behind_head": null,
+    "indexed_commit": null,
+    "runtime_id": null
+  },
+  "phase": "design",
+  "phase_history": [
+    {
+      "at": "2026-09-01T07:30:37+00:00",
+      "phase": "preflight",
+      "reason": "run initialized"
+    },
+    {
+      "at": "2026-09-01T07:30:37+00:00",
+      "phase": "evidence",
+      "reason": "Repository identity frozen; codebase-memory available only for a different checkout of the same remote; Gimle/Palace tools unavailable, current-tree verification required."
+    },
+    {
+      "at": "2026-09-01T07:48:26+00:00",
+      "phase": "design",
+      "reason": "Verified analog families are complete for walker profile, project bundle, and dormant bootstrap; begin final written design."
+    },
+    {
+      "at": "2026-09-01T07:54:49+00:00",
+      "phase": "adversarial_review",
+      "reason": "Final repository spec written with roster, authority, delta matrix, tests, failure modes and open questions; control-repo companion is tracked by its own spec gate."
+    },
+    {
+      "at": "2026-09-01T07:55:37+00:00",
+      "phase": "awaiting_approval",
+      "reason": "Adversarial review accepted all eleven challenges; final spec hash remains unchanged."
+    },
+    {
+      "at": "2026-09-01T07:56:55+00:00",
+      "phase": "design",
+      "reason": "Removed intentional Markdown trailing-space line breaks so the spec passes git diff --check; no semantic design changed."
+    },
+    {
+      "at": "2026-09-01T07:56:55+00:00",
+      "phase": "adversarial_review",
+      "reason": "Formatting-only spec revision preserves the accepted design and all adversarial decisions."
+    },
+    {
+      "at": "2026-09-01T07:57:23+00:00",
+      "phase": "awaiting_approval",
+      "reason": "Formatting-clean spec received a fresh adversarial decision revision for every challenge; all outcomes remain ACCEPT."
+    },
+    {
+      "at": "2026-09-01T09:18:28+00:00",
+      "phase": "design",
+      "reason": "User-directed revision removes the duplicative permanent Android Architect, retains a custom Media implementer, adopts strict one-child-until-cleanup lifecycle, and corrects generated Git origins."
+    },
+    {
+      "at": "2026-09-01T09:18:29+00:00",
+      "phase": "adversarial_review",
+      "reason": "Revised design and verification plan are complete; re-evaluate all authority, roster, media-skill, lifecycle, recovery, and workspace-origin challenges against the new spec hash."
+    },
+    {
+      "at": "2026-09-01T09:19:29+00:00",
+      "phase": "awaiting_approval",
+      "reason": "Revised spec has current-hash adversarial decisions for six-agent roster, Code Reviewer consolidation, custom Media skill sources, strict one-child lifecycle, recovery, and GitHub origin normalization."
+    },
+    {
+      "at": "2026-09-01T09:31:16+00:00",
+      "phase": "design",
+      "reason": "Post-approval review found new Media-role boundary/version/experimental-API clarifications; reopening design before any implementation."
+    }
+  ],
+  "projects": {
+    "code": "Users-ant013-Android-Gimle-Palace",
+    "git": null,
+    "memory": null
+  },
+  "repository": {
+    "approved_head": null,
+    "approved_worktree_fingerprint": null,
+    "base_head": "25e531cd91e7b60375801583626b46357f032557",
+    "base_worktree_manifest": {
+      "audit/runs/glitcherry-paperclip-company-20260901/state.json": "ef878bc914b3feb6d865bccc3b43f55ed48668c682f4ada737c6df031eff7b7f"
+    },
+    "branch": "feature/glitcherry-paperclip-company",
+    "identity_frozen": true,
+    "integration_branch": "develop",
+    "root": "/Users/ant013/Data/AI/audit/worktrees/gimle-palace-glitcherry-company",
+    "worktree_fingerprint": "54589404e794c358"
+  },
+  "repository_change": true,
+  "revision": 91,
+  "run_id": "glitcherry-paperclip-company-20260901",
+  "schema_version": "2.1",
+  "skill_versions": {
+    "gimle-evidence": "2.1.0"
+  },
+  "spec": {
+    "approval": null,
+    "status": "ready"
+  },
+  "task_id": "GLITCHERRY-PAPERCLIP-COMPANY",
+  "trust": "YELLOW",
+  "updated_at": "2026-09-01T09:31:22+00:00",
+  "workflow": "analog_change"
+}
