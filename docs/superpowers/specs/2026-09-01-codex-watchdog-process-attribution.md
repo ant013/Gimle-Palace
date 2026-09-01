@@ -1,9 +1,9 @@
 # Codex Watchdog Process Attribution
 
-Date: 2026-09-01  
-Status: PROPOSED  
-Branch: `fix/codex-watchdog-process-detection`  
-Baseline: `81199ac82352e90493fff50d785554c5404382ec` (`origin/develop`)  
+Date: 2026-09-01
+Status: PROPOSED
+Branch: `fix/codex-watchdog-process-detection`
+Baseline: `81199ac82352e90493fff50d785554c5404382ec` (`origin/develop`)
 Trigger: Glitcherry DX-004 / GLA-7 `NOT_READY`
 
 ## Goal
@@ -233,4 +233,3 @@ git diff --check
   remain behaviorally unchanged to keep the remediation surgical. Default:
   preserve Claude behavior and require the new authoritative correlation for
   Codex only.
-
