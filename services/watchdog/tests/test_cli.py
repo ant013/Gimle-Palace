@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import json
 import sys
+from argparse import Namespace
 from pathlib import Path
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import httpx
 
@@ -89,6 +90,27 @@ def test_cmd_status(tmp_path: Path, capsys, monkeypatch, mock_paperclip):
     assert "Paperclip agent command shapes: claude=" in out
     assert " codex=" in out
     assert "Active cooldowns: 0" in out
+
+
+def test_cmd_status_includes_no_tty_processes(tmp_path: Path, capsys, monkeypatch):
+    cfg_path = _minimal_cfg(tmp_path)
+    monkeypatch.setattr(cli, "_DEFAULT_STATE_PATH", str(tmp_path / "watchdog-state.json"))
+    monkeypatch.setattr(cli, "_reconcile_for_status", Mock(return_value=(True, "")))
+    run = Mock(
+        return_value=Mock(stdout=("  PID COMMAND\n49574 /usr/local/bin/codex exec --json\n"))
+    )
+    monkeypatch.setattr(cli.subprocess, "run", run)
+
+    rc = cli._cmd_status(Namespace(config=cfg_path, allow_degraded=False))
+
+    assert rc == 0
+    assert "Paperclip agent command shapes: claude=0 codex=1" in capsys.readouterr().out
+    run.assert_called_once_with(
+        ["ps", "-axo", "pid,command"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
 
 
 def test_cmd_status_prints_mode_and_reconciliation(capsys, monkeypatch, observe_only_config_file):

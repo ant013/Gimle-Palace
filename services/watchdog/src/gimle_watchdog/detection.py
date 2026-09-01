@@ -380,7 +380,7 @@ def scan_idle_hangs(config: Config) -> list[HangedProc]:
     hang_stream_idle_max_s = min(c.thresholds.hang_stream_idle_max_s for c in config.companies)
     try:
         result = subprocess.run(
-            ["ps", "-ao", "pid,ppid,etime,time,command"],
+            ["ps", "-axo", "pid,ppid,etime,time,command"],
             capture_output=True,
             text=True,
             check=True,
