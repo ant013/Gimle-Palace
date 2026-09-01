@@ -178,13 +178,17 @@ def _cmd_debug_watchdog(cfg_path: Path) -> int:
     if not procs:
         print("No candidate hanged procs found.")
         return 0
-    header = f"{'PID':>8}  {'etime_s':>8}  {'cpu_s':>6}  {'cpu_ratio':>10}  {'stream_age_s':>12}  command"
+    header = (
+        f"{'PID':>8}  {'runtime':>7}  {'etime_s':>8}  {'cpu_s':>6}  "
+        f"{'cpu_ratio':>10}  {'stream_age_s':>12}  command"
+    )
     print(header)
     print("-" * len(header))
     for p in procs:
         stream_age = str(p.stream_event_age_s) if p.stream_event_age_s is not None else "n/a"
         print(
-            f"{p.pid:>8}  {p.etime_s:>8}  {p.cpu_s:>6}  {p.cpu_ratio:>10.4f}  {stream_age:>12}  {p.command[:60]}"
+            f"{p.pid:>8}  {p.runtime:>7}  {p.etime_s:>8}  {p.cpu_s:>6}  "
+            f"{p.cpu_ratio:>10.4f}  {stream_age:>12}  {p.command[:60]}"
         )
     return 0
 
@@ -265,13 +269,9 @@ def _cmd_status(args: argparse.Namespace) -> int:
         result = subprocess.run(
             ["ps", "-ao", "pid,command"], capture_output=True, text=True, check=True
         )
-        matches = sum(
-            1
-            for line in result.stdout.splitlines()
-            if all(tok in line for tok in detection.PS_FILTER_TOKENS)
-        )
+        process_counts = detection.count_agent_commands(result.stdout)
     except Exception:
-        matches = -1
+        process_counts = {"claude": -1, "codex": -1}
 
     print(f"Configured companies: {len(cfg.companies)}")
     for company in cfg.companies:
@@ -284,7 +284,10 @@ def _cmd_status(args: argparse.Namespace) -> int:
         print(reconciliation_msg)
     if not api_reachable and not args.allow_degraded:
         return 2
-    print(f"paperclip-skills procs matching filter now: {matches}")
+    print(
+        "Paperclip agent command shapes: "
+        f"claude={process_counts['claude']} codex={process_counts['codex']}"
+    )
     print(f"Active cooldowns: {len(state.issue_cooldowns)}")
     print(f"Active escalations: {len(state.escalated_issues)}")
     perm_count = sum(1 for e in state.escalated_issues.values() if e.get("permanent"))

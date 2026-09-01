@@ -126,6 +126,136 @@ def test_parse_ps_skips_high_cpu_procs():
     assert len(hangs) == 0
 
 
+_COMPANY_ID = "bb8f7183-83f7-4757-a21f-ea4dcc93da9f"
+_AGENT_ID = "9a6bbfbc-4f0d-4883-b56c-2d82a01122de"
+_ISSUE_ID = "32c71ede-f45a-4f0c-84a7-676ff200c72e"
+_RUN_ID = "bf1e351b-44e1-4903-82ba-869fda596feb"
+_WORKSPACE_ID = "e339e270-d7ce-4dec-a49e-32b4fc8d4e27"
+
+
+def _codex_identity() -> det.PaperclipProcessIdentity:
+    return det.PaperclipProcessIdentity(
+        company_id=_COMPANY_ID,
+        agent_id=_AGENT_ID,
+        issue_id=_ISSUE_ID,
+        run_id=_RUN_ID,
+        workspace_id=_WORKSPACE_ID,
+    )
+
+
+def test_classify_agent_command_distinguishes_claude_and_codex():
+    assert (
+        det.classify_agent_command(
+            "/usr/bin/claude --append-system-prompt-file /tmp/paperclip-skills-a"
+        )
+        == "claude"
+    )
+    assert det.classify_agent_command("/usr/local/bin/codex exec --json --model gpt-5") == "codex"
+    assert det.classify_agent_command("/tmp/mycodex exec --json") is None
+    assert det.classify_agent_command("/usr/local/bin/codex resume") is None
+    assert (
+        det.classify_agent_command(
+            "/usr/bin/claude --append-system-prompt-file /tmp/paperclip-skills-a '"
+        )
+        == "claude"
+    )
+
+
+def test_parse_paperclip_identity_extracts_only_allowlisted_uuid_fields():
+    process_text = (
+        "/usr/local/bin/codex exec --json "
+        f"PAPERCLIP_COMPANY_ID={_COMPANY_ID} "
+        f"PAPERCLIP_AGENT_ID={_AGENT_ID} "
+        f"PAPERCLIP_TASK_ID={_ISSUE_ID} "
+        f"PAPERCLIP_RUN_ID={_RUN_ID} "
+        f"PAPERCLIP_WORKSPACE_ID={_WORKSPACE_ID} "
+        "PAPERCLIP_API_KEY=must-never-be-returned"
+    )
+
+    identity = det.parse_paperclip_identity(process_text)
+
+    assert identity == _codex_identity()
+    assert "must-never-be-returned" not in repr(identity)
+
+
+@pytest.mark.parametrize(
+    "missing_key",
+    [
+        "PAPERCLIP_COMPANY_ID",
+        "PAPERCLIP_AGENT_ID",
+        "PAPERCLIP_TASK_ID",
+        "PAPERCLIP_RUN_ID",
+        "PAPERCLIP_WORKSPACE_ID",
+    ],
+)
+def test_parse_paperclip_identity_rejects_missing_or_malformed_fields(missing_key: str):
+    values = {
+        "PAPERCLIP_COMPANY_ID": _COMPANY_ID,
+        "PAPERCLIP_AGENT_ID": _AGENT_ID,
+        "PAPERCLIP_TASK_ID": _ISSUE_ID,
+        "PAPERCLIP_RUN_ID": _RUN_ID,
+        "PAPERCLIP_WORKSPACE_ID": _WORKSPACE_ID,
+    }
+    values.pop(missing_key)
+    process_text = " ".join(f"{key}={value}" for key, value in values.items())
+    assert det.parse_paperclip_identity(process_text) is None
+
+    malformed = process_text + f" {missing_key}=not-a-uuid"
+    assert det.parse_paperclip_identity(malformed) is None
+
+
+def test_parse_ps_codex_requires_paperclip_parent_and_complete_identity():
+    text = (
+        "  PID  PPID     ELAPSED        TIME COMMAND\n"
+        "44465  6814     2:00:00     0:00:01 /usr/local/bin/codex exec --json\n"
+    )
+    import unittest.mock as _mock
+
+    with (
+        _mock.patch.object(det, "last_stream_event_age_seconds", return_value=None),
+        _mock.patch.object(det, "read_process_command", return_value="node /bin/paperclipai run"),
+        _mock.patch.object(det, "read_paperclip_identity", return_value=_codex_identity()),
+    ):
+        hangs = det.parse_ps_output(text, 3600, 0.005, 300)
+
+    assert len(hangs) == 1
+    assert hangs[0].runtime == "codex"
+    assert hangs[0].ppid == 6814
+    assert hangs[0].identity == _codex_identity()
+
+
+def test_parse_ps_skips_unattributed_or_non_paperclip_codex():
+    text = (
+        "  PID  PPID     ELAPSED        TIME COMMAND\n"
+        "44465  6814     2:00:00     0:00:01 /usr/local/bin/codex exec --json\n"
+    )
+    import unittest.mock as _mock
+
+    with (
+        _mock.patch.object(det, "last_stream_event_age_seconds", return_value=None),
+        _mock.patch.object(det, "read_process_command", return_value="node /bin/paperclipai run"),
+        _mock.patch.object(det, "read_paperclip_identity", return_value=None),
+    ):
+        assert det.parse_ps_output(text, 3600, 0.005, 300) == []
+
+    with (
+        _mock.patch.object(det, "last_stream_event_age_seconds", return_value=None),
+        _mock.patch.object(det, "read_process_command", return_value="/bin/zsh -l"),
+        _mock.patch.object(det, "read_paperclip_identity", return_value=_codex_identity()),
+    ):
+        assert det.parse_ps_output(text, 3600, 0.005, 300) == []
+
+
+def test_count_agent_commands_reports_runtimes_without_environment():
+    text = (
+        "  PID COMMAND\n"
+        "1 /usr/bin/claude --append-system-prompt-file /tmp/paperclip-skills-a\n"
+        "2 /usr/local/bin/codex exec --json\n"
+        "3 /usr/local/bin/codex resume\n"
+    )
+    assert det.count_agent_commands(text) == {"claude": 1, "codex": 1}
+
+
 # --- New GIM-80 detection tests ---------------------------------------------------
 
 

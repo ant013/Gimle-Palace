@@ -10,7 +10,7 @@ import httpx
 import pytest
 
 from gimle_watchdog import actions as act
-from gimle_watchdog.detection import HangedProc
+from gimle_watchdog.detection import HangedProc, PaperclipProcessIdentity
 from gimle_watchdog.models import (
     CommentOnlyHandoffFinding,
     FindingType,
@@ -265,6 +265,103 @@ async def test_kill_hanged_proc_pid_reused_skip():
     with patch.object(act, "_read_proc_cmdline", return_value="/usr/sbin/unrelated --daemon"):
         result = await act.kill_hanged_proc(hang)
     assert result.status == "pid_reused_skip"
+
+
+async def test_kill_codex_requires_live_correlation_before_signal():
+    identity = PaperclipProcessIdentity(
+        company_id="bb8f7183-83f7-4757-a21f-ea4dcc93da9f",
+        agent_id="9a6bbfbc-4f0d-4883-b56c-2d82a01122de",
+        issue_id="32c71ede-f45a-4f0c-84a7-676ff200c72e",
+        run_id="bf1e351b-44e1-4903-82ba-869fda596feb",
+        workspace_id="e339e270-d7ce-4dec-a49e-32b4fc8d4e27",
+    )
+    hang = HangedProc(
+        pid=44465,
+        ppid=6814,
+        etime_s=7200,
+        cpu_s=1,
+        cpu_ratio=1 / 7200,
+        command="/usr/local/bin/codex exec --json",
+        runtime="codex",
+        identity=identity,
+    )
+    correlation_guard = AsyncMock(return_value=False)
+
+    with (
+        patch.object(act, "_read_proc_cmdline", return_value=hang.command),
+        patch.object(act.detection, "process_snapshot_matches", return_value=True),
+        patch("gimle_watchdog.actions.os.kill") as kill_mock,
+    ):
+        result = await act.kill_hanged_proc(hang, pre_signal_guard=correlation_guard)
+
+    assert result.status == "correlation_skip"
+    correlation_guard.assert_awaited_once()
+    kill_mock.assert_not_called()
+
+
+async def test_kill_codex_revalidates_snapshot_and_forces_only_exact_pid():
+    identity = PaperclipProcessIdentity(
+        company_id="bb8f7183-83f7-4757-a21f-ea4dcc93da9f",
+        agent_id="9a6bbfbc-4f0d-4883-b56c-2d82a01122de",
+        issue_id="32c71ede-f45a-4f0c-84a7-676ff200c72e",
+        run_id="bf1e351b-44e1-4903-82ba-869fda596feb",
+        workspace_id="e339e270-d7ce-4dec-a49e-32b4fc8d4e27",
+    )
+    hang = HangedProc(
+        pid=44465,
+        ppid=6814,
+        etime_s=7200,
+        cpu_s=1,
+        cpu_ratio=1 / 7200,
+        command="/usr/local/bin/codex exec --json",
+        runtime="codex",
+        identity=identity,
+    )
+    correlation_guard = AsyncMock(return_value=True)
+
+    with (
+        patch.object(act, "_read_proc_cmdline", return_value=hang.command),
+        patch.object(act.detection, "process_snapshot_matches", side_effect=[True, True]),
+        patch("gimle_watchdog.actions.os.kill") as kill_mock,
+        patch("gimle_watchdog.actions.asyncio.sleep"),
+    ):
+        result = await act.kill_hanged_proc(hang, pre_signal_guard=correlation_guard)
+
+    assert result.status == "forced"
+    correlation_guard.assert_awaited_once()
+    assert kill_mock.call_args_list[0].args == (44465, act.signal.SIGTERM)
+    assert kill_mock.call_args_list[-1].args == (44465, act.signal.SIGKILL)
+
+
+async def test_kill_codex_skips_when_identity_changes_after_sigterm():
+    identity = PaperclipProcessIdentity(
+        company_id="bb8f7183-83f7-4757-a21f-ea4dcc93da9f",
+        agent_id="9a6bbfbc-4f0d-4883-b56c-2d82a01122de",
+        issue_id="32c71ede-f45a-4f0c-84a7-676ff200c72e",
+        run_id="bf1e351b-44e1-4903-82ba-869fda596feb",
+        workspace_id="e339e270-d7ce-4dec-a49e-32b4fc8d4e27",
+    )
+    hang = HangedProc(
+        pid=44465,
+        ppid=6814,
+        etime_s=7200,
+        cpu_s=1,
+        cpu_ratio=1 / 7200,
+        command="/usr/local/bin/codex exec --json",
+        runtime="codex",
+        identity=identity,
+    )
+
+    with (
+        patch.object(act, "_read_proc_cmdline", return_value=hang.command),
+        patch.object(act.detection, "process_snapshot_matches", side_effect=[True, False]),
+        patch("gimle_watchdog.actions.os.kill") as kill_mock,
+        patch("gimle_watchdog.actions.asyncio.sleep"),
+    ):
+        result = await act.kill_hanged_proc(hang, pre_signal_guard=AsyncMock(return_value=True))
+
+    assert result.status == "post_term_identity_skip"
+    assert [call.args[1] for call in kill_mock.call_args_list] == [act.signal.SIGTERM, 0]
 
 
 def test_read_proc_cmdline_for_nonexistent_returns_none():

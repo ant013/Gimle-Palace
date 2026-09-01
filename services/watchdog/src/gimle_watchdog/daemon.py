@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections import Counter
 import datetime as _dt
 import logging
 import sys
@@ -38,6 +39,8 @@ log = logging.getLogger("watchdog.daemon")
 
 
 TICK_TIMEOUT_SECONDS = 60
+CODEX_CORRELATION_TIMEOUT_SECONDS = 10
+_ACTIVE_EXECUTION_STATUSES = frozenset({"todo", "in_progress", "in_review", "blocked"})
 
 
 @dataclass
@@ -69,6 +72,66 @@ class AlertPostBudget:
                 self.hard_limit,
             )
         return True
+
+
+@dataclass(frozen=True)
+class ProcessCorrelation:
+    ok: bool
+    reason: str
+
+
+async def _correlate_codex_process(
+    cfg: Config,
+    client: PaperclipClient,
+    proc: detection.HangedProc,
+) -> ProcessCorrelation:
+    """Correlate a Codex PID identity to exactly one current Paperclip run."""
+    identity = proc.identity
+    if proc.runtime != "codex" or identity is None:
+        return ProcessCorrelation(ok=False, reason="missing_codex_identity")
+    configured_companies = [
+        company for company in cfg.companies if company.id == identity.company_id
+    ]
+    if len(configured_companies) != 1:
+        return ProcessCorrelation(ok=False, reason="unknown_or_duplicate_company")
+    thresholds = configured_companies[0].thresholds
+    idle_cpu = proc.cpu_ratio < thresholds.idle_cpu_ratio_max
+    stream_stalled = (
+        proc.stream_event_age_s is not None
+        and proc.stream_event_age_s > thresholds.hang_stream_idle_max_s
+    )
+    if proc.etime_s < thresholds.hang_etime_min * 60 or not (idle_cpu or stream_stalled):
+        return ProcessCorrelation(ok=False, reason="company_threshold_not_met")
+
+    try:
+        issues, agents = await asyncio.wait_for(
+            asyncio.gather(
+                client.list_active_issues(identity.company_id),
+                client.list_company_agents(identity.company_id),
+            ),
+            timeout=CODEX_CORRELATION_TIMEOUT_SECONDS,
+        )
+    except Exception as exc:
+        log.warning(
+            "codex_process_correlation_failed reason=paperclip_api_unavailable error=%s",
+            type(exc).__name__,
+        )
+        return ProcessCorrelation(ok=False, reason="paperclip_api_unavailable")
+
+    agent_matches = [agent for agent in agents if agent.id == identity.agent_id]
+    if len(agent_matches) != 1:
+        return ProcessCorrelation(ok=False, reason="unknown_company_agent")
+    issue_matches = [
+        issue
+        for issue in issues
+        if issue.id == identity.issue_id
+        and issue.assignee_agent_id == identity.agent_id
+        and issue.active_run_id == identity.run_id
+        and issue.status in _ACTIVE_EXECUTION_STATUSES
+    ]
+    if len(issue_matches) != 1:
+        return ProcessCorrelation(ok=False, reason="no_exact_active_run")
+    return ProcessCorrelation(ok=True, reason="exact_active_run")
 
 
 async def _sleep(seconds: float) -> None:
@@ -739,11 +802,39 @@ async def _tick(cfg: Config, state: State, client: PaperclipClient) -> None:
 
     # Phase 1: kill host-level idle hangs
     hanged = detection.scan_idle_hangs(cfg)
+    codex_identity_counts = Counter(
+        proc.identity.correlation_key
+        for proc in hanged
+        if proc.runtime == "codex" and proc.identity is not None
+    )
     for proc in hanged:
-        res = await actions.kill_hanged_proc(proc)
+        pre_signal_guard: actions.PreSignalGuard | None = None
+        if proc.runtime == "codex":
+            if proc.identity is None or codex_identity_counts[proc.identity.correlation_key] != 1:
+                log.warning(
+                    "hang_skipped pid=%d runtime=codex reason=duplicate_or_missing_identity",
+                    proc.pid,
+                )
+                continue
+
+            async def _guard(candidate: detection.HangedProc = proc) -> bool:
+                correlation = await _correlate_codex_process(cfg, client, candidate)
+                if not correlation.ok:
+                    log.warning(
+                        "hang_skipped pid=%d runtime=codex reason=%s",
+                        candidate.pid,
+                        correlation.reason,
+                    )
+                return correlation.ok
+
+            pre_signal_guard = _guard
+
+        res = await actions.kill_hanged_proc(proc, pre_signal_guard=pre_signal_guard)
         log.warning(
-            "hang_killed pid=%d etime_s=%d cpu_s=%d cpu_ratio=%.4f stream_age_s=%s status=%s",
+            "hang_action pid=%d runtime=%s etime_s=%d cpu_s=%d cpu_ratio=%.4f "
+            "stream_age_s=%s status=%s",
             proc.pid,
+            proc.runtime,
             proc.etime_s,
             proc.cpu_s,
             proc.cpu_ratio,

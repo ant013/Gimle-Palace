@@ -86,6 +86,8 @@ def test_cmd_status(tmp_path: Path, capsys, monkeypatch, mock_paperclip):
     assert "Auto repair: disabled" in out
     assert "Alert budget: soft=5 hard=20" in out
     assert "Configured companies: 1" in out
+    assert "Paperclip agent command shapes: claude=" in out
+    assert " codex=" in out
     assert "Active cooldowns: 0" in out
 
 
