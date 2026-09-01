@@ -1,0 +1,158 @@
+schemaVersion: 2
+
+project:
+  key: glitcherry-android
+  display_name: Glitcherry Android
+  system_name: Glitcherry-Android
+  issue_prefix: GLA
+  integration_branch: develop
+  specs_dir: docs/specs
+  plans_dir: docs/plans
+
+domain:
+  wallet_target_short: Glitcherry
+  wallet_target_name: Glitcherry Android
+  wallet_target_slug: glitcherry-android
+
+evidence:
+  merge_without_smoke_issue: GLA-bootstrap
+  graphiti_mock_issue: GLA-bootstrap
+  release_reset_issue: GLA-bootstrap
+  asyncmock_driver_issue: GLA-bootstrap
+  worktree_discipline_issue_pair: GLA-bootstrap
+  qa_worktree_discipline_issue: GLA-bootstrap
+  mcp_wire_contract_issue: GLA-bootstrap
+  qa_deploy_checklist_issue: GLA-bootstrap
+  review_scope_drift_issue: GLA-bootstrap
+  qa_to_cto_stall_issue: GLA-bootstrap
+  handoff_flake_issue: GLA-bootstrap
+  pre_slim_baseline_issue: GLA-bootstrap
+  cr_to_pe_stall_issue: GLA-bootstrap
+  handoff_misclassified_issue: GLA-bootstrap
+  post_merge_stall_issue: GLA-bootstrap
+
+paths:
+  overlay_root: paperclips/projects/glitcherry-android/overlays
+  project_rules_file: AGENTS.md
+
+host_paths:
+  required_existing:
+    - project_root
+    - primary_repo_root
+    - control_repo_root
+    - gimle_skills_root
+
+sandbox:
+  mode: constrained
+  bypass_approvals_and_sandbox: false
+  runtime_env:
+    PAPERCLIP_API_URL: paperclip_runtime_api_url
+
+mcp:
+  service_name: glitcherry-android
+  package_name: glitcherry_android
+  tool_namespace: glitcherry
+  base_required:
+    - codebase-memory
+    - context7
+    - serena
+    - github
+    - sequential-thinking
+  runtime_smoke_required:
+    - codebase-memory
+    - context7
+  codebase_memory_projects:
+    primary: Users-ant013-Data-AI-Glitcherry-Android
+    control: Users-ant013-Data-AI-Glitcherry
+  additions:
+    project: []
+    by_role: {}
+
+skills:
+  additions:
+    project:
+      - analog-driven-change
+      - gimle-evidence
+    by_role: {}
+
+subagents:
+  additions:
+    project: []
+    by_role: {}
+
+targets:
+  codex:
+    instruction_entry_file: AGENTS.md
+    adapter_type: codex_local
+    deploy_mode: api
+    instructions_bundle_mode: managed
+
+compatibility:
+  legacy_output_paths: false
+
+agents:
+  - agent_name: GlitcherryCEO
+    role_source: paperclips/projects/glitcherry-android/roles-codex/glitcherry-ceo.md
+    profile: minimal
+    target: codex
+    model: gpt-5.6-sol
+    modelReasoningEffort: high
+    paperclip_role: ceo
+    paperclip_icon: crown
+    workflow_role: governance
+    primary_codebase_memory_project: Users-ant013-Data-AI-Glitcherry-Android
+  - agent_name: GlitcherryCTO
+    role_source: paperclips/projects/glitcherry-android/roles-codex/glitcherry-cto.md
+    profile: walker
+    target: codex
+    reportsTo: GlitcherryCEO
+    model: gpt-5.6-sol
+    modelReasoningEffort: xhigh
+    paperclip_role: cto
+    paperclip_icon: shield
+    workflow_role: inner_orchestrator
+    primary_codebase_memory_project: Users-ant013-Data-AI-Glitcherry-Android
+  - agent_name: GlitcherryAndroidEngineer
+    role_source: paperclips/projects/glitcherry-android/roles-codex/android-engineer.md
+    profile: implementer
+    target: codex
+    reportsTo: GlitcherryCTO
+    model: gpt-5.6-sol
+    modelReasoningEffort: high
+    paperclip_role: engineer
+    paperclip_icon: code
+    workflow_role: platform_implementer
+    primary_codebase_memory_project: Users-ant013-Data-AI-Glitcherry-Android
+  - agent_name: GlitcherryMediaPipelineEngineer
+    role_source: paperclips/projects/glitcherry-android/roles-codex/media-pipeline-engineer.md
+    profile: implementer
+    target: codex
+    reportsTo: GlitcherryCTO
+    model: gpt-5.6-sol
+    modelReasoningEffort: xhigh
+    paperclip_role: engineer
+    paperclip_icon: atom
+    workflow_role: media_implementer
+    primary_codebase_memory_project: Users-ant013-Data-AI-Glitcherry-Android
+  - agent_name: GlitcherryCodeReviewer
+    role_source: paperclips/projects/glitcherry-android/roles-codex/code-reviewer.md
+    profile: reviewer
+    target: codex
+    reportsTo: GlitcherryCTO
+    model: gpt-5.6-sol
+    modelReasoningEffort: xhigh
+    paperclip_role: engineer
+    paperclip_icon: eye
+    workflow_role: reviewer
+    primary_codebase_memory_project: Users-ant013-Data-AI-Glitcherry-Android
+  - agent_name: GlitcherryQAEngineer
+    role_source: paperclips/projects/glitcherry-android/roles-codex/qa-engineer.md
+    profile: reviewer
+    target: codex
+    reportsTo: GlitcherryCTO
+    model: gpt-5.6-sol
+    modelReasoningEffort: high
+    paperclip_role: qa
+    paperclip_icon: bug
+    workflow_role: qa
+    primary_codebase_memory_project: Users-ant013-Data-AI-Glitcherry-Android
