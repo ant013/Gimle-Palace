@@ -85,7 +85,7 @@ async def test_detect_project_stale_files_reads_latest_ingest_run_and_file_hashe
     )
 
     assert report.requires_reingest is True
-    assert report.project_reason is None
+    assert report.project_reason == "scip_artifact_missing"
     assert len(report.stale_files) == 1
     assert report.stale_files[0]["path"] == "Sources/Wallet.swift"
 
