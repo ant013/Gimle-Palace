@@ -76,96 +76,96 @@
         {
           "agentId": "",
           "agentName": "GlitcherryCEO",
-          "bytes": 15795,
+          "bytes": 17608,
           "family": "minimal",
-          "lines": 348,
+          "lines": 378,
           "output": "paperclips/dist/glitcherry-android/codex/GlitcherryCEO.md",
           "platform": "",
           "profiles": [
             "minimal"
           ],
           "roleId": "codex:glitcherry-ceo",
-          "sha256": "757d605d885db7ff3864f051e47d10a352870f08a6e0058700ec3c143675e2e5",
+          "sha256": "1eaf522835261f6d7dac8b51a9a286f104307cc09c06193f0d18c5d5fafbac4d",
           "source": "paperclips/projects/glitcherry-android/roles-codex/glitcherry-ceo.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "",
           "agentName": "GlitcherryCTO",
-          "bytes": 29658,
+          "bytes": 32435,
           "family": "cto",
-          "lines": 658,
+          "lines": 704,
           "output": "paperclips/dist/glitcherry-android/codex/GlitcherryCTO.md",
           "platform": "",
           "profiles": [
             "walker"
           ],
           "roleId": "codex:glitcherry-cto",
-          "sha256": "05e9d0d0c11d87c5110eb7126c187145aae3149b25c56569b8403dc56fcfd94f",
+          "sha256": "acbdcf8ddc032ecc7e810d60dd23c5436300946c727becd77509b8f33d321b61",
           "source": "paperclips/projects/glitcherry-android/roles-codex/glitcherry-cto.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "",
           "agentName": "GlitcherryAndroidEngineer",
-          "bytes": 24480,
+          "bytes": 26293,
           "family": "implementer",
-          "lines": 544,
+          "lines": 574,
           "output": "paperclips/dist/glitcherry-android/codex/GlitcherryAndroidEngineer.md",
           "platform": "",
           "profiles": [
             "implementer"
           ],
           "roleId": "codex:glitcherry-android-engineer",
-          "sha256": "5e3b777e18ad616f8f2a9465fa900e09d5e8c25429d7fa45ed907345ad92476d",
+          "sha256": "a89ebd42a8aad25c4f35872a86ae7b97716822db04e454f8beaa963bd1570383",
           "source": "paperclips/projects/glitcherry-android/roles-codex/android-engineer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "",
           "agentName": "GlitcherryMediaPipelineEngineer",
-          "bytes": 25093,
+          "bytes": 26906,
           "family": "implementer",
-          "lines": 554,
+          "lines": 584,
           "output": "paperclips/dist/glitcherry-android/codex/GlitcherryMediaPipelineEngineer.md",
           "platform": "",
           "profiles": [
             "implementer"
           ],
           "roleId": "codex:glitcherry-media-pipeline-engineer",
-          "sha256": "4270d90e318cbe6817c44930d5d02be98c53e45a3bfec47adb6238609d8063cd",
+          "sha256": "c1d034db6bd7427b821f9750143201be904e774bb95a417bd1dbc5ce88e832f8",
           "source": "paperclips/projects/glitcherry-android/roles-codex/media-pipeline-engineer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "",
           "agentName": "GlitcherryCodeReviewer",
-          "bytes": 24194,
+          "bytes": 26007,
           "family": "reviewer",
-          "lines": 539,
+          "lines": 569,
           "output": "paperclips/dist/glitcherry-android/codex/GlitcherryCodeReviewer.md",
           "platform": "",
           "profiles": [
             "reviewer"
           ],
           "roleId": "codex:glitcherry-code-reviewer",
-          "sha256": "29d1c6e7b8d1d60fa59f8462f15dc077e2da4a46e9aad4cab3abf0d0fd587d57",
+          "sha256": "d1f983a6531b95dc30d94e30297447e63435e4c9f70c8c8a10499fb636801cc5",
           "source": "paperclips/projects/glitcherry-android/roles-codex/code-reviewer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "",
           "agentName": "GlitcherryQAEngineer",
-          "bytes": 24193,
+          "bytes": 26006,
           "family": "qa",
-          "lines": 540,
+          "lines": 570,
           "output": "paperclips/dist/glitcherry-android/codex/GlitcherryQAEngineer.md",
           "platform": "",
           "profiles": [
             "reviewer"
           ],
           "roleId": "codex:glitcherry-qa-engineer",
-          "sha256": "99e9f1b683734e2a68d9aeb026c808250c3e601fcad1ff7a3aa58da4b82c64bf",
+          "sha256": "848270d948840293434276dca94f8e6c2707c33c52135df283e731e50141ae42",
           "source": "paperclips/projects/glitcherry-android/roles-codex/qa-engineer.md",
           "workspaceCwd": ""
         }

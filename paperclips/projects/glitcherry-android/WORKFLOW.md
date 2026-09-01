@@ -56,6 +56,112 @@ If unfinished pinned work exists but none is eligible, the root stays API status
 `blocked` with reason `ROADMAP_BLOCKED` and the exact required Human Engineering
 Lead action.
 
+## Diagnostic execution class — DX-00 only
+
+This is a project-scoped exception for the Human Engineering Lead-approved
+operational qualification sprint. It activates only when the root pins sprint
+`DX-00`, ordered children `DX-001`, `DX-002`, `DX-003`, `DX-004`, and control
+repository commit `6e76a73e894e69f4546e67c3498f7864c8d0cb99`.
+
+The child issue title must begin with exactly one of these ID and word pairs:
+
+- `DX-001 diagnostic`;
+- `DX-002 diagnostic`;
+- `DX-003 diagnostic`;
+- `DX-004 diagnostic`.
+
+The issue title only grants this exception. A body, comment, approximate `DX-*`
+prefix, different ID, or issue in another company cannot grant it. The child
+description must cite the immutable control contract, name the current bounded
+step, and name the expected next owner.
+
+The normal parent loop remains in force. There is at most one non-terminal direct
+child. The CTO may create the next diagnostic child only after the current child
+has reached its required stop state and cleanup evidence is complete: all persistent
+clones are clean/current, no unmerged PR remains, and every exact task/status ref
+or recorded temporary worktree from that child is absent. A recovery wake resumes
+the same child and never creates a replacement.
+
+For every advancing transition, prove the prior child is terminal and cleanup
+evidence is complete before selection. DX-004 `blocked` is a final sprint stop and
+never advances to another child.
+
+The owner-approved unlimited mode is `budgetMonthlyCents=0`; it is not a zero-budget
+failure. Record per-run cost evidence and escalate anomalous growth to the Human
+Engineering Lead. Missing or contradictory owner cost policy is a stop condition.
+
+Retain root and child issues as the audit and cost ledger. Never call DELETE for a
+Paperclip issue. Use `done`, `cancelled`, or `blocked` as the contract requires.
+
+### DX-001 diagnostic — role and handoff circuit
+
+Route the same child exactly:
+
+`GlitcherryCTO -> GlitcherryAndroidEngineer -> GlitcherryMediaPipelineEngineer -> GlitcherryCodeReviewer -> GlitcherryQAEngineer -> GlitcherryCEO -> GlitcherryCTO`.
+
+Each fresh wake posts one card containing exact agent name and Paperclip role,
+ownership area, one allowed action, one forbidden action, company/Project/workspace
+IDs and actual `pwd` without credentials, and expected next owner. Then it performs
+the atomic handoff, verifies once, and stops. This child is repository-write-free:
+the issue contract is its spec, and it creates no branch, file, product phase,
+review, QA execution, or merge. The returning CTO validates one issue ID, all six
+unique agents, the complete ordered ledger, no duplicate child/wake, and zero
+repository diff before setting the child `done`.
+
+### DX-002 diagnostic — observed capability circuit
+
+Use the same route and repository-write-free handoff behavior as DX-001. Each role
+records its instruction entry path/digest; declared and observed skills; the
+availability of `analog-driven-change` and `gimle-evidence`; and safe read-only
+probes of applicable `codebase-memory`, `context7`, `serena`, `github`, and
+`sequential-thinking` contracts. Record each result as `AVAILABLE`, `MISSING`,
+`BROKEN`, or `NOT_APPLICABLE`. A filename, declared tool, nested error, stale index,
+or ambiguous mapping is not a PASS. Never install or reconfigure a capability and
+never expose environment or credential values. The returning CTO posts the exact
+run-linked matrix and sets the child `done` only if the handoff ledger is complete.
+
+### DX-003 diagnostic — bounded Git lifecycle
+
+DX-003 uses the seven child phases below for the narrow diagnostic artifact, with
+these explicit deltas:
+
+- the CTO materializes the bounded diagnostic spec and plan on a task branch from
+  current Android `develop`;
+- `GlitcherryAndroidEngineer` is the only writer and adds only the approved spec/
+  plan artifacts plus `docs/diagnostics/DX-003-workflow-proof.md` containing
+  non-secret workspace, GitHub auth, JDK, Android SDK/adb/emulator, Gradle strategy,
+  and Maestro availability/version evidence;
+- Code Reviewer independently reviews the exact head; QA checks that same head in
+  detached read-only state and does not invent an emulator gate when no Android
+  scaffold exists;
+- the CTO performs one Android `develop` merge after both gates. There is no
+  diagnostic control status branch or second merge: retained Paperclip evidence is
+  this slice's status ledger;
+- after the merge is proven, remove only exact remote/local task refs and any
+  recorded temporary worktree, prune worktree metadata, and prove all six
+  persistent clones clean/current on `develop` before setting the child `done`.
+
+Any product/source/config diff, stale or unreviewed head, unsafe cleanup target,
+release need, or merge outside Android `develop` blocks the child.
+
+### DX-004 diagnostic — fail-closed watchdog qualification
+
+First collect read-only watchdog PID/mode/posture, detector/test coverage, and exact
+`company -> agent -> run -> PID` process-tree evidence for this diagnostic run.
+Only unambiguous attribution of one current Codex subprocess permits the documented
+controlled hang, `SIGTERM`, bounded `SIGKILL` fallback, and one recovery wake of the
+same issue.
+
+Never use broad `pkill`, a process name or glob as a kill target, weaken host-global
+thresholds, terminate Paperclip/watchdog/launchd, affect another company, or create
+a replacement child. If exact attribution is absent or ambiguous, perform no fault
+injection, post the framework blocker, set the child and root `blocked` with
+`ROADMAP_BLOCKED`, and report `NOT_READY`. No next child is permitted.
+
+Normal product slices still require all seven phases and both Android/control merges.
+The disposable `smoke-probe-*` and `smoke-e2e-*` exception also remains unchanged;
+neither smoke nor DX rules grant authority to release, sign, tag, or publish.
+
 ## Seven child phases
 
 ### Phase 1 — Spec
