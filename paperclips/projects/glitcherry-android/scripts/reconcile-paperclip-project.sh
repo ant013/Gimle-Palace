@@ -102,8 +102,6 @@ raise SystemExit(0 if stat.S_ISDIR(value.st_mode) else 1)
 PY
   [ -f "${directory_path}/AGENTS.md" ] && [ ! -L "${directory_path}/AGENTS.md" ] || \
     die "$label has no generated AGENTS.md"
-  [ -d "${directory_path}/repo/.git" ] && [ ! -L "${directory_path}/repo/.git" ] || \
-    die "$label has no prepared Android repository"
 }
 
 is_uuid() {
@@ -161,7 +159,7 @@ else
     project_payload="$(jq -n \
       --arg name "$PROJECT_NAME" \
       --arg lead "$CTO_ID" \
-      '{name:$name,description:"Persistent per-agent runtime workspaces for Glitcherry Android.",status:"in_progress",leadAgentId:$lead}')"
+      '{name:$name,description:"Role instruction workspaces for Glitcherry Android.",status:"in_progress",leadAgentId:$lead}')"
     PROJECT_ID="$(paperclip_post "/api/companies/${COMPANY_ID}/projects" "$project_payload" | jq -r '.id // ""')"
   fi
   is_uuid "$PROJECT_ID" || die "project reconciliation returned an invalid identifier"

@@ -116,7 +116,7 @@ def _fixture(tmp_path: Path) -> dict[str, object]:
     team_root = tmp_path / "runs"
     for name in AGENT_NAMES:
         workspace = team_root / name / "workspace"
-        (workspace / "repo" / ".git").mkdir(parents=True)
+        workspace.mkdir(parents=True)
         (workspace / "AGENTS.md").write_text(f"# {name}\n")
 
     paths = tmp_path / "paths.yaml"

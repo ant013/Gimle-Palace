@@ -40,7 +40,9 @@ host_paths:
     - project_root
     - primary_repo_root
     - control_repo_root
-    - gimle_skills_root
+    - task_worktree_root
+    - task_state_root
+    - slice_controller_path
 
 sandbox:
   mode: constrained
@@ -73,9 +75,7 @@ mcp:
 
 skills:
   additions:
-    project:
-      - analog-driven-change
-      - gimle-evidence
+    project: []
     by_role: {}
 
 subagents:

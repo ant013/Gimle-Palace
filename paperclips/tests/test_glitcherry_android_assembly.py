@@ -103,12 +103,17 @@ def test_glitcherry_project_files_and_portable_local_examples_exist():
         "roles-codex/qa-engineer.md",
         "references/media-skill-sources.md",
         "scripts/reconcile-paperclip-project.sh",
+        "scripts/slice-worktree.py",
     ]
     for relative in required:
         assert (PROJECT / relative).is_file(), relative
 
     paths = yaml.safe_load((PROJECT / "paths.local-example.yaml").read_text())
     assert paths["team_workspace_root"] == "/opt/example/glitcherry-paperclip-runs"
+    assert paths["task_worktree_root"] == "/opt/example/glitcherry-slice-worktrees"
+    assert paths["task_state_root"] == "/opt/example/glitcherry-slice-state"
+    assert paths["slice_controller_path"].endswith("/scripts/slice-worktree.py")
+    assert paths["slice_lease_seconds"] == 2700
     assert paths["android_repository_url"] == "https://github.com/ant013/Glitcherry-Android.git"
     assert paths["control_repository_url"] == "https://github.com/ant013/Glitcherry.git"
     assert paths["paperclip_runtime_api_url"].startswith("http://127.0.0.1:")
@@ -124,7 +129,7 @@ def test_glitcherry_project_files_and_portable_local_examples_exist():
     }
 
 
-def test_workflow_is_the_single_seven_phase_parent_child_contract():
+def test_workflow_is_the_single_worktree_parent_child_contract():
     text = (PROJECT / "WORKFLOW.md").read_text()
     required = [
         "single lifecycle authority",
@@ -134,13 +139,19 @@ def test_workflow_is_the_single_seven_phase_parent_child_contract():
         "blockedByIssueIds",
         "issue_blockers_resolved",
         "issue_children_completed",
-        "Phase 1 — Spec",
+        "Phase 1 — Create worktree and materialize spec",
         "Phase 2 — Independent spec review",
         "Phase 3 — Plan and independent plan review",
         "Phase 4 — Implementation by exactly one engineer",
         "Phase 5 — Exact-head code and architecture review",
-        "Phase 6 — QA",
-        "Phase 7 — Integrate, synchronize, and clean",
+        "Phase 6 — Integrate, synchronize, and clean",
+        "Sprint smoke gate — QA only here",
+        "task_worktree_root",
+        "task_state_root",
+        "exclusive lease",
+        "maximum three",
+        "fourth autonomous",
+        "SPRINT_SMOKE_REQUIRED",
         "GLA-N + Android merge SHA",
         "POST evidence",
         "PATCH assignee/status/projectWorkspaceId",
@@ -168,7 +179,9 @@ def test_common_overlay_enforces_authority_repositories_and_one_writer():
     required = [
         "WORKFLOW.md",
         "Human Engineering Lead",
-        "workspace/repo",
+        "task_worktree_root",
+        "task_state_root",
+        "exclusive lease",
         "workspace/control",
         "workspace/AGENTS.md",
         "Project workspace binding",
@@ -201,7 +214,8 @@ def test_dx_00_diagnostic_class_is_exact_serial_and_fail_closed():
         "company -> agent -> run -> PID",
         "NOT_READY",
         "No next child is permitted",
-        "Normal product slices still require all seven phases and both Android/control merges",
+        "Historical DX-003",
+        "normal product slices use the single-worktree contract",
     ]
     for marker in required:
         assert marker in flat_workflow
@@ -269,8 +283,9 @@ def test_role_crafts_preserve_exact_write_and_review_boundaries():
     assert "Media3 `1.11.0`" in media
     assert "independent spec" in reviewer and "exact PR head" in reviewer
     assert "architecture" in reviewer and "never implement fixes" in reviewer
-    assert "detached read-only" in qa and "never commit or push" in qa
-    for marker in ["same implementer", "scope drift", "LOCAL_BLOCKED", "Human Engineering Lead"]:
+    assert "maximum three" in reviewer and "fourth autonomous" in reviewer
+    assert "sprint smoke" in qa and "never commit or push" in qa
+    for marker in ["SPRINT_SMOKE_REQUIRED", "candidate SHA", "LOCAL_BLOCKED", "Human Engineering Lead"]:
         assert marker in qa
 
 
@@ -319,3 +334,7 @@ def test_rendered_glitcherry_roles_have_no_templates_or_forbidden_authority():
     assert "develop -> main" not in cto.lower()
     assert "## Commit and Push" not in qa
     assert "commit push" not in qa.lower()
+    for text in rendered.values():
+        assert "task_worktree_root" in text
+        assert "exclusive lease" in text
+        assert "all persistent clones" not in text

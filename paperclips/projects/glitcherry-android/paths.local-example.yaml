@@ -6,10 +6,13 @@ primary_repo_root: /opt/example/Glitcherry-Android
 control_repo_root: /opt/example/Glitcherry
 production_checkout: /opt/example/Glitcherry-Android
 team_workspace_root: /opt/example/glitcherry-paperclip-runs
+task_worktree_root: /opt/example/glitcherry-slice-worktrees
+task_state_root: /opt/example/glitcherry-slice-state
+slice_controller_path: /opt/example/Gimle-Palace/paperclips/projects/glitcherry-android/scripts/slice-worktree.py
+slice_lease_seconds: 2700
 operator_memory_dir: /opt/example/glitcherry-paperclip-memory
 overlay_root: paperclips/projects/glitcherry-android/overlays
 project_rules_file: AGENTS.md
-gimle_skills_root: /opt/example/gimle-skills
 android_repository_url: https://github.com/ant013/Glitcherry-Android.git
 control_repository_url: https://github.com/ant013/Glitcherry.git
 paperclip_runtime_api_url: http://127.0.0.1:3100
