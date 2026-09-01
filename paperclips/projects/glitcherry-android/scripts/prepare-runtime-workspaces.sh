@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Prepare the persistent Glitcherry Git checkouts after bootstrap and before wake.
+# Validate the persistent Glitcherry runtime roots before any agent is woken.
 
 set -euo pipefail
 umask 077
@@ -28,9 +28,9 @@ Options:
   -h, --help                       Show this help.
 
 The production path accepts only the exact ant013 Glitcherry HTTPS origins. It
-prepares clean, current develop clones under each persistent agent workspace and
-the CTO control clone. It never writes repository AGENTS.md or removes a
-persistent workspace.
+validates one canonical clean Android clone, one canonical clean control clone,
+the task roots, and the generated role workspaces. It never creates a
+per-agent repository clone and never modifies repository content.
 USAGE
 }
 
@@ -71,13 +71,15 @@ while [ "$#" -gt 0 ]; do
 done
 
 for command_name in git yq python3; do
-  command -v "$command_name" >/dev/null 2>&1 || die "required command is unavailable: $command_name"
+  command -v "$command_name" >/dev/null 2>&1 || \
+    die "required command is unavailable: $command_name"
 done
 
 validate_regular_file() {
   local file_path="$1"
   local label="$2"
-  python3 - "$file_path" <<'PY' >/dev/null 2>&1 || die "$label must be a regular non-symlink file"
+  python3 - "$file_path" <<'PY' >/dev/null 2>&1 || \
+    die "$label must be a regular non-symlink file"
 import os
 import stat
 import sys
@@ -90,7 +92,8 @@ PY
 validate_private_file() {
   local file_path="$1"
   local label="$2"
-  python3 - "$file_path" <<'PY' >/dev/null 2>&1 || die "$label must be owner-controlled and mode 600"
+  python3 - "$file_path" <<'PY' >/dev/null 2>&1 || \
+    die "$label must be owner-controlled and mode 600"
 import os
 import stat
 import sys
@@ -108,7 +111,8 @@ PY
 validate_absolute_directory() {
   local directory_path="$1"
   local label="$2"
-  python3 - "$directory_path" <<'PY' >/dev/null 2>&1 || die "$label must be an existing absolute non-symlink directory"
+  python3 - "$directory_path" <<'PY' >/dev/null 2>&1 || \
+    die "$label must be an existing absolute non-symlink directory"
 import os
 import pathlib
 import stat
@@ -125,59 +129,9 @@ raise SystemExit(0 if stat.S_ISDIR(value.st_mode) else 1)
 PY
 }
 
-validate_regular_file "$MANIFEST" "manifest"
-validate_private_file "$PATHS_FILE" "paths file"
-validate_private_file "$BINDINGS_FILE" "bindings file"
-
-[ "$(yq -r '.schemaVersion // ""' "$PATHS_FILE")" = "2" ] || die "paths file schemaVersion must be 2"
-[ "$(yq -r '.schemaVersion // ""' "$BINDINGS_FILE")" = "2" ] || die "bindings file schemaVersion must be 2"
-
-INTEGRATION_BRANCH="$(yq -r '.project.integration_branch // ""' "$MANIFEST")"
-[ "$INTEGRATION_BRANCH" = "develop" ] || die "Glitcherry integration branch must be develop"
-
-TEAM_ROOT="$(yq -r '.team_workspace_root // ""' "$PATHS_FILE")"
-ANDROID_REMOTE="$(yq -r '.android_repository_url // ""' "$PATHS_FILE")"
-CONTROL_REMOTE="$(yq -r '.control_repository_url // ""' "$PATHS_FILE")"
-validate_absolute_directory "$TEAM_ROOT" "team workspace root"
-
 validate_uuid() {
   [[ "$1" =~ ^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$ ]]
 }
-
-COMPANY_ID="$(yq -r '.company_id // ""' "$BINDINGS_FILE")"
-validate_uuid "$COMPANY_ID" || die "bindings file has an invalid company identifier"
-
-AGENT_NAMES=()
-while IFS= read -r agent_name; do
-  [ -n "$agent_name" ] || continue
-  AGENT_NAMES+=("$agent_name")
-done < <(yq -r '.agents[]?.agent_name // ""' "$MANIFEST")
-[ "${#AGENT_NAMES[@]}" -gt 0 ] || die "manifest has no agents"
-
-CTO_NAMES=()
-while IFS= read -r cto_name; do
-  [ -n "$cto_name" ] || continue
-  CTO_NAMES+=("$cto_name")
-done < <(yq -r '.agents[]? | select(.workflow_role == "inner_orchestrator") | .agent_name' "$MANIFEST")
-[ "${#CTO_NAMES[@]}" -eq 1 ] || die "manifest must define exactly one inner orchestrator"
-CTO_NAME="${CTO_NAMES[0]}"
-
-manifest_names_sorted="$(printf '%s\n' "${AGENT_NAMES[@]}" | LC_ALL=C sort)"
-binding_names_sorted="$(yq -r '.agents | keys | .[]' "$BINDINGS_FILE" | LC_ALL=C sort)"
-[ "$manifest_names_sorted" = "$binding_names_sorted" ] || die "bindings agents do not exactly match the manifest"
-
-AGENT_IDS=()
-for agent_name in "${AGENT_NAMES[@]}"; do
-  [[ "$agent_name" =~ ^[A-Za-z][A-Za-z0-9_-]*$ ]] || die "manifest contains an unsafe agent name"
-  agent_id="$(yq -r ".agents[\"${agent_name}\"] // \"\"" "$BINDINGS_FILE")"
-  validate_uuid "$agent_id" || die "bindings file has an invalid agent identifier"
-  [ "$agent_id" != "$COMPANY_ID" ] || die "bindings file reuses the company identifier for an agent"
-  AGENT_IDS+=("$agent_id")
-done
-[ "$(printf '%s\n' "${AGENT_NAMES[@]}" | LC_ALL=C sort -u | wc -l | tr -d ' ')" -eq "${#AGENT_NAMES[@]}" ] || \
-  die "manifest contains duplicate agent names"
-[ "$(printf '%s\n' "${AGENT_IDS[@]}" | LC_ALL=C sort -u | wc -l | tr -d ' ')" -eq "${#AGENT_IDS[@]}" ] || \
-  die "bindings file contains duplicate agent identifiers"
 
 validate_local_remote() {
   local remote_value="$1"
@@ -191,60 +145,21 @@ validate_local_remote() {
     die "test remote must be a bare repository"
 }
 
-if [ "$ALLOW_LOCAL_TEST_REMOTES" -eq 1 ]; then
-  validate_local_remote "$ANDROID_REMOTE"
-  validate_local_remote "$CONTROL_REMOTE"
-else
-  [ "$ANDROID_REMOTE" = "$ANDROID_GITHUB_URL" ] && [ "$CONTROL_REMOTE" = "$CONTROL_GITHUB_URL" ] || \
-    die "repository URLs must be the exact allowlisted GitHub HTTPS origins"
-fi
-
-git ls-remote --exit-code --heads "$ANDROID_REMOTE" refs/heads/develop >/dev/null 2>&1 || \
-  die "Android origin has no reachable develop branch"
-git ls-remote --exit-code --heads "$CONTROL_REMOTE" refs/heads/develop >/dev/null 2>&1 || \
-  die "control origin has no reachable develop branch"
-
-workspace_for_agent() {
-  printf '%s/%s/workspace' "$TEAM_ROOT" "$1"
-}
-
-validate_workspace() {
-  local agent_name="$1"
-  local workspace_path
-  workspace_path="$(workspace_for_agent "$agent_name")"
-  validate_absolute_directory "$workspace_path" "agent workspace"
-  [ -f "$workspace_path/AGENTS.md" ] && [ ! -L "$workspace_path/AGENTS.md" ] || \
-    die "generated workspace AGENTS.md is missing or unsafe"
-}
-
-repo_state() {
+validate_repo() {
   local repo_path="$1"
   local expected_remote="$2"
   local label="$3"
   local actual_remote top_level current_head remote_head
 
-  if [ ! -e "$repo_path" ]; then
-    printf 'missing'
-    return
-  fi
-  [ ! -L "$repo_path" ] || die "$label repository is an unmanaged symlink"
-  [ -d "$repo_path" ] || die "$label repository is unmanaged"
-  if [ -z "$(find "$repo_path" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
-    printf 'missing'
-    return
-  fi
-  [ -d "$repo_path/.git" ] && [ ! -L "$repo_path/.git" ] || die "$label repository is unmanaged"
+  validate_absolute_directory "$repo_path" "$label repository"
+  [ -e "$repo_path/.git" ] && [ ! -L "$repo_path/.git" ] || \
+    die "$label repository is unmanaged"
   top_level="$(git -C "$repo_path" rev-parse --show-toplevel 2>/dev/null || true)"
   [ -n "$top_level" ] && [ "$top_level" = "$(cd "$repo_path" && pwd -P)" ] || \
     die "$label repository is unmanaged"
-  if [ "$label" = "Android" ]; then
-    [ -f "$repo_path/AGENTS.md" ] && [ ! -L "$repo_path/AGENTS.md" ] || \
-      die "Android repository has no regular tracked AGENTS.md"
-    git -C "$repo_path" ls-files --error-unmatch -- AGENTS.md >/dev/null 2>&1 || \
-      die "Android repository has no regular tracked AGENTS.md"
-  fi
   actual_remote="$(git -C "$repo_path" remote get-url origin 2>/dev/null || true)"
-  [ "$actual_remote" = "$expected_remote" ] || die "$label origin does not match the configured allowlist"
+  [ "$actual_remote" = "$expected_remote" ] || \
+    die "$label origin does not match the configured allowlist"
   [ -z "$(git -C "$repo_path" status --porcelain --untracked-files=all 2>/dev/null)" ] || \
     die "$label repository is dirty"
   [ "$(git -C "$repo_path" branch --show-current 2>/dev/null || true)" = "$INTEGRATION_BRANCH" ] || \
@@ -254,44 +169,104 @@ repo_state() {
     die "$label repository could not fetch current develop"
   current_head="$(git -C "$repo_path" rev-parse HEAD 2>/dev/null || true)"
   remote_head="$(git -C "$repo_path" rev-parse "refs/remotes/origin/${INTEGRATION_BRANCH}" 2>/dev/null || true)"
-  [ -n "$current_head" ] && [ "$current_head" = "$remote_head" ] || \
-    die "$label repository is not current develop"
-  printf 'ready'
-}
-
-ANDROID_TARGETS=()
-for agent_name in "${AGENT_NAMES[@]}"; do
-  validate_workspace "$agent_name"
-  workspace_path="$(workspace_for_agent "$agent_name")"
-  ANDROID_TARGETS+=("${workspace_path}/repo")
-done
-CTO_WORKSPACE="$(workspace_for_agent "$CTO_NAME")"
-CONTROL_TARGET="${CTO_WORKSPACE}/control"
-
-# Validate every existing target before creating any missing clone.
-for target_path in "${ANDROID_TARGETS[@]}"; do
-  repo_state "$target_path" "$ANDROID_REMOTE" "Android" >/dev/null
-done
-repo_state "$CONTROL_TARGET" "$CONTROL_REMOTE" "control" >/dev/null
-
-clone_if_missing() {
-  local target_path="$1"
-  local expected_remote="$2"
-  local label="$3"
-  local state
-  state="$(repo_state "$target_path" "$expected_remote" "$label")"
-  if [ "$state" = "missing" ]; then
-    mkdir -p "$target_path"
-    git clone --quiet --no-tags --branch "$INTEGRATION_BRANCH" --single-branch \
-      "$expected_remote" "$target_path" >/dev/null 2>&1 || die "$label repository clone failed"
+  [ -n "$current_head" ] && [ -n "$remote_head" ] || \
+    die "$label repository has no current develop head"
+  if [ "$current_head" != "$remote_head" ]; then
+    git -C "$repo_path" merge-base --is-ancestor "$current_head" "$remote_head" || \
+      die "$label repository has diverged from origin/develop"
+    git -C "$repo_path" merge --quiet --ff-only "$remote_head" >/dev/null 2>&1 || \
+      die "$label repository could not fast-forward develop"
   fi
-  [ "$(repo_state "$target_path" "$expected_remote" "$label")" = "ready" ] || \
-    die "$label repository verification failed"
 }
 
-for target_path in "${ANDROID_TARGETS[@]}"; do
-  clone_if_missing "$target_path" "$ANDROID_REMOTE" "Android"
-done
-clone_if_missing "$CONTROL_TARGET" "$CONTROL_REMOTE" "control"
+validate_regular_file "$MANIFEST" "manifest"
+validate_private_file "$PATHS_FILE" "paths file"
+validate_private_file "$BINDINGS_FILE" "bindings file"
 
-printf 'Prepared %s Android workspaces and one CTO control workspace.\n' "${#ANDROID_TARGETS[@]}"
+[ "$(yq -r '.schemaVersion // ""' "$PATHS_FILE")" = "2" ] || \
+  die "paths file schemaVersion must be 2"
+[ "$(yq -r '.schemaVersion // ""' "$BINDINGS_FILE")" = "2" ] || \
+  die "bindings file schemaVersion must be 2"
+
+INTEGRATION_BRANCH="$(yq -r '.project.integration_branch // ""' "$MANIFEST")"
+[ "$INTEGRATION_BRANCH" = "develop" ] || \
+  die "Glitcherry integration branch must be develop"
+
+TEAM_ROOT="$(yq -r '.team_workspace_root // ""' "$PATHS_FILE")"
+ANDROID_ROOT="$(yq -r '.primary_repo_root // ""' "$PATHS_FILE")"
+CONTROL_ROOT="$(yq -r '.control_repo_root // ""' "$PATHS_FILE")"
+TASK_WORKTREE_ROOT="$(yq -r '.task_worktree_root // ""' "$PATHS_FILE")"
+TASK_STATE_ROOT="$(yq -r '.task_state_root // ""' "$PATHS_FILE")"
+SLICE_CONTROLLER="$(yq -r '.slice_controller_path // ""' "$PATHS_FILE")"
+LEASE_SECONDS="$(yq -r '.slice_lease_seconds // ""' "$PATHS_FILE")"
+ANDROID_REMOTE="$(yq -r '.android_repository_url // ""' "$PATHS_FILE")"
+CONTROL_REMOTE="$(yq -r '.control_repository_url // ""' "$PATHS_FILE")"
+
+validate_absolute_directory "$TEAM_ROOT" "team workspace root"
+validate_absolute_directory "$TASK_WORKTREE_ROOT" "task worktree root"
+validate_absolute_directory "$TASK_STATE_ROOT" "task state root"
+validate_regular_file "$SLICE_CONTROLLER" "slice controller"
+[ -x "$SLICE_CONTROLLER" ] || die "slice controller must be executable"
+[[ "$LEASE_SECONDS" =~ ^[0-9]+$ ]] && \
+  [ "$LEASE_SECONDS" -ge 60 ] && [ "$LEASE_SECONDS" -le 7200 ] || \
+  die "slice_lease_seconds must be between 60 and 7200"
+
+COMPANY_ID="$(yq -r '.company_id // ""' "$BINDINGS_FILE")"
+validate_uuid "$COMPANY_ID" || die "bindings file has an invalid company identifier"
+
+AGENT_NAMES=()
+while IFS= read -r agent_name; do
+  [ -n "$agent_name" ] || continue
+  AGENT_NAMES+=("$agent_name")
+done < <(yq -r '.agents[]?.agent_name // ""' "$MANIFEST")
+[ "${#AGENT_NAMES[@]}" -gt 0 ] || die "manifest has no agents"
+
+manifest_names_sorted="$(printf '%s\n' "${AGENT_NAMES[@]}" | LC_ALL=C sort)"
+binding_names_sorted="$(yq -r '.agents | keys | .[]' "$BINDINGS_FILE" | LC_ALL=C sort)"
+[ "$manifest_names_sorted" = "$binding_names_sorted" ] || \
+  die "bindings agents do not exactly match the manifest"
+
+AGENT_IDS=()
+for agent_name in "${AGENT_NAMES[@]}"; do
+  [[ "$agent_name" =~ ^[A-Za-z][A-Za-z0-9_-]*$ ]] || \
+    die "manifest contains an unsafe agent name"
+  agent_id="$(yq -r ".agents[\"${agent_name}\"] // \"\"" "$BINDINGS_FILE")"
+  validate_uuid "$agent_id" || die "bindings file has an invalid agent identifier"
+  [ "$agent_id" != "$COMPANY_ID" ] || \
+    die "bindings file reuses the company identifier for an agent"
+  AGENT_IDS+=("$agent_id")
+
+  workspace_path="${TEAM_ROOT}/${agent_name}/workspace"
+  validate_absolute_directory "$workspace_path" "agent workspace"
+  [ -f "$workspace_path/AGENTS.md" ] && [ ! -L "$workspace_path/AGENTS.md" ] || \
+    die "generated workspace AGENTS.md is missing or unsafe"
+done
+
+[ "$(printf '%s\n' "${AGENT_NAMES[@]}" | LC_ALL=C sort -u | wc -l | tr -d ' ')" -eq "${#AGENT_NAMES[@]}" ] || \
+  die "manifest contains duplicate agent names"
+[ "$(printf '%s\n' "${AGENT_IDS[@]}" | LC_ALL=C sort -u | wc -l | tr -d ' ')" -eq "${#AGENT_IDS[@]}" ] || \
+  die "bindings file contains duplicate agent identifiers"
+
+if [ "$ALLOW_LOCAL_TEST_REMOTES" -eq 1 ]; then
+  validate_local_remote "$ANDROID_REMOTE"
+  validate_local_remote "$CONTROL_REMOTE"
+else
+  [ "$ANDROID_REMOTE" = "$ANDROID_GITHUB_URL" ] && \
+    [ "$CONTROL_REMOTE" = "$CONTROL_GITHUB_URL" ] || \
+    die "repository URLs must be the exact allowlisted GitHub HTTPS origins"
+fi
+
+git ls-remote --exit-code --heads "$ANDROID_REMOTE" refs/heads/develop >/dev/null 2>&1 || \
+  die "Android origin has no reachable develop branch"
+git ls-remote --exit-code --heads "$CONTROL_REMOTE" refs/heads/develop >/dev/null 2>&1 || \
+  die "control origin has no reachable develop branch"
+
+validate_repo "$ANDROID_ROOT" "$ANDROID_REMOTE" "Android"
+[ -f "$ANDROID_ROOT/AGENTS.md" ] && [ ! -L "$ANDROID_ROOT/AGENTS.md" ] || \
+  die "Android repository has no regular tracked AGENTS.md"
+git -C "$ANDROID_ROOT" ls-files --error-unmatch -- AGENTS.md >/dev/null 2>&1 || \
+  die "Android repository has no regular tracked AGENTS.md"
+validate_repo "$CONTROL_ROOT" "$CONTROL_REMOTE" "control"
+
+printf 'Validated one canonical Android clone, one control clone, and %s role workspaces.\n' \
+  "${#AGENT_NAMES[@]}"

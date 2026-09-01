@@ -1,22 +1,23 @@
 # Glitcherry Android Walker workflow
 
 This file is the single lifecycle authority for the six-agent Glitcherry Android
-company. It supersedes conflicting phase names or handoff chains from reusable
-fragments. Bootstrap is dormant and creates no roadmap or product issue. Product
+company. Bootstrap is dormant and creates no roadmap or product issue. Product
 execution begins only when the Human Engineering Lead explicitly activates one
 root issue for a human-approved sprint containing at least one eligible `READY`
 slice.
 
 ## Human authority
 
-The Human Engineering Lead and their AI assistant are the only authors of stages,
-sprints, roadmap ordering, future slices, `DRAFT -> READY`, owner decisions,
-budgets, stage acceptance, releases, signing, and publication. Paperclip agents
-may materialize and execute only the exact slice pinned by the root issue. An
-issue may narrow execution detail but cannot expand roadmap authority.
+The Human Engineering Lead and their AI assistant alone author stages, sprints,
+roadmap order, future slices, `DRAFT -> READY`, owner decisions, budgets, stage
+acceptance, release builds, signing, and publication. Paperclip agents execute
+only the pinned contract. `GlitcherryCEO` preserves governance context but is not
+in the normal chain. `GlitcherryCTO` is the sole Walker and only merge authority.
 
-`GlitcherryCEO` keeps goal and company-boundary context. The CEO is not in the
-normal chain. `GlitcherryCTO` is the sole Walker and only merge authority.
+For this project, do not load or apply Gimle, Palace, `analog-driven-change`, or
+`gimle-evidence`. Those workflows are reserved for confirmed Unstoppable iOS
+projects. Glitcherry uses codebase-memory, Serena, targeted local inspection,
+official Android documentation, and this project contract.
 
 ## Parent Walker loop — GlitcherryCTO only
 
@@ -27,278 +28,232 @@ description pins all of:
 - the ordered slice IDs;
 - the control repository `ROADMAP.md head SHA`.
 
-On every parent wake, the CTO fetches the control repository and validates the
-pinned roadmap head. Before selecting work it proves:
+On every parent wake, the CTO fetches both canonical repositories and proves:
 
-1. no non-terminal direct child exists;
-2. the parent has no unresolved blocker;
-3. neither persistent clone is dirty;
-4. no approved-but-unmerged PR, task branch, status branch, or recorded temporary
-   worktree remains from the prior child;
-5. cleanup evidence for the prior child is complete.
+1. the pinned roadmap head still matches;
+2. no non-terminal direct child exists and the parent has no unresolved blocker;
+3. the canonical Android and control clones are clean/current `develop`;
+4. no active slice state, task worktree, approved-but-unmerged PR, or exact task/
+   status ref remains from the prior child;
+5. the prior child has both merge records and exact cleanup evidence.
 
 The CTO selects only the first pinned `READY` slice whose dependencies are
-`DONE`. It creates exactly one child using `parentId=<root-id>`, the bound
-Glitcherry Paperclip Project ID, and the CTO Project workspace ID. It reads the
-child back to verify all three relations, then PATCHes the parent to API status
-`blocked` with `blockedByIssueIds=[<child-id>]`. Prose references are not a
-liveness contract.
+`DONE`. It creates exactly one child with `parentId=<root-id>`, the Glitcherry
+Project ID, and the CTO Project workspace ID; reads it back; then PATCHes the
+parent to API status `blocked` with `blockedByIssueIds=[<child-id>]`.
 
-After the child becomes `done`, current Paperclip may wake the parent with
-`issue_blockers_resolved` and/or `issue_children_completed`. The CTO clears the
-resolved blocker, verifies cleanup again, and scans the same pinned sprint. If no
-automatic wake arrives, watchdog may issue one bounded recovery wake and the CTO
-polls that exact child once. It never creates a second child as recovery.
+After the child becomes `done`, Paperclip may wake the parent through
+`issue_blockers_resolved` and/or `issue_children_completed`. The CTO clears only
+the resolved blocker and scans the same pinned sprint. If no wake arrives, the
+watchdog may issue one bounded recovery wake for that exact child. A replacement
+child is never recovery.
 
-When every pinned slice is `DONE`, the CTO posts the sprint execution summary and
-marks the root `done`. This neither accepts the stage nor starts another sprint.
-If unfinished pinned work exists but none is eligible, the root stays API status
-`blocked` with reason `ROADMAP_BLOCKED` and the exact required Human Engineering
-Lead action.
+When all pinned slices are `DONE`, the CTO sets the root to `blocked` with reason
+`SPRINT_SMOKE_REQUIRED`, records the immutable current Android `develop`
+candidate SHA, and stops the Walker. It does not mark the sprint complete and
+does not select another sprint until the sprint smoke gate below is resolved.
 
-## Diagnostic execution class — DX-00 only
+## One slice = one worktree, branch, PR, and lease
 
-This is a project-scoped exception for the Human Engineering Lead-approved
-operational qualification sprint. It activates only when the root pins sprint
-`DX-00`, ordered children `DX-001`, `DX-002`, `DX-003`, `DX-004`, and control
-repository commit `6e76a73e894e69f4546e67c3498f7864c8d0cb99`.
+- The canonical clean clones come from `primary_repo_root` and
+  `control_repo_root`.
+- Product work for one active slice occurs only at its controller-recorded path
+  beneath `task_worktree_root`; durable mode-600 state is beneath
+  `task_state_root`.
+- All phase owners use the same exact task worktree, branch, and committed HEAD
+  sequentially. Agent `workspace/AGENTS.md` holds instructions only; there is no
+  per-agent `workspace/repo` checkout.
+- The task controller is `scripts/slice-worktree.py`. Every role verifies the
+  live Paperclip assignee/workspace, then obtains the exclusive lease before
+  repository access. A different owner/run, expired lease, dirty tree, wrong
+  branch, unexpected HEAD, or second active slice fails closed.
+- Exactly one of `GlitcherryAndroidEngineer` or
+  `GlitcherryMediaPipelineEngineer` is the primary application-code writer. The
+  other may give one bounded read-only boundary finding only.
+- Spec, plan, implementation, and corrections use local commits on one task
+  branch. The branch is pushed and one PR to `develop` is opened when the first
+  implementation head is reviewable. Corrections update that same PR.
+- Handoff releases the current lease only after a clean committed HEAD is
+  recorded. The next role claims that exact HEAD. No two phase owners operate in
+  the task worktree at the same time.
 
-The child issue title must begin with exactly one of these ID and word pairs:
+The default lease is 2700 seconds. A healthy long-running role renews it. A lease
+expiry is not permission to overwrite or delete anything: recovery must identify
+the exact `company -> agent -> run -> PID`, prove the prior run stopped or was
+terminated, preserve dirty/unmerged state, record evidence, and resume the same
+slice. Never use broad process-name matching or broad `pkill`.
 
-- `DX-001 diagnostic`;
-- `DX-002 diagnostic`;
-- `DX-003 diagnostic`;
-- `DX-004 diagnostic`.
+## Six child phases
 
-The issue title only grants this exception. A body, comment, approximate `DX-*`
-prefix, different ID, or issue in another company cannot grant it. The child
-description must cite the immutable control contract, name the current bounded
-step, and name the expected next owner.
-
-The normal parent loop remains in force. There is at most one non-terminal direct
-child. The CTO may create the next diagnostic child only after the current child
-has reached its required stop state and cleanup evidence is complete: all persistent
-clones are clean/current, no unmerged PR remains, and every exact task/status ref
-or recorded temporary worktree from that child is absent. A recovery wake resumes
-the same child and never creates a replacement.
-
-For every advancing transition, prove the prior child is terminal and cleanup
-evidence is complete before selection. DX-004 `blocked` is a final sprint stop and
-never advances to another child.
-
-The owner-approved unlimited mode is `budgetMonthlyCents=0`; it is not a zero-budget
-failure. Record per-run cost evidence and escalate anomalous growth to the Human
-Engineering Lead. Missing or contradictory owner cost policy is a stop condition.
-
-Retain root and child issues as the audit and cost ledger. Never call DELETE for a
-Paperclip issue. Use `done`, `cancelled`, or `blocked` as the contract requires.
-
-### DX-001 diagnostic — role and handoff circuit
-
-Route the same child exactly:
-
-`GlitcherryCTO -> GlitcherryAndroidEngineer -> GlitcherryMediaPipelineEngineer -> GlitcherryCodeReviewer -> GlitcherryQAEngineer -> GlitcherryCEO -> GlitcherryCTO`.
-
-Each fresh wake posts one card containing exact agent name and Paperclip role,
-ownership area, one allowed action, one forbidden action, company/Project/workspace
-IDs and actual `pwd` without credentials, and expected next owner. Then it performs
-the atomic handoff, verifies once, and stops. This child is repository-write-free:
-the issue contract is its spec, and it creates no branch, file, product phase,
-review, QA execution, or merge. The returning CTO validates one issue ID, all six
-unique agents, the complete ordered ledger, no duplicate child/wake, and zero
-repository diff before setting the child `done`.
-
-### DX-002 diagnostic — observed capability circuit
-
-Use the same route and repository-write-free handoff behavior as DX-001. Each role
-records its instruction entry path/digest; declared and observed skills; the
-availability of `analog-driven-change` and `gimle-evidence`; and safe read-only
-probes of applicable `codebase-memory`, `context7`, `serena`, `github`, and
-`sequential-thinking` contracts. Record each result as `AVAILABLE`, `MISSING`,
-`BROKEN`, or `NOT_APPLICABLE`. A filename, declared tool, nested error, stale index,
-or ambiguous mapping is not a PASS. Never install or reconfigure a capability and
-never expose environment or credential values. The returning CTO posts the exact
-run-linked matrix and sets the child `done` only if the handoff ledger is complete.
-
-### DX-003 diagnostic — bounded Git lifecycle
-
-DX-003 uses the seven child phases below for the narrow diagnostic artifact, with
-these explicit deltas:
-
-- the CTO materializes the bounded diagnostic spec and plan on a task branch from
-  current Android `develop`;
-- `GlitcherryAndroidEngineer` is the only writer and adds only the approved spec/
-  plan artifacts plus `docs/diagnostics/DX-003-workflow-proof.md` containing
-  non-secret workspace, GitHub auth, JDK, Android SDK/adb/emulator, Gradle strategy,
-  and Maestro availability/version evidence;
-- Code Reviewer independently reviews the exact head; QA checks that same head in
-  detached read-only state and does not invent an emulator gate when no Android
-  scaffold exists;
-- the CTO performs one Android `develop` merge after both gates. There is no
-  diagnostic control status branch or second merge: retained Paperclip evidence is
-  this slice's status ledger;
-- after the merge is proven, remove only exact remote/local task refs and any
-  recorded temporary worktree, prune worktree metadata, and prove all six
-  persistent clones clean/current on `develop` before setting the child `done`.
-
-Any product/source/config diff, stale or unreviewed head, unsafe cleanup target,
-release need, or merge outside Android `develop` blocks the child.
-
-### DX-004 diagnostic — fail-closed watchdog qualification
-
-First collect read-only watchdog PID/mode/posture, detector/test coverage, and exact
-`company -> agent -> run -> PID` process-tree evidence for this diagnostic run.
-Only unambiguous attribution of one current Codex subprocess permits the documented
-controlled hang, `SIGTERM`, bounded `SIGKILL` fallback, and one recovery wake of the
-same issue.
-
-Never use broad `pkill`, a process name or glob as a kill target, weaken host-global
-thresholds, terminate Paperclip/watchdog/launchd, affect another company, or create
-a replacement child. If exact attribution is absent or ambiguous, perform no fault
-injection, post the framework blocker, set the child and root `blocked` with
-`ROADMAP_BLOCKED`, and report `NOT_READY`. No next child is permitted.
-
-Normal product slices still require all seven phases and both Android/control merges.
-The disposable `smoke-probe-*` and `smoke-e2e-*` exception also remains unchanged;
-neither smoke nor DX rules grant authority to release, sign, tag, or publish.
-
-## Seven child phases
-
-### Phase 1 — Spec
+### Phase 1 — Create worktree and materialize spec
 
 Owner: `GlitcherryCTO`.
 
-From clean persistent clones, fetch/prune and fast-forward local `develop`.
-Create `feature/GLA-N-<slug>`, write only the materialized technical spec, and
-push a spec-only commit. The spec must cite the pinned roadmap slice and may
-narrow but never expand it. POST evidence, set the child `in_review`, assign
-`GlitcherryCodeReviewer`, verify once, and stop.
+From clean current canonical clones, create the controller state and exact
+`feature/GLA-N-<slug>` worktree from `origin/develop`. Materialize only the
+approved technical spec, cite the pinned roadmap slice, and commit locally. The
+spec may narrow execution detail but cannot expand product scope. Record the
+clean HEAD, hand the lease to `GlitcherryCodeReviewer` for `spec_review`, perform
+the atomic Paperclip handoff, and stop.
 
 ### Phase 2 — Independent spec review
 
 Owner: `GlitcherryCodeReviewer`.
 
-In a fresh wake, fetch the immutable spec head and review feasibility, hidden
-product decisions, Android/media ownership, failure paths, and testability.
-Never edit the branch. Restore the reviewer clone to clean current `develop`
-before handoff. Approval is valid only for the cited head. Findings return to
-the CTO.
+Claim the same worktree and verify the recorded spec HEAD. Review feasibility,
+hidden product choices, Android/media ownership, failure paths, and testability.
+Never edit or commit. Approval hands the same clean HEAD to the CTO. Findings
+return to the CTO with one consolidated list. At most two spec/plan revision
+rounds are allowed; unresolved product or architecture ambiguity blocks for the
+Human Engineering Lead.
 
 ### Phase 3 — Plan and independent plan review
 
 Owners in sequence: `GlitcherryCTO`, then `GlitcherryCodeReviewer`.
 
-The CTO writes and pushes a plan that traces every acceptance criterion to tests,
-implementation steps, ownership, verification, and commits. The reviewer checks
-the exact new head without implementing. At most two combined spec/plan revision
-rounds are allowed. Unresolved disagreement blocks the child for the Human
-Engineering Lead.
+The CTO claims the same worktree, adds a plan mapping every acceptance criterion
+to ownership, implementation, tests, verification, and commits, commits locally,
+and hands the exact HEAD to the reviewer. The reviewer stays read-only and either
+approves the exact plan HEAD for one named implementer or returns one consolidated
+finding list to the CTO.
 
 ### Phase 4 — Implementation by exactly one engineer
 
 Owner: either `GlitcherryAndroidEngineer` or
 `GlitcherryMediaPipelineEngineer`, never both as writers.
 
-The CTO classifies by primary acceptance risk. Android owns lifecycle,
-permissions, import, storage/share, app state, and build wiring. Media owns effect
-graphs, shaders, codec/export, audio processing, HDR/format policy, and
-deterministic rendering. A cross-domain slice still has one primary writer; the
-other specialist may provide one bounded read-only boundary finding.
-
-The assigned implementer fetches the approved branch, works test-first, pushes
-only that task branch, and opens or updates a PR whose base is exactly `develop`.
-Before handoff the implementer restores its persistent clone to clean `develop`
-but retains the exact local task ref until squash merge is proven. The other
-implementer remains on clean `develop`.
+The assigned implementer claims the same approved worktree/HEAD, reads its
+tracked `AGENTS.md`, makes only plan-traceable code/test changes, and creates
+focused local commits. It runs risk-scaled targeted checks only. When the first
+implementation head is reviewable, it pushes the task branch, opens one PR whose
+base is exactly `develop`, records the PR/head, hands the clean exact HEAD to
+`GlitcherryCodeReviewer` for `code_review`, and stops.
 
 ### Phase 5 — Exact-head code and architecture review
 
 Owner: `GlitcherryCodeReviewer`.
 
-In a fresh wake, review the exact PR head and required commands. Apply the
-architecture lens directly: boundaries, Kotlin correctness, lifecycle,
-concurrency, test quality, regressions, and, when relevant, experimental media
-APIs, AGSL API floor, codec/HDR/fallback, and preview/export parity. Code defects
-return to the same implementer; plan or scope gaps return to the CTO. Any new PR
-head invalidates all prior review evidence. At most two implementation review
-loops are allowed.
+Claim and review the controller-recorded PR HEAD in the same worktree. Apply both
+code and architecture lenses: boundaries, Kotlin correctness, lifecycle,
+concurrency, regressions, test quality, and relevant media/API/codec/HDR/fallback
+and preview/export parity risks. The first pass returns one consolidated blocker
+list. Later passes review the delta plus affected invariants unless a structural
+rewrite is recorded.
 
-### Phase 6 — QA
+Each `CHANGES_REQUESTED` increments the durable counter and returns the same
+worktree/PR to the same primary implementer. There is a maximum three complete
+Code Review rejection/fix/re-review cycles. After the third correction, the next
+reviewer decision must be exact-head approval or API status `blocked` with
+`LOCAL_BLOCKED`; a fourth autonomous correction loop is forbidden. Non-blocking
+suggestions do not reject or increment the counter. Scope/spec gaps go to the CTO
+and are not disguised as code defects.
 
-Owner: `GlitcherryQAEngineer`.
+Approval records `reviewed_head` and hands the lease directly to
+`GlitcherryCTO`. QA does not run inside a normal slice.
 
-Fetch the exact reviewed head in detached read-only state. Run risk-scaled unit,
-lint, build, Compose UI, Maestro, media fixture, AVD, and physical-device gates
-required by the slice, with only one emulator active at a time. Media slices must
-exercise one normal path and one approved degraded path. Post commands, results,
-artifact locations, device/API identity, and the immutable head. Restore clean
-current `develop` before handoff.
-
-| QA observation | Required child transition |
-| --- | --- |
-| All required checks and acceptance evidence pass on the exact head | `in_progress` to `GlitcherryCTO` for Phase 7 |
-| Reproducible implementation, build, test, or device defect | `in_progress` to the same implementer; prior review and QA are invalid |
-| Scope drift, missing acceptance, spec/plan mismatch, or undefined fallback | `in_progress` to `GlitcherryCTO`; revise spec/plan and repeat independent gates |
-| Physical-device-only, owner-decision, credential, or capability blocker | `blocked` with named Human Engineering Lead action; no next child |
-| Local infrastructure residue or transient iMac failure | `blocked` with reason `LOCAL_BLOCKED`; bounded recovery on this child only |
-
-QA never commits, pushes, fixes production code, waives a failure, or merges.
-
-### Phase 7 — Integrate, synchronize, and clean
+### Phase 6 — Integrate, synchronize, and clean
 
 Owner: `GlitcherryCTO`.
 
-Verify the immutable PR head, base `develop`, required checks, current Code
-Reviewer approval, and QA PASS. Squash-merge Android and record its immutable
-merge SHA on the child.
+Claim the exact approved state. Verify the PR base is `develop`, its live head
+equals `reviewed_head`, required targeted checks are complete, and current Code
+Reviewer approval cites that head. Squash-merge the Android PR and record its PR
+number and merge SHA.
 
-In the persistent control clone, search `origin/develop` for the unique marker
-`GLA-N + Android merge SHA`. If absent, create exactly one status branch, change
-only the slice status/evidence and required ADR index, push it, and squash-merge
-it to control `develop`. If present, skip duplicate control work.
+A squash merge does not preserve feature-head ancestry. CTO verifies the PR is
+merged in the normal GitHub flow, records its PR number and merge SHA, and the
+controller checks that merge SHA is reachable from `origin/develop`. Do not add
+extra ancestry or tree-equality gates that can block valid squash merges.
 
-After both merge SHAs are proven, ask the primary implementer to perform bounded
-task-ref cleanup, clean the CTO Android and control clones, and verify:
+In the canonical control clone, search `origin/develop` for the unique marker
+`GLA-N + Android merge SHA`. If absent, create one status branch, update only the
+slice status/evidence and required ADR index, push it, and squash-merge to control
+`develop`. If present, reuse the existing immutable control merge record.
 
-- remote task/status branches are absent after their proven merges;
-- exact local task/status refs are absent;
-- all persistent clones are on current clean `develop`;
-- no orphaned recorded temporary worktree exists;
-- all phase-owner evidence cites the final immutable head.
+Only after both merge SHAs are recorded and reachable may cleanup remove the clean
+exact task worktree, force-delete only its recorded local squash-merged task ref,
+delete only its recorded remote task/status refs, and prune worktree metadata.
+Broad cleanup, unrecorded paths, dirty worktrees, and missing merges remain the
+only cleanup blockers.
 
-Only after both merges and cleanup may the CTO mark the child `done`. If Android
-merged but control integration or cleanup failed, resume from the recorded
-Android SHA, search the unique marker first, and finish only the missing steps.
-Never reimplement, remerge Android, or select another slice.
+The CTO marks the child `done` only after the controller state is `cleaned`, both
+canonical clones are current clean `develop`, the exact refs are absent, and all
+evidence is retained. If Android merged but control or cleanup failed, resume
+from the recorded SHA; never reimplement or remerge Android. The next slice is
+forbidden until this phase is complete.
+
+## Sprint smoke gate — QA only here
+
+QA is activated once per sprint, only after every sprint slice is merged and
+cleaned, the root is stopped at `SPRINT_SMOKE_REQUIRED`, and the candidate SHA is
+fixed. `GlitcherryQAEngineer` verifies that exact Android `develop` candidate in
+a separate read-only test checkout or detached state; it never claims an active
+slice worktree.
+
+Run the deliberately small sprint smoke suite: launch/import, preview/navigation,
+save/share, and any sprint-specific critical media path on the declared AVD and,
+when required, the Samsung A55 Android 16 reference device. Use one emulator at a
+time. Post commands, result, artifacts, device/API identity, and candidate SHA.
+
+- PASS returns the root to the Human Engineering Lead for sprint acceptance.
+- A reproducible product defect blocks the root with the failing evidence and
+  named owner; the Walker does not invent or start a corrective slice.
+- Infrastructure residue uses `LOCAL_BLOCKED` and one bounded exact-run recovery.
+- Missing product/acceptance authority uses `ROADMAP_BLOCKED`.
+
+## Diagnostic execution class — DX-00 only
+
+This is a retained project-scoped exception for the already approved diagnostic
+sprint. It applies only when the root pins `DX-00`, ordered children `DX-001`,
+`DX-002`, `DX-003`, `DX-004`, and control commit
+`6e76a73e894e69f4546e67c3498f7864c8d0cb99`. The child title must begin with the
+exact ID and word `diagnostic`; an issue body or comment cannot grant the
+exception. Retain issues as audit/cost records. Never call DELETE for a
+Paperclip issue.
+
+- `DX-001 diagnostic` is the repository-write-free CTO -> Android -> Media ->
+  Code Reviewer -> QA -> CEO -> CTO identity and handoff circuit.
+- `DX-002 diagnostic` repeats the circuit for observed MCP/skill capability.
+  Gimle, Palace, `analog-driven-change`, and `gimle-evidence` must be recorded as
+  `NOT_APPLICABLE` by Glitcherry policy and must not be loaded or probed.
+- `DX-003 diagnostic` is retained as `Historical DX-003`; it used the prior
+  bounded diagnostic Git contract and one
+  Android `develop` merge. It is historical evidence, not a template; normal
+  product slices use the single-worktree contract above.
+- `DX-004 diagnostic` permits controlled watchdog qualification only after exact
+  `company -> agent -> run -> PID` attribution. Ambiguity means no kill,
+  `NOT_READY`, `ROADMAP_BLOCKED`, and no next child.
+
+The owner-approved unlimited mode is `budgetMonthlyCents=0`; record per-run cost
+evidence and escalate anomalous growth. For every diagnostic transition, the
+current child must be terminal and cleanup evidence is complete before the next
+child. No next child is permitted on ambiguity or residue.
 
 ## Atomic handoff
 
-Every transition is atomic and uses this exact order:
+Every transition uses this exact order:
 
-1. push the required phase artifact when the role has push authority;
-2. `POST evidence` to `/api/issues/{id}/comments` and require a 2xx response;
-3. `PATCH assignee/status/projectWorkspaceId` to the exact next owner, state,
+1. finish the required local commit and/or allowed push and verify a clean HEAD;
+2. record the controller handoff to the exact next owner/phase;
+3. `POST evidence` to `/api/issues/{id}/comments` and require 2xx;
+4. `PATCH assignee/status/projectWorkspaceId` to the exact next owner, API state,
    and that owner's bound Project workspace;
-4. perform `one read-only verification` of assignee, status, Project ID, and
-   workspace ID;
-5. `STOP` the current run.
+5. perform `one read-only verification` of assignee, status, Project ID,
+   workspace ID, controller owner/phase, and HEAD;
+6. `STOP` the current run.
 
-A mention is decoration, not ownership transfer. On HTTP 409, reload once and
-enter the explicit recovery path. Never loop wakes or write the Paperclip
-database directly.
+A mention is not a handoff. On HTTP 409, reload once and recover this same child.
+Never write the Paperclip database directly.
 
 ## Stop conditions
 
-- `LOCAL_BLOCKED` and `ROADMAP_BLOCKED` are reason codes; the API status is
-  `blocked`. Neither permits another child.
-- More than two spec/plan or implementation review rounds blocks for the Human
-  Engineering Lead.
-- A stale review head, dirty clone, residual branch/worktree, missing parent
-  blocker, partial merge, or incomplete cleanup stops advancement.
-- A missing Project ID, missing workspace ID, or workspace ID not bound to the
-  current assignee stops advancement; never accept a fallback agent-home run.
-- A required unstable API, undefined media fallback, API-floor mismatch,
-  unsupported format, or hardware capability gap not accepted by the slice
-  blocks instead of guessing.
-- No agent may create a release build, merge to `main`, tag, sign, publish, or
-  access release/operator credentials.
+- `LOCAL_BLOCKED` and `ROADMAP_BLOCKED` are reason codes; API status is
+  `blocked`. Neither permits the next child.
+- A stale head, active/expired conflicting lease, dirty task worktree, wrong
+  branch, residual exact ref, partial merge, or incomplete cleanup stops work.
+- Missing Project/workspace binding or a workspace not bound to the current
+  assignee stops work; never accept an agent-home fallback.
+- Undefined product, media fallback, API-floor, format, device, credential, or
+  release decision blocks rather than being guessed.
+- Agents never release, sign, tag, publish, merge to `main`, or use operator
+  secrets.

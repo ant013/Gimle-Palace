@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -60,6 +61,12 @@ def _fixture(tmp_path: Path) -> dict[str, Path]:
     )
     control_remote, _ = _make_bare_remote(tmp_path, "Glitcherry", "control")
     team_root = tmp_path / "runs"
+    task_worktree_root = tmp_path / "slice-worktrees"
+    task_state_root = tmp_path / "slice-state"
+    task_worktree_root.mkdir()
+    task_state_root.mkdir()
+    task_worktree_root.chmod(0o700)
+    task_state_root.chmod(0o700)
     for name in ("GlitcherryCTO", "GlitcherryAndroidEngineer"):
         workspace = team_root / name / "workspace"
         workspace.mkdir(parents=True)
@@ -79,11 +86,21 @@ agents:
 """
     )
     paths = tmp_path / "paths.yaml"
+    primary_repo_root = tmp_path / "canonical-android"
+    control_repo_root = tmp_path / "canonical-control"
+    _git("clone", "--branch", "develop", str(android_remote), str(primary_repo_root), cwd=tmp_path)
+    _git("clone", "--branch", "develop", str(control_remote), str(control_repo_root), cwd=tmp_path)
     _write_private(
         paths,
         f"""\
 schemaVersion: 2
 team_workspace_root: {team_root}
+primary_repo_root: {primary_repo_root}
+control_repo_root: {control_repo_root}
+task_worktree_root: {task_worktree_root}
+task_state_root: {task_state_root}
+slice_controller_path: {SCRIPT.parent / 'slice-worktree.py'}
+slice_lease_seconds: 2700
 android_repository_url: {android_remote}
 control_repository_url: {control_remote}
 """,
@@ -104,6 +121,10 @@ agents:
         "android_source": android_source,
         "control_remote": control_remote,
         "team_root": team_root,
+        "primary_repo_root": primary_repo_root,
+        "control_repo_root": control_repo_root,
+        "task_worktree_root": task_worktree_root,
+        "task_state_root": task_state_root,
         "manifest": manifest,
         "paths": paths,
         "bindings": bindings,
@@ -131,7 +152,7 @@ def _run(fixture: dict[str, Path], *extra: str) -> subprocess.CompletedProcess[s
     )
 
 
-def test_preparer_is_idempotent_and_keeps_tracked_agents_unchanged(
+def test_preparer_is_idempotent_and_prepares_one_canonical_android_clone(
     tmp_path: Path,
 ) -> None:
     fixture = _fixture(tmp_path)
@@ -140,25 +161,24 @@ def test_preparer_is_idempotent_and_keeps_tracked_agents_unchanged(
     first = _run(fixture)
     assert first.returncode == 0, first.stderr
 
-    android_repos = [
-        fixture["team_root"] / name / "workspace" / "repo"
-        for name in ("GlitcherryCTO", "GlitcherryAndroidEngineer")
-    ]
-    control_repo = fixture["team_root"] / "GlitcherryCTO" / "workspace" / "control"
-    git_dir_inodes = [(repo / ".git").stat().st_ino for repo in android_repos]
+    android_repo = fixture["primary_repo_root"]
+    control_repo = fixture["control_repo_root"]
+    git_dir_inode = (android_repo / ".git").stat().st_ino
 
-    for repo in android_repos:
-        assert _sha256(repo / "AGENTS.md") == expected_agents_hash
-        assert _git("status", "--porcelain", cwd=repo).stdout == ""
-        assert _git("branch", "--show-current", cwd=repo).stdout.strip() == "develop"
+    assert _sha256(android_repo / "AGENTS.md") == expected_agents_hash
+    assert _git("status", "--porcelain", cwd=android_repo).stdout == ""
+    assert _git("branch", "--show-current", cwd=android_repo).stdout.strip() == "develop"
     assert (control_repo / ".git").is_dir()
+    assert not (fixture["team_root"] / "GlitcherryCTO" / "workspace" / "repo").exists()
+    assert not (
+        fixture["team_root"] / "GlitcherryAndroidEngineer" / "workspace" / "repo"
+    ).exists()
 
     second = _run(fixture)
     assert second.returncode == 0, second.stderr
-    assert [(repo / ".git").stat().st_ino for repo in android_repos] == git_dir_inodes
-    for repo in android_repos:
-        assert _sha256(repo / "AGENTS.md") == expected_agents_hash
-        assert _git("status", "--porcelain", cwd=repo).stdout == ""
+    assert (android_repo / ".git").stat().st_ino == git_dir_inode
+    assert _sha256(android_repo / "AGENTS.md") == expected_agents_hash
+    assert _git("status", "--porcelain", cwd=android_repo).stdout == ""
 
 
 def test_preparer_refuses_wrong_origin_without_disclosing_it(tmp_path: Path) -> None:
@@ -172,6 +192,12 @@ def test_preparer_refuses_wrong_origin_without_disclosing_it(tmp_path: Path) -> 
         f"""\
 schemaVersion: 2
 team_workspace_root: {fixture['team_root']}
+primary_repo_root: {fixture['primary_repo_root']}
+control_repo_root: {fixture['control_repo_root']}
+task_worktree_root: {fixture['task_worktree_root']}
+task_state_root: {fixture['task_state_root']}
+slice_controller_path: {SCRIPT.parent / 'slice-worktree.py'}
+slice_lease_seconds: 2700
 android_repository_url: {wrong_remote}
 control_repository_url: {fixture['control_remote']}
 """,
@@ -188,7 +214,7 @@ def test_preparer_refuses_dirty_repository(tmp_path: Path) -> None:
     fixture = _fixture(tmp_path)
     first = _run(fixture)
     assert first.returncode == 0, first.stderr
-    repo = fixture["team_root"] / "GlitcherryAndroidEngineer" / "workspace" / "repo"
+    repo = fixture["primary_repo_root"]
     (repo / "README.md").write_text("dirty\n")
 
     result = _run(fixture)
@@ -197,15 +223,12 @@ def test_preparer_refuses_dirty_repository(tmp_path: Path) -> None:
     assert (repo / "README.md").read_text() == "dirty\n"
 
 
-def test_preparer_refuses_unmanaged_and_stale_repository(tmp_path: Path) -> None:
+def test_preparer_refuses_unmanaged_and_fast_forwards_stale_repository(
+    tmp_path: Path,
+) -> None:
     unmanaged_fixture = _fixture(tmp_path / "unmanaged")
-    unmanaged_repo = (
-        unmanaged_fixture["team_root"]
-        / "GlitcherryAndroidEngineer"
-        / "workspace"
-        / "repo"
-    )
-    unmanaged_repo.mkdir()
+    unmanaged_repo = unmanaged_fixture["primary_repo_root"]
+    shutil.rmtree(unmanaged_repo / ".git")
     (unmanaged_repo / "keep.txt").write_text("do not delete\n")
 
     unmanaged = _run(unmanaged_fixture)
@@ -223,8 +246,10 @@ def test_preparer_refuses_unmanaged_and_stale_repository(tmp_path: Path) -> None
     _git("push", str(stale_fixture["android_remote"]), "develop", cwd=source)
 
     stale = _run(stale_fixture)
-    assert stale.returncode != 0
-    assert "current develop" in stale.stderr.lower()
+    assert stale.returncode == 0, stale.stderr
+    assert _git("rev-parse", "HEAD", cwd=stale_fixture["primary_repo_root"]).stdout == _git(
+        "rev-parse", "develop", cwd=source
+    ).stdout
 
 
 def test_local_remotes_require_explicit_test_flag_and_no_workspace_source_key(

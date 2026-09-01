@@ -1,6 +1,6 @@
 # Glitcherry single-worktree Paperclip protocol
 
-Status: Proposed — awaiting Human Engineering Lead approval
+Status: Approved by Human Engineering Lead; implementation in progress
 
 ## Goal
 
@@ -67,7 +67,8 @@ The source-of-truth product contract is the companion Glitcherry specification:
 - Validate one canonical Android host clone from `primary_repo_root`.
 - Add `task_worktree_root` to host-local `paths.yaml`. A slice path is derived
   only from a validated issue key and slug beneath that root.
-- Keep the CTO's `workspace/control` clone for roadmap status/evidence.
+- Validate the canonical control clone from `control_repo_root` for roadmap
+  status/evidence. The role workspaces remain instruction roots only.
 - Store state beneath a private host-local state directory, keyed by exact issue
   ID/key. State includes branch, base/head SHA, worktree path, phase, owner,
   expected next owner, rejection count, and recovery marker.
@@ -112,8 +113,11 @@ does not authorize the Walker to invent a corrective slice.
   update the same PR.
 - CTO squash-merges only after exact-head approval and required targeted checks.
 - Existing control-plane status/evidence integration remains required.
-- Cleanup validates merge reachability, then removes only the exact task
-  worktree and merged local/remote task/status refs and prunes metadata.
+- Cleanup requires recorded Android/control merge SHAs reachable from each
+  `origin/develop`, then removes the exact clean task worktree and recorded
+  local/remote task/status refs. It deliberately avoids extra feature-head
+  ancestry, tree-equality, or embedded GitHub API gates that can reject a valid
+  squash merge.
 - The next child remains forbidden until both merges and cleanup are proven.
 
 ## Affected files and areas
