@@ -6,8 +6,8 @@ from palace_mcp.extractors.foundation.errors import ExtractorError, ExtractorErr
 
 
 class TestExtractorErrorCode:
-    def test_has_36_codes(self) -> None:
-        assert len(ExtractorErrorCode) == 36
+    def test_has_37_codes(self) -> None:
+        assert len(ExtractorErrorCode) == 37
 
     def test_all_codes_are_strings(self) -> None:
         for code in ExtractorErrorCode:
@@ -55,6 +55,9 @@ class TestExtractorErrorCode:
             ExtractorErrorCode.CHECKPOINT_DOC_COUNT_MISMATCH
             == "checkpoint_doc_count_mismatch"
         )
+
+    def test_scip_artifact_stale_present(self) -> None:
+        assert ExtractorErrorCode.SCIP_ARTIFACT_STALE == "scip_artifact_stale"
 
 
 class TestExtractorError:

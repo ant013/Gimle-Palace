@@ -37,6 +37,15 @@ import anyio
 import httpx
 
 from palace_mcp.extractors.foundation.profiles import get_ordered_extractors
+from palace_mcp.swift_scip_provenance import (
+    SWIFT_SCIP_EMITTER_NAME as _SWIFT_SCIP_EMITTER_NAME,
+    SWIFT_SCIP_EMITTER_VERSION as _SWIFT_SCIP_EMITTER_VERSION,
+    SwiftScipProvenance,
+    SwiftScipProvenancePolicy,
+    inspect_swift_scip_provenance,
+    load_swift_scip_metadata,
+    validate_swift_scip_metadata,
+)
 
 _SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
 _DEFAULT_MCP_URL = "http://localhost:8000/mcp"
@@ -53,8 +62,6 @@ _PROJECT_SUCCESS_STATUSES = {
     "SUCCEEDED_WITH_SKIPS",
     "SUCCEEDED_WITH_FAILURES",
 }
-_SWIFT_SCIP_EMITTER_NAME = "palace-swift-scip-emit-cli"
-_SWIFT_SCIP_EMITTER_VERSION = "2026-05-15"
 _DEFAULT_REMOTE_HOST = "imac-ssh.ant013.work"
 _DEFAULT_REMOTE_BASE = "/Users/Shared/Ios/HorizontalSystems"
 _DEFAULT_MACBOOK_BASE = "/Users/ant013/Ios/HorizontalSystems"
@@ -601,15 +608,7 @@ def _build_macbook_fallback_command(spec: ProjectRuntimeSpec) -> str:
 
 
 def _load_scip_metadata(meta_path: Path) -> dict[str, Any] | None:
-    if not meta_path.exists():
-        return None
-    try:
-        payload = json.loads(meta_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(payload, dict):
-        return None
-    return payload
+    return load_swift_scip_metadata(meta_path)
 
 
 def swift_scip_metadata_needs_regeneration(
@@ -618,37 +617,44 @@ def swift_scip_metadata_needs_regeneration(
     repo_head_sha: str,
     metadata: dict[str, Any] | None,
 ) -> tuple[bool, str]:
-    if metadata is None:
-        return True, "metadata missing or invalid"
-    resolved_repo_path = str(repo_path.resolve())
-    expected_package_path = (
-        "Wallet.xcworkspace"
-        if metadata.get("slug") == "uw-ios-app"
-        else "Package.swift"
+    stale, reason = validate_swift_scip_metadata(
+        repo_path=repo_path,
+        repo_head_sha=repo_head_sha,
+        metadata=metadata,
     )
-    required = {
-        "repo_head_sha": repo_head_sha,
-        "emitter_name": _SWIFT_SCIP_EMITTER_NAME,
-        "emitter_version": _SWIFT_SCIP_EMITTER_VERSION,
-        "package_path": expected_package_path,
-        "destination_repo_path": resolved_repo_path,
+    compatibility_reasons = {
+        "metadata_missing_or_invalid": "metadata missing or invalid",
+        "metadata_current": "metadata current",
+        "metadata_current_remote_copy": "metadata current (remote_copy)",
+        "source_repo_path_missing": "source_repo_path missing",
+        "destination_repo_path_missing": "destination_repo_path missing",
+        "generator_host_missing": "generator_host missing",
     }
-    for key, expected in required.items():
-        if metadata.get(key) != expected:
-            return True, f"{key} mismatch"
-    source_repo_path = metadata.get("source_repo_path")
-    generator_host = metadata.get("generator_host")
-    if not isinstance(source_repo_path, str) or not source_repo_path:
-        return True, "source_repo_path missing"
-    if not isinstance(generator_host, str) or not generator_host:
-        return True, "generator_host missing"
-    if metadata.get("artifact_origin") == "remote_copy":
-        return False, "metadata current (remote_copy)"
-    if source_repo_path != resolved_repo_path:
-        return True, "source_repo_path mismatch"
-    if generator_host != socket.gethostname():
-        return True, "generator_host mismatch"
-    return False, "metadata current"
+    if reason.endswith("_mismatch"):
+        reason = f"{reason.removesuffix('_mismatch')} mismatch"
+    return stale, compatibility_reasons.get(reason, reason)
+
+
+def _require_current_prepared_scip(
+    *, spec: ProjectRuntimeSpec, output_path: Path
+) -> SwiftScipProvenance:
+    provenance = inspect_swift_scip_provenance(
+        repo_path=spec.repo_path,
+        project_slug=spec.slug,
+        scip_path=output_path,
+        policy=SwiftScipProvenancePolicy.PREPARATION,
+    )
+    if provenance.current:
+        return provenance
+    error_code = (
+        "missing_required_scip_artifact"
+        if provenance.reason in {"scip_artifact_missing", "scip_artifact_empty"}
+        else "stale_scip_artifact"
+    )
+    raise ProjectAnalyzeCliError(
+        f"current Swift SCIP artifact required: {provenance.reason}",
+        error_code=error_code,
+    )
 
 
 def _write_scip_metadata(
@@ -917,55 +923,40 @@ def ensure_swift_scip_artifact(
     emit_scip: str,
 ) -> dict[str, Any]:
     output_path = spec.repo_path / "scip" / "index.scip"
-    meta_path = spec.repo_path / "scip" / "index.scip.meta.json"
     repo_head_sha = _git_head_sha(spec.repo_path)
-    metadata = _load_scip_metadata(meta_path)
-    stale, reason = swift_scip_metadata_needs_regeneration(
-        repo_path=spec.repo_path,
-        repo_head_sha=repo_head_sha,
-        metadata=metadata,
-    )
-    usable_index = output_path.exists() and output_path.stat().st_size > 0
 
     if emit_scip == "always":
-        return _emit_swift_scip(spec=spec, repo_head_sha=repo_head_sha)
+        result = _emit_swift_scip(spec=spec, repo_head_sha=repo_head_sha)
+        _require_current_prepared_scip(spec=spec, output_path=output_path)
+        return result
 
     if emit_scip == "never":
-        if not usable_index:
-            raise ProjectAnalyzeCliError(
-                "usable SCIP artifact required for --emit-scip=never",
-                error_code="missing_required_scip_artifact",
-            )
+        provenance = _require_current_prepared_scip(spec=spec, output_path=output_path)
         return {
             "emitted": False,
             "host_scip_path": str(output_path),
-            "meta_path": str(meta_path),
-            "metadata": metadata,
+            "meta_path": str(provenance.metadata_path),
+            "metadata": provenance.metadata,
             "reason": "existing artifact reused",
-            "stale": stale,
-            "stale_reason": reason,
         }
 
-    if not usable_index or stale:
-        try:
-            return _emit_swift_scip(spec=spec, repo_head_sha=repo_head_sha)
-        except ScipEmitToolchainUnsupported:
-            if not usable_index:
-                raise
-            return {
-                "emitted": False,
-                "host_scip_path": str(output_path),
-                "meta_path": str(meta_path),
-                "metadata": metadata,
-                "reason": "toolchain unavailable; existing artifact reused (stale)",
-            }
+    provenance = inspect_swift_scip_provenance(
+        repo_path=spec.repo_path,
+        project_slug=spec.slug,
+        scip_path=output_path,
+        policy=SwiftScipProvenancePolicy.PREPARATION,
+    )
+    if not provenance.current:
+        result = _emit_swift_scip(spec=spec, repo_head_sha=repo_head_sha)
+        _require_current_prepared_scip(spec=spec, output_path=output_path)
+        return result
 
     return {
         "emitted": False,
         "host_scip_path": str(output_path),
-        "meta_path": str(meta_path),
-        "metadata": metadata,
-        "reason": reason,
+        "meta_path": str(provenance.metadata_path),
+        "metadata": provenance.metadata,
+        "reason": provenance.reason,
     }
 
 
