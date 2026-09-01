@@ -27,6 +27,7 @@ from palace_mcp.git.path_resolver import (
     resolve_registered_project,
 )
 from palace_mcp.memory.schema import ProjectInfo
+from palace_mcp.swift_scip_provenance import inspect_swift_scip_index_state
 
 logger = logging.getLogger(__name__)
 
@@ -350,6 +351,41 @@ async def get_project_overview(
             freshness_state="unknown",
             freshness_reason="indexed_commit_unpopulated_reingest_required",
         )
+
+    if (
+        base.language_profile == "swift_kit"
+        and repo_path is not None
+        and identity_check in ("ok", "unchecked")
+    ):
+        try:
+            swift_index_state = await inspect_swift_scip_index_state(
+                driver,
+                project_slug=slug,
+                project_id=group_id,
+                repo_path=repo_path,
+            )
+        except Exception as exc:
+            logger.warning("get_project_overview SCIP state inspection failed: %s", exc)
+            swift_index_state = None
+        if swift_index_state is None or not swift_index_state.current:
+            scip_reason = (
+                swift_index_state.reason
+                if swift_index_state is not None
+                else "scip_index_state_unavailable"
+            )
+            definitely_stale = freshness.stale is True or (
+                swift_index_state is not None and swift_index_state.stale is True
+            )
+            freshness = FreshnessResult(
+                indexed_commit=freshness.indexed_commit,
+                commits_behind_head=freshness.commits_behind_head,
+                stale=True if definitely_stale else None,
+                freshness_state=(
+                    "behind_local_tree" if definitely_stale else "unknown"
+                ),
+                freshness_reason=scip_reason,
+                tree_head=freshness.tree_head,
+            )
 
     return base.model_copy(
         update={

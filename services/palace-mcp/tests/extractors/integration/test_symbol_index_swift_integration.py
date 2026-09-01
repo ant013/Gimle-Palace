@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 import shutil
+import socket
 import subprocess
 import time
 from types import SimpleNamespace
@@ -26,6 +28,11 @@ from palace_mcp.extractors.runner import run_extractor
 from palace_mcp.extractors.schema import ensure_extractors_schema
 from palace_mcp.extractors.scip_parser import parse_scip_file
 from palace_mcp.proto import scip_pb2
+from palace_mcp.swift_scip_provenance import (
+    SWIFT_SCIP_EMITTER_NAME,
+    SWIFT_SCIP_EMITTER_VERSION,
+    swift_scip_metadata_path,
+)
 from tests.extractors.unit.test_real_scip_fixtures import (
     _UW_IOS_N_DOCUMENTS,
     _UW_IOS_TOOL_NAME,
@@ -38,7 +45,6 @@ from tests.extractors.fixtures.scip_factory import (
 
 _RUN_ID = "swift-integration-run-001"
 _RERUN_ID = "swift-integration-run-002"
-_HEAD_SHA = "0123456789abcdef0123456789abcdef01234567"
 _STORE_QNAME = "UwMiniCore s%3A10UwMiniCore11WalletStoreC"
 _SELECT_QNAME = "UwMiniCore s%3A10UwMiniCore11WalletStoreC6select8walletIDySi_tF"
 FIXTURE_SCIP = (
@@ -140,6 +146,40 @@ def _copy_fixture_repo(repo: Path) -> None:
             shutil.copy2(source, destination)
 
 
+def _initialize_repo(repo: Path) -> str:
+    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=repo, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "t@example.com"], cwd=repo, check=True
+    )
+    subprocess.run(["git", "config", "user.name", "t"], cwd=repo, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-q", "-m", "initial"], cwd=repo, check=True)
+    return _git_head(repo)
+
+
+def _git_head(repo: Path) -> str:
+    return subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=repo, text=True
+    ).strip()
+
+
+def _write_scip_metadata(*, repo: Path, scip_path: Path, slug: str) -> None:
+    metadata = {
+        "slug": slug,
+        "repo_head_sha": _git_head(repo),
+        "emitter_name": SWIFT_SCIP_EMITTER_NAME,
+        "emitter_version": SWIFT_SCIP_EMITTER_VERSION,
+        "artifact_origin": "local",
+        "package_path": "Package.swift",
+        "generator_host": socket.gethostname(),
+        "source_repo_path": str(repo.resolve()),
+        "destination_repo_path": str(repo.resolve()),
+    }
+    swift_scip_metadata_path(scip_path).write_text(
+        json.dumps(metadata), encoding="utf-8"
+    )
+
+
 @pytest.fixture
 async def _project_and_repo(driver: AsyncDriver, tmp_path: Path) -> Path:
     async with driver.session() as session:
@@ -156,8 +196,11 @@ async def _project_and_repo(driver: AsyncDriver, tmp_path: Path) -> Path:
     repo = tmp_path / "repos" / "uw-ios-mini"
     repo.mkdir(parents=True)
     _copy_fixture_repo(repo)
-    (repo / ".git").mkdir()
-    (repo / ".git" / "HEAD").write_text(f"{_HEAD_SHA}\n")
+    scip_path = repo / "scip" / "index.scip"
+    scip_path.parent.mkdir()
+    shutil.copy2(FIXTURE_SCIP, scip_path)
+    _initialize_repo(repo)
+    _write_scip_metadata(repo=repo, scip_path=scip_path, slug="uw-ios-mini")
     return tmp_path / "repos"
 
 
@@ -186,11 +229,11 @@ async def test_run_writes_shadow_backing_for_struct_symbol(
         "func renderBalanceData() {}\n",
         encoding="utf-8",
     )
-    (repo / ".git").mkdir()
-    (repo / ".git" / "HEAD").write_text(
-        "0123456789abcdef0123456789abcdef01234567\n",
-        encoding="utf-8",
+    (repo / "Package.swift").write_text(
+        "// swift-tools-version: 6.0\n", encoding="utf-8"
     )
+    _initialize_repo(repo)
+    _write_scip_metadata(repo=repo, scip_path=scip_path, slug="swift-shadow-mini")
 
     settings = MagicMock()
     tantivy_dir = tmp_path / "tantivy"
@@ -274,18 +317,9 @@ async def test_incremental_run_does_not_deprecate_unchanged_file_symbols(
     repo = repo_root / "swift-incremental-mini"
     repo.mkdir(parents=True)
     _write_incremental_repo(repo, file_c_suffix="// run 1")
-    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
-    subprocess.run(
-        ["git", "config", "user.email", "t@example.com"], cwd=repo, check=True
-    )
-    subprocess.run(["git", "config", "user.name", "t"], cwd=repo, check=True)
-    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
-    subprocess.run(["git", "commit", "-q", "-m", "initial"], cwd=repo, check=True)
-    initial_head_sha = subprocess.check_output(
-        ["git", "rev-parse", "HEAD"],
-        cwd=repo,
-        text=True,
-    ).strip()
+    (repo / "Package.swift").write_text("// swift-tools-version: 6.0\n")
+    initial_head_sha = _initialize_repo(repo)
+    _write_scip_metadata(repo=repo, scip_path=scip_path, slug="swift-incremental-mini")
 
     settings = MagicMock()
     tantivy_dir = tmp_path / "tantivy"
@@ -338,14 +372,13 @@ async def test_incremental_run_does_not_deprecate_unchanged_file_symbols(
         subprocess.run(
             ["git", "commit", "-q", "-m", "incremental"], cwd=repo, check=True
         )
-        head_sha = subprocess.check_output(
-            ["git", "rev-parse", "HEAD"],
-            cwd=repo,
-            text=True,
-        ).strip()
+        head_sha = _git_head(repo)
         write_scip_fixture(
             _build_incremental_prune_scip(file_c_lines=(10, 20)),
             scip_path,
+        )
+        _write_scip_metadata(
+            repo=repo, scip_path=scip_path, slug="swift-incremental-mini"
         )
         second_run = await SymbolIndexSwift().run(graphiti=graphiti_mock, ctx=run2_ctx)
         prune_stats = await PruneSwiftSymbols().run(
@@ -424,7 +457,7 @@ class TestSymbolIndexSwiftIntegration:
         tmp_path: Path,
     ) -> None:
         await ensure_extractors_schema(driver)
-        scip_path = FIXTURE_SCIP
+        scip_path = _project_and_repo / "uw-ios-mini" / "scip" / "index.scip"
         parsed = parse_scip_file(scip_path)
         assert parsed.metadata.tool_info.name == _UW_IOS_TOOL_NAME
         assert len(parsed.documents) == _UW_IOS_N_DOCUMENTS
@@ -521,7 +554,11 @@ class TestSymbolIndexSwiftIntegration:
     ) -> None:
         await ensure_extractors_schema(driver)
         settings = MagicMock()
-        settings.palace_scip_index_paths = {"uw-ios-mini": str(FIXTURE_SCIP)}
+        settings.palace_scip_index_paths = {
+            "uw-ios-mini": str(
+                _project_and_repo / "uw-ios-mini" / "scip" / "index.scip"
+            )
+        }
         tantivy_dir = tmp_path / "tantivy"
         tantivy_dir.mkdir()
         settings.palace_tantivy_index_path = str(tantivy_dir)
@@ -594,7 +631,11 @@ class TestSymbolIndexSwiftIntegration:
     ) -> None:
         await ensure_extractors_schema(driver)
         settings = MagicMock()
-        settings.palace_scip_index_paths = {"uw-ios-mini": str(FIXTURE_SCIP)}
+        settings.palace_scip_index_paths = {
+            "uw-ios-mini": str(
+                _project_and_repo / "uw-ios-mini" / "scip" / "index.scip"
+            )
+        }
         tantivy_dir = tmp_path / "tantivy"
         tantivy_dir.mkdir()
         settings.palace_tantivy_index_path = str(tantivy_dir)
@@ -738,7 +779,8 @@ class TestSymbolIndexSwiftIntegration:
 
         assert file_record is not None
         assert file_record["run_id"] == _RERUN_ID
-        assert file_record["commit_sha"] == _HEAD_SHA
+        expected_head = _git_head(_project_and_repo / "uw-ios-mini")
+        assert file_record["commit_sha"] == expected_head
         assert file_record["seen_at"] is not None
         assert file_record["deprecated"] is False
         assert file_record["deprecated_at"] is None
@@ -748,7 +790,7 @@ class TestSymbolIndexSwiftIntegration:
 
         assert symbol_record is not None
         assert symbol_record["run_id"] == _RERUN_ID
-        assert symbol_record["commit_sha"] == _HEAD_SHA
+        assert symbol_record["commit_sha"] == expected_head
         assert symbol_record["seen_at"] is not None
         assert symbol_record["deprecated"] is False
         assert symbol_record["deprecated_at"] is None
@@ -892,13 +934,9 @@ async def test_perf_p1_incremental_phase1_graph_update_completes_under_three_min
     repo = repo_root / "swift-incremental-perf"
     repo.mkdir(parents=True)
     _write_incremental_repo(repo, file_c_suffix="// run 1")
-    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
-    subprocess.run(
-        ["git", "config", "user.email", "t@example.com"], cwd=repo, check=True
-    )
-    subprocess.run(["git", "config", "user.name", "t"], cwd=repo, check=True)
-    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
-    subprocess.run(["git", "commit", "-q", "-m", "initial"], cwd=repo, check=True)
+    (repo / "Package.swift").write_text("// swift-tools-version: 6.0\n")
+    _initialize_repo(repo)
+    _write_scip_metadata(repo=repo, scip_path=scip_path, slug="swift-incremental-perf")
 
     settings = MagicMock()
     tantivy_dir = tmp_path / "tantivy"
@@ -954,6 +992,9 @@ async def test_perf_p1_incremental_phase1_graph_update_completes_under_three_min
         write_scip_fixture(
             _build_incremental_prune_scip(file_c_lines=(10, 20)),
             scip_path,
+        )
+        _write_scip_metadata(
+            repo=repo, scip_path=scip_path, slug="swift-incremental-perf"
         )
 
         start = time.perf_counter()

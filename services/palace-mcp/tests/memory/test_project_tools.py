@@ -5,7 +5,8 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -29,6 +30,7 @@ def _make_project_row(
     framework: str | None = None,
     repo_url: str | None = None,
     repo_path: str | None = None,
+    language_profile: str | None = None,
     indexed_commit: str | None = None,
     expected_profile: bool = False,
 ) -> dict[str, Any]:
@@ -42,6 +44,7 @@ def _make_project_row(
             "framework": framework,
             "repo_url": repo_url,
             "repo_path": repo_path,
+            "language_profile": language_profile,
             "indexed_commit": indexed_commit,
             "expected_profile": expected_profile,
             "source_created_at": _NOW,
@@ -358,6 +361,59 @@ async def test_get_project_overview_reports_freshness_metadata(
     assert info.freshness_state == "behind_local_tree"
     assert info.origin_checked is False
     assert info.commits_behind_origin is None
+
+
+@pytest.mark.parametrize(
+    "reason",
+    ["repo_head_sha_mismatch", "scip_baseline_digest_mismatch"],
+)
+@pytest.mark.asyncio
+async def test_get_project_overview_rejects_false_current_swift_scip_state(
+    tmp_path: Path,
+    reason: str,
+) -> None:
+    repo_path = tmp_path / "swift-kit"
+    repo_path.mkdir()
+    _run(["git", "init", "-q", "-b", "main"], cwd=repo_path)
+    _run(["git", "config", "user.email", "t@t"], cwd=repo_path)
+    _run(["git", "config", "user.name", "T"], cwd=repo_path)
+    (repo_path / "Package.swift").write_text("// swift-tools-version: 6.0\n")
+    _run(["git", "add", "."], cwd=repo_path)
+    _run(["git", "commit", "-m", "initial", "-q"], cwd=repo_path)
+    head = _run_text(["git", "rev-parse", "HEAD"], cwd=repo_path)
+    project_row = _make_project_row(
+        "swift-kit",
+        "Swift Kit",
+        ["swift"],
+        repo_path=str(repo_path),
+        language_profile="swift_kit",
+        indexed_commit=head,
+    )
+    driver = _make_mock_driver_for_overview(
+        project_row,
+        [],
+        indexed_commit=head,
+    )
+
+    with patch(
+        "palace_mcp.memory.project_tools.inspect_swift_scip_index_state",
+        new=AsyncMock(
+            return_value=SimpleNamespace(current=False, stale=True, reason=reason)
+        ),
+    ) as inspect_mock:
+        info = await get_project_overview(driver, slug="swift-kit")
+
+    assert info.indexed_commit == head
+    assert info.commits_behind_local_tree == 0
+    assert info.stale is True
+    assert info.freshness_state != "current_local_tree"
+    assert info.freshness_reason == reason
+    inspect_mock.assert_awaited_once_with(
+        driver,
+        project_slug="swift-kit",
+        project_id="project/swift-kit",
+        repo_path=repo_path,
+    )
 
 
 @pytest.mark.asyncio

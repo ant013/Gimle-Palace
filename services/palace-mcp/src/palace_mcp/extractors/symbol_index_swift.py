@@ -80,6 +80,13 @@ from palace_mcp.extractors.scip_parser import (
     iter_scip_symbol_infos,
     parse_scip_file,
 )
+from palace_mcp.swift_scip_provenance import (
+    SWIFT_SYMBOL_BASELINE_KIND as _SWIFT_SYMBOL_BASELINE_KIND,
+    SWIFT_SYMBOL_BASELINE_STATE_VERSION as _SWIFT_SYMBOL_BASELINE_STATE_VERSION,
+    SwiftScipProvenancePolicy,
+    git_head_sha,
+    inspect_swift_scip_provenance,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -176,8 +183,6 @@ RETURN collect(DISTINCT f.last_seen_in_commit) AS commits
 _GRAPH_BATCH_SIZE = 500
 _INCREMENTAL_FULL_REPROCESS_THRESHOLD = 0.8
 _GIT_CHANGESET_CAP = 500
-_SWIFT_SYMBOL_BASELINE_KIND = "swift_symbol_scope"
-_SWIFT_SYMBOL_BASELINE_STATE_VERSION = 1
 _SWIFT_SOURCE_SUFFIXES = (".swift", ".swiftinterface")
 _SWIFT_ACCESS_LOOKBACK_LINES = 2
 _SWIFT_ACCESS_MODIFIER_RE = re.compile(
@@ -230,6 +235,44 @@ class SymbolIndexSwift(BaseExtractor):
                 action="retry",
             )
 
+        try:
+            scip_path = ctx.scip_path or FindScipPath.resolve(
+                ctx.project_slug, settings
+            )
+        except ScipPathRequiredError as e:
+            raise ExtractorError(
+                error_code=ExtractorErrorCode.SCIP_PATH_REQUIRED,
+                message=str(e),
+                recoverable=False,
+                action="manual_cleanup",
+            ) from e
+
+        provenance = inspect_swift_scip_provenance(
+            repo_path=ctx.repo_path,
+            project_slug=ctx.project_slug,
+            scip_path=scip_path,
+            policy=SwiftScipProvenancePolicy.CONSUMPTION,
+        )
+        if not provenance.current:
+            raise ExtractorError(
+                error_code=ExtractorErrorCode.SCIP_ARTIFACT_STALE,
+                message=(
+                    "current Swift SCIP artifact required before ingest: "
+                    f"{provenance.reason}"
+                ),
+                recoverable=False,
+                action="manual_cleanup",
+                context={
+                    "scip_path": str(scip_path),
+                    "metadata_path": str(provenance.metadata_path),
+                    "reason": provenance.reason,
+                },
+            )
+        assert provenance.repo_head_sha is not None
+        assert provenance.scip_digest is not None
+        commit_sha = provenance.repo_head_sha
+        scip_digest = provenance.scip_digest
+
         previous_error = await _get_previous_error_code(driver, ctx.project_slug)
         check_resume_budget(previous_error_code=previous_error)
 
@@ -242,11 +285,7 @@ class SymbolIndexSwift(BaseExtractor):
         )
 
         try:
-            scip_path = ctx.scip_path or FindScipPath.resolve(
-                ctx.project_slug, settings
-            )
             scip_index = parse_scip_file(scip_path)
-            commit_sha = _read_head_sha(ctx.repo_path)
             scip_paths = _scip_source_paths(scip_index)
 
             def _iter_occurrences() -> Iterable[SymbolOccurrence]:
@@ -285,6 +324,7 @@ class SymbolIndexSwift(BaseExtractor):
             graph_fallback_reason: str | None = None
             previous_commit_sha: str | None = None
             previous_commit_source: str | None = None
+            artifact_reprocess_required = False
             if (
                 not ctx.force
                 and previous_body_hashes
@@ -295,6 +335,7 @@ class SymbolIndexSwift(BaseExtractor):
                     project_id=ctx.group_id,
                     commit_sha=commit_sha,
                     body_hash_manifest_digest=current_body_hash_manifest_digest,
+                    scip_digest=scip_digest,
                 )
                 if fast_skip_reason is None:
                     logger.info(
@@ -322,51 +363,55 @@ class SymbolIndexSwift(BaseExtractor):
                         mode=ExtractorExecutionMode.SKIPPED,
                     )
 
-                await _refresh_graph_state(
-                    driver,
-                    repo_path=ctx.repo_path,
-                    scip_index=scip_index,
-                    iter_occurrences=_iter_occurrences,
-                    project_id=ctx.group_id,
-                    run_id=ctx.run_id,
-                    commit_sha=commit_sha,
-                    file_body_hashes=current_body_hashes,
-                    selected_paths=None,
-                    removed_paths=set(),
-                )
-                await _write_swift_symbol_baseline(
-                    driver,
-                    project_id=ctx.group_id,
-                    project_slug=ctx.project_slug,
-                    run_id=ctx.run_id,
-                    commit_sha=commit_sha,
-                    scip_path=scip_path,
-                    repo_path=ctx.repo_path,
-                    scip_digest=_file_digest(scip_path),
-                    scip_document_count=scip_document_count,
-                    scip_occurrence_count=scip_occurrence_count,
-                    current_body_hashes=current_body_hashes,
-                )
-                logger.info(
-                    "symbol_index_swift.freshness.skip",
-                    extra={
-                        "extractor": self.name,
-                        "project": ctx.project_slug,
-                        "run_id": ctx.run_id,
-                        "freshness_decision": "skip",
-                        "freshness_reason": "body_hash_match",
-                        "baseline_state": fast_skip_reason,
-                        "graph_refresh": "full",
-                        "file_count": len(current_body_hashes),
-                    },
-                )
-                await finalize_ingest_run(driver, run_id=ctx.run_id, success=True)
-                return ExtractorStats(
-                    outcome=ExtractorOutcome.SKIPPED,
-                    message="Skipped re-ingest: file body_hash values matched existing :File nodes.",
-                    next_action="Modify source content before rerunning symbol_index_swift.",
-                    mode=ExtractorExecutionMode.SKIPPED,
-                )
+                if fast_skip_reason == "stale_scip_digest":
+                    artifact_reprocess_required = True
+                    graph_fallback_reason = "scip_digest_mismatch"
+                else:
+                    await _refresh_graph_state(
+                        driver,
+                        repo_path=ctx.repo_path,
+                        scip_index=scip_index,
+                        iter_occurrences=_iter_occurrences,
+                        project_id=ctx.group_id,
+                        run_id=ctx.run_id,
+                        commit_sha=commit_sha,
+                        file_body_hashes=current_body_hashes,
+                        selected_paths=None,
+                        removed_paths=set(),
+                    )
+                    await _write_swift_symbol_baseline(
+                        driver,
+                        project_id=ctx.group_id,
+                        project_slug=ctx.project_slug,
+                        run_id=ctx.run_id,
+                        commit_sha=commit_sha,
+                        scip_path=scip_path,
+                        repo_path=ctx.repo_path,
+                        scip_digest=scip_digest,
+                        scip_document_count=scip_document_count,
+                        scip_occurrence_count=scip_occurrence_count,
+                        current_body_hashes=current_body_hashes,
+                    )
+                    logger.info(
+                        "symbol_index_swift.freshness.skip",
+                        extra={
+                            "extractor": self.name,
+                            "project": ctx.project_slug,
+                            "run_id": ctx.run_id,
+                            "freshness_decision": "skip",
+                            "freshness_reason": "body_hash_match",
+                            "baseline_state": fast_skip_reason,
+                            "graph_refresh": "full",
+                            "file_count": len(current_body_hashes),
+                        },
+                    )
+                    await finalize_ingest_run(driver, run_id=ctx.run_id, success=True)
+                    return ExtractorStats(
+                        outcome=ExtractorOutcome.SKIPPED,
+                        message="Skipped re-ingest: file body_hash values matched existing :File nodes.",
+                        next_action="Modify source content before rerunning symbol_index_swift.",
+                        mode=ExtractorExecutionMode.SKIPPED,
+                    )
             if previous_body_hashes:
                 logger.info(
                     "symbol_index_swift.freshness.reingest",
@@ -375,7 +420,11 @@ class SymbolIndexSwift(BaseExtractor):
                         "project": ctx.project_slug,
                         "run_id": ctx.run_id,
                         "freshness_decision": "reingest",
-                        "freshness_reason": "body_hash_mismatch",
+                        "freshness_reason": (
+                            "scip_digest_mismatch"
+                            if artifact_reprocess_required
+                            else "body_hash_mismatch"
+                        ),
                         "changed_files": [
                             path
                             for path in sorted(current_body_hashes)
@@ -390,6 +439,7 @@ class SymbolIndexSwift(BaseExtractor):
                 )
                 incremental_tantivy = (
                     not ctx.force
+                    and not artifact_reprocess_required
                     and _incremental_ingest_enabled(settings)
                     and changed_ratio < _INCREMENTAL_FULL_REPROCESS_THRESHOLD
                 )
@@ -595,7 +645,7 @@ class SymbolIndexSwift(BaseExtractor):
                 commit_sha=commit_sha,
                 scip_path=scip_path,
                 repo_path=ctx.repo_path,
-                scip_digest=_file_digest(scip_path),
+                scip_digest=scip_digest,
                 scip_document_count=scip_document_count,
                 scip_occurrence_count=scip_occurrence_count,
                 current_body_hashes=current_body_hashes,
@@ -700,6 +750,7 @@ async def _current_swift_baseline_fast_skip_reason(
     project_id: str,
     commit_sha: str,
     body_hash_manifest_digest: str,
+    scip_digest: str,
 ) -> str | None:
     baseline = await load_extractor_baseline(
         driver,
@@ -717,6 +768,8 @@ async def _current_swift_baseline_fast_skip_reason(
         return "stale_commit"
     if baseline.body_hash_manifest_digest != body_hash_manifest_digest:
         return "stale_body_hash_manifest"
+    if baseline.scip_digest != scip_digest:
+        return "stale_scip_digest"
     return None
 
 
@@ -762,16 +815,6 @@ def _body_hash_manifest_digest(file_body_hashes: dict[str, str]) -> str:
         digest.update(b"\0")
         digest.update(body_hash.encode("utf-8", errors="surrogateescape"))
         digest.update(b"\0")
-    return f"sha256:{digest.hexdigest()}"
-
-
-def _file_digest(path: Path) -> str | None:
-    if not path.is_file():
-        return None
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
     return f"sha256:{digest.hexdigest()}"
 
 
@@ -1488,15 +1531,7 @@ def _is_vendor(file_path: str) -> bool:
 
 
 def _read_head_sha(repo_path: Path) -> str:
-    head_file = repo_path / ".git" / "HEAD"
-    try:
-        ref = head_file.read_text().strip()
-        if ref.startswith("ref: "):
-            ref_path = repo_path / ".git" / ref[5:]
-            return ref_path.read_text().strip()[:40]
-        return ref[:40]
-    except (FileNotFoundError, OSError):
-        return "unknown"
+    return git_head_sha(repo_path) or "unknown"
 
 
 async def _get_previous_error_code(driver: AsyncDriver, project: str) -> str | None:

@@ -22,6 +22,7 @@ from palace_mcp.cache import hydration_semaphore
 from palace_mcp.config import Settings
 from palace_mcp.memory.project_tools import list_projects
 from palace_mcp.memory.schema import ProjectInfo
+from palace_mcp.swift_scip_provenance import inspect_swift_scip_index_state
 
 logger = logging.getLogger(__name__)
 
@@ -225,6 +226,23 @@ async def detect_project_stale_files(
             errors=[f"repo path missing: {repo_path}"],
         )
 
+    swift_index_reason: str | None = None
+    if project.language_profile == "swift_kit":
+        try:
+            swift_index_state = await inspect_swift_scip_index_state(
+                driver,
+                project_slug=project.slug,
+                project_id=f"project/{project.slug}",
+                repo_path=repo_path,
+            )
+            if not swift_index_state.current:
+                swift_index_reason = swift_index_state.reason
+        except Exception as exc:
+            logger.warning(
+                "detect_project_stale_files SCIP state inspection failed: %s", exc
+            )
+            swift_index_reason = "scip_index_state_unavailable"
+
     async with driver.session() as session:
         run_row = await (
             await session.run(_READ_LATEST_INGEST_RUN, project=project.slug)
@@ -246,6 +264,8 @@ async def detect_project_stale_files(
         project_reason = "ingest_run_missing"
     elif finished_at is None:
         project_reason = "ingest_run_unfinished"
+    elif swift_index_reason is not None:
+        project_reason = swift_index_reason
 
     stale: list[dict[str, Any]] = []
     metadata_only: list[dict[str, Any]] = []
@@ -281,8 +301,7 @@ async def detect_project_stale_files(
         language_profile=project.language_profile,
         run_id=run_id,
         finished_at=finished_at,
-        requires_reingest=bool(stale)
-        or project_reason in {"ingest_run_missing", "ingest_run_unfinished"},
+        requires_reingest=bool(stale) or project_reason is not None,
         project_reason=project_reason,
         stale_files=stale,
         metadata_only_files=metadata_only,
