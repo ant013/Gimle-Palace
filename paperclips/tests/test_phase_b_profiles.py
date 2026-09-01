@@ -73,16 +73,26 @@ def test_resolve_extends_detects_cycle():
         resolve_extends_chain(b, {"a": a, "b": b})
 
 
-PROFILE_NAMES = ["custom", "minimal", "research", "writer", "implementer", "qa", "reviewer", "cto"]
+PROFILE_NAMES = [
+    "custom",
+    "minimal",
+    "research",
+    "writer",
+    "implementer",
+    "qa",
+    "reviewer",
+    "cto",
+    "walker",
+]
 
 
-def test_all_8_profiles_exist():
+def test_all_9_profiles_exist():
     for name in PROFILE_NAMES:
         p = PROFILES_DIR / f"{name}.yaml"
         assert p.is_file(), f"missing profile: {p}"
 
 
-def test_all_8_profiles_validate():
+def test_all_9_profiles_validate():
     from paperclips.scripts.profile_schema import load_profile
     for name in PROFILE_NAMES:
         p = PROFILES_DIR / f"{name}.yaml"
@@ -116,11 +126,33 @@ def test_cto_extends_reviewer():
     assert p["extends"] == "reviewer"
 
 
+def test_walker_extends_reviewer_with_non_release_capabilities():
+    from paperclips.scripts.profile_schema import load_profile
+    p = load_profile(PROFILES_DIR / "walker.yaml")
+    assert p["extends"] == "reviewer"
+    assert set(p["includes"]) == {
+        "git/commit-and-push.md",
+        "worktree/active.md",
+        "pre-work/existing-field-semantics.md",
+        "universal/cto-merge-authority.md",
+        "plan/producer.md",
+    }
+    assert "git/release-cut.md" not in p["includes"]
+    assert "handoff/phase-orchestration.md" not in p["includes"]
+
+
 def test_extends_chain_resolution_for_cto():
     from paperclips.scripts.profile_schema import load_all_profiles, resolve_extends_chain
     all_p = load_all_profiles(PROFILES_DIR)
     chain = resolve_extends_chain(all_p["cto"], all_p)
     assert [p["name"] for p in chain] == ["reviewer", "cto"]
+
+
+def test_extends_chain_resolution_for_walker():
+    from paperclips.scripts.profile_schema import load_all_profiles, resolve_extends_chain
+    all_p = load_all_profiles(PROFILES_DIR)
+    chain = resolve_extends_chain(all_p["walker"], all_p)
+    assert [p["name"] for p in chain] == ["reviewer", "walker"]
 
 
 def test_extends_chain_resolution_for_qa():

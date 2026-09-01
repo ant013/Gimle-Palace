@@ -9,8 +9,18 @@ REPO = Path(__file__).resolve().parents[2]
 PROFILES_DIR = REPO / "paperclips" / "fragments" / "profiles"
 
 
-def test_all_8_profiles_present():
-    for n in ["custom", "minimal", "research", "writer", "implementer", "qa", "reviewer", "cto"]:
+def test_all_9_profiles_present():
+    for n in [
+        "custom",
+        "minimal",
+        "research",
+        "writer",
+        "implementer",
+        "qa",
+        "reviewer",
+        "cto",
+        "walker",
+    ]:
         assert (PROFILES_DIR / f"{n}.yaml").is_file()
 
 

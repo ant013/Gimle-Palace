@@ -1,6 +1,6 @@
 """Profile YAML schema for UAA Phase B.
 
-Stdlib-only + pyyaml. Validates the 8 profiles in
+Stdlib-only + pyyaml. Validates the reusable profiles in
 paperclips/fragments/profiles/*.yaml per spec §5.2.
 """
 from __future__ import annotations

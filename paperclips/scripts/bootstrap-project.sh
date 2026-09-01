@@ -597,6 +597,7 @@ for agent_name in $hire_order; do
   profile_name=$(echo "$agent_meta" | jq -r '.profile')
   case "$profile_name" in
     cto)         fallback_role="cto";         fallback_icon="🧠" ;;
+    walker)      fallback_role="cto";         fallback_icon="shield" ;;
     reviewer)    fallback_role="reviewer";    fallback_icon="🔎" ;;
     implementer) fallback_role="implementer"; fallback_icon="🛠" ;;
     qa)          fallback_role="qa";          fallback_icon="🧪" ;;

@@ -93,6 +93,17 @@ def test_git_capabilities_follow_profile_not_workflow_role():
     assert "EXPECTED_GIT_inner_orchestrator" not in text
 
 
+def test_walker_bootstrap_fallback_is_cto_with_shield_icon():
+    text = (REPO / "paperclips" / "scripts" / "bootstrap-project.sh").read_text()
+    assert 'walker)      fallback_role="cto";         fallback_icon="shield" ;;' in text
+
+
+def test_walker_runtime_git_probe_is_merge_capable_but_release_incapable():
+    text = PROBES.read_text()
+    assert 'EXPECTED_GIT_walker_must_have="commit push fetch merge"' in text
+    assert 'EXPECTED_GIT_walker_must_not_have="release-cut release tag publish"' in text
+
+
 def test_git_forbidden_operations_are_checked_only_in_can_section():
     command = (
         f'source "{PROBES}"; '

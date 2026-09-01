@@ -1,0 +1,11 @@
+# CI-only fallback. Real UUIDs live in
+# ~/.paperclip/projects/glitcherry-android/bindings.yaml with mode 600.
+schemaVersion: 2
+company_id: "00000000-0000-0000-0000-000000000004"
+agents:
+  GlitcherryCEO: "00000000-0000-0000-0000-000000000410"
+  GlitcherryCTO: "00000000-0000-0000-0000-000000000411"
+  GlitcherryAndroidEngineer: "00000000-0000-0000-0000-000000000412"
+  GlitcherryMediaPipelineEngineer: "00000000-0000-0000-0000-000000000413"
+  GlitcherryCodeReviewer: "00000000-0000-0000-0000-000000000414"
+  GlitcherryQAEngineer: "00000000-0000-0000-0000-000000000415"

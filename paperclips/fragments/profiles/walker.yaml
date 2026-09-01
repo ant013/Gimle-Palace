@@ -1,0 +1,14 @@
+schemaVersion: 2
+name: walker
+inheritsUniversal: true
+extends: reviewer
+includes:
+  - git/commit-and-push.md
+  - worktree/active.md
+  - pre-work/existing-field-semantics.md
+  - universal/cto-merge-authority.md
+  - plan/producer.md
+description: |
+  Non-release technical Walker profile. Inherits reviewer mechanics and adds
+  task-branch writes, worktree discipline, integration merge authority and plan
+  production. NO release-cut. Project workflow defines phase orchestration.
