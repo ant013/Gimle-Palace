@@ -103,6 +103,34 @@ async def test_list_active_issues_includes_blocked_status():
         await client.aclose()
 
 
+@pytest.mark.parametrize(
+    ("active_run", "legacy_active_run_id", "expected"),
+    [
+        ({"id": "run-nested", "status": "running"}, None, "run-nested"),
+        ({"id": "run-nested"}, "run-legacy", "run-nested"),
+        (None, "run-legacy", "run-legacy"),
+        ({}, None, None),
+        ("run-not-an-object", None, None),
+    ],
+)
+def test_issue_parses_current_nested_active_run_shape(
+    active_run: object, legacy_active_run_id: str | None, expected: str | None
+):
+    issue = pc._issue_from_json(
+        {
+            "id": ISSUE_ID,
+            "assigneeAgentId": "agent-1",
+            "executionRunId": "run-nested",
+            "activeRun": active_run,
+            "activeRunId": legacy_active_run_id,
+            "status": "in_progress",
+            "updatedAt": "2026-09-01T18:49:01Z",
+        }
+    )
+
+    assert issue.active_run_id == expected
+
+
 @pytest.mark.asyncio
 async def test_patch_issue_assignee():
     captured: dict = {}

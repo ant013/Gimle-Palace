@@ -52,11 +52,20 @@ def _parse_iso(s: str) -> datetime:
 
 
 def _issue_from_json(data: dict[str, Any]) -> Issue:
+    active_run = data.get("activeRun")
+    active_run_id = active_run.get("id") if isinstance(active_run, dict) else None
+    if not isinstance(active_run_id, str) or not active_run_id:
+        legacy_active_run_id = data.get("activeRunId")
+        active_run_id = (
+            legacy_active_run_id
+            if isinstance(legacy_active_run_id, str) and legacy_active_run_id
+            else None
+        )
     return Issue(
         id=str(data["id"]),
         assignee_agent_id=data.get("assigneeAgentId"),
         execution_run_id=data.get("executionRunId"),
-        active_run_id=data.get("activeRunId"),
+        active_run_id=active_run_id,
         status=str(data.get("status", "")),
         updated_at=_parse_iso(str(data.get("updatedAt", "1970-01-01T00:00:00Z"))),
         issue_number=int(data.get("issueNumber") or 0),
