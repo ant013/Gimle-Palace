@@ -423,8 +423,9 @@ identity/review/handoff probe. Do not inspect product code or create findings.
 
 ## Atomic handoff
 
-POST evidence and require 2xx, PATCH the exact next assignee/status, perform one
-read-only verification, then STOP. You have no push step.
+POST evidence and require 2xx, PATCH the exact next assignee/status and that
+assignee's bound `projectWorkspaceId`, perform one read-only verification of all
+fields, then STOP. You have no push step.
 
 
 ## Glitcherry Android runtime contract
@@ -440,14 +441,16 @@ release operations.
 Resolve handoffs only through these host-local bindings; never copy an ID from
 another company:
 
-| Agent | Binding |
-| --- | --- |
-| `GlitcherryCEO` | `00000000-0000-0000-0000-000000000410` |
-| `GlitcherryCTO` | `00000000-0000-0000-0000-000000000411` |
-| `GlitcherryAndroidEngineer` | `00000000-0000-0000-0000-000000000412` |
-| `GlitcherryMediaPipelineEngineer` | `00000000-0000-0000-0000-000000000413` |
-| `GlitcherryCodeReviewer` | `00000000-0000-0000-0000-000000000414` |
-| `GlitcherryQAEngineer` | `00000000-0000-0000-0000-000000000415` |
+Paperclip Project: `00000000-0000-0000-0000-000000000400`.
+
+| Agent | Agent binding | Project workspace binding |
+| --- | --- | --- |
+| `GlitcherryCEO` | `00000000-0000-0000-0000-000000000410` | `00000000-0000-0000-0000-000000000420` |
+| `GlitcherryCTO` | `00000000-0000-0000-0000-000000000411` | `00000000-0000-0000-0000-000000000421` |
+| `GlitcherryAndroidEngineer` | `00000000-0000-0000-0000-000000000412` | `00000000-0000-0000-0000-000000000422` |
+| `GlitcherryMediaPipelineEngineer` | `00000000-0000-0000-0000-000000000413` | `00000000-0000-0000-0000-000000000423` |
+| `GlitcherryCodeReviewer` | `00000000-0000-0000-0000-000000000414` | `00000000-0000-0000-0000-000000000424` |
+| `GlitcherryQAEngineer` | `00000000-0000-0000-0000-000000000415` | `00000000-0000-0000-0000-000000000425` |
 
 ### Execution invariants
 
@@ -456,8 +459,11 @@ another company:
 - Before selection, prove there is no non-terminal direct child, unresolved
   blocker, dirty persistent clone, approved-but-unmerged PR, residual exact ref,
   or orphaned recorded temporary worktree.
-- Create exactly one child with `parentId=<root-id>`, verify it, then PATCH the
-  parent to API status `blocked` with `blockedByIssueIds=[<child-id>]`.
+- Create exactly one child with `parentId=<root-id>`,
+  `projectId=00000000-0000-0000-0000-000000000400`, and
+  `projectWorkspaceId=00000000-0000-0000-0000-000000000421`; verify it, then
+  PATCH the parent to API status `blocked` with
+  `blockedByIssueIds=[<child-id>]`.
 - A completed child may wake the parent through `issue_blockers_resolved` and/or
   `issue_children_completed`. One bounded watchdog recovery wake is allowed; a
   second child is not a recovery mechanism.
@@ -476,6 +482,9 @@ another company:
 - Your runtime cwd is the persistent workspace root under
   `/opt/example/glitcherry-paperclip-runs`; the generated role prompt is
   `workspace/AGENTS.md`.
+- Every issue must select Paperclip Project `00000000-0000-0000-0000-000000000400` and the
+  workspace binding for its current assignee. A missing or mismatched selection is
+  a stop condition because the installed runtime otherwise falls back to agent-home.
 - The Android checkout is `workspace/repo`; its tracked `AGENTS.md` remains the
   repository-local policy and must never be replaced by the generated prompt.
 - Only `GlitcherryCTO` also uses `workspace/control` for the canonical roadmap
@@ -518,9 +527,10 @@ new authority.
 
 ### Handoff and disposable smoke
 
-Every handoff is `POST evidence` and require 2xx, then PATCH the exact assignee
-and status, perform one read-only verification, and STOP. A 409 permits one
-reload and the documented recovery path only.
+Every handoff is `POST evidence` and require 2xx, then PATCH the exact assignee,
+status, and that same agent's Project workspace binding. Perform one read-only verification
+of all three fields, then STOP. A 409 permits one reload and the
+documented recovery path only.
 
 An issue title beginning exactly with `smoke-probe-` or `smoke-e2e-` is a
 disposable, repository-write-free authority probe. For it, do only the requested

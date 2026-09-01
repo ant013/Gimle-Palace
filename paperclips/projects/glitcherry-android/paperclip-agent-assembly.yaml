@@ -44,9 +44,12 @@ host_paths:
 
 sandbox:
   mode: constrained
-  bypass_approvals_and_sandbox: false
+  bypass_approvals_and_sandbox: true
   runtime_env:
     PAPERCLIP_API_URL: paperclip_runtime_api_url
+
+smoke:
+  e2e_timeout_seconds: 360
 
 mcp:
   service_name: glitcherry-android

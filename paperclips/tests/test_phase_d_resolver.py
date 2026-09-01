@@ -30,6 +30,24 @@ def test_bindings_only_returns_new_uuids():
     assert "CXNewAgent" in out["agents"]
 
 
+def test_bindings_preserve_project_and_workspace_ids(tmp_path):
+    from paperclips.scripts.resolve_bindings import resolve_all
+
+    bindings = tmp_path / "bindings.yaml"
+    bindings.write_text(
+        "schemaVersion: 2\n"
+        "company_id: company\n"
+        "project_id: project\n"
+        "agents:\n  CTO: agent\n"
+        "workspaces:\n  CTO: workspace\n"
+    )
+
+    out = resolve_all(legacy_env_path=None, bindings_yaml_path=bindings)
+
+    assert out["project_id"] == "project"
+    assert out["workspaces"] == {"CTO": "workspace"}
+
+
 def test_both_matching_no_conflicts():
     from paperclips.scripts.resolve_bindings import resolve_all
     out = resolve_all(

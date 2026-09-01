@@ -104,6 +104,16 @@ def test_walker_runtime_git_probe_is_merge_capable_but_release_incapable():
     assert 'EXPECTED_GIT_walker_must_not_have="release-cut release tag publish"' in text
 
 
+def test_e2e_probe_can_pin_and_handoff_project_workspaces():
+    probes = PROBES.read_text()
+    smoke = (REPO / "paperclips" / "scripts" / "smoke-test.sh").read_text()
+    assert "projectWorkspaceId: $w" in probes
+    assert "projectWorkspaceId ${next_workspace_uuid}" in probes
+    assert '.project_id // ""' in smoke
+    assert '.workspaces[\\"${next_name}\\"]' in smoke
+    assert ".smoke.e2e_timeout_seconds // 180" in smoke
+
+
 def test_git_forbidden_operations_are_checked_only_in_can_section():
     command = (
         f'source "{PROBES}"; '

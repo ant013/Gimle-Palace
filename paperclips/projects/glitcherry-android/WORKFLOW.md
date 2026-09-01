@@ -38,9 +38,11 @@ pinned roadmap head. Before selecting work it proves:
 5. cleanup evidence for the prior child is complete.
 
 The CTO selects only the first pinned `READY` slice whose dependencies are
-`DONE`. It creates exactly one child using `parentId=<root-id>`, reads the child
-back to verify the relation, then PATCHes the parent to API status `blocked` with
-`blockedByIssueIds=[<child-id>]`. Prose references are not a liveness contract.
+`DONE`. It creates exactly one child using `parentId=<root-id>`, the bound
+Glitcherry Paperclip Project ID, and the CTO Project workspace ID. It reads the
+child back to verify all three relations, then PATCHes the parent to API status
+`blocked` with `blockedByIssueIds=[<child-id>]`. Prose references are not a
+liveness contract.
 
 After the child becomes `done`, current Paperclip may wake the parent with
 `issue_blockers_resolved` and/or `issue_children_completed`. The CTO clears the
@@ -169,8 +171,10 @@ Every transition is atomic and uses this exact order:
 
 1. push the required phase artifact when the role has push authority;
 2. `POST evidence` to `/api/issues/{id}/comments` and require a 2xx response;
-3. `PATCH assignee/status` to the exact next owner and state;
-4. perform `one read-only verification` of assignee and status;
+3. `PATCH assignee/status/projectWorkspaceId` to the exact next owner, state,
+   and that owner's bound Project workspace;
+4. perform `one read-only verification` of assignee, status, Project ID, and
+   workspace ID;
 5. `STOP` the current run.
 
 A mention is decoration, not ownership transfer. On HTTP 409, reload once and
@@ -185,6 +189,8 @@ database directly.
   Engineering Lead.
 - A stale review head, dirty clone, residual branch/worktree, missing parent
   blocker, partial merge, or incomplete cleanup stops advancement.
+- A missing Project ID, missing workspace ID, or workspace ID not bound to the
+  current assignee stops advancement; never accept a fallback agent-home run.
 - A required unstable API, undefined media fallback, API-floor mismatch,
   unsupported format, or hardware capability gap not accepted by the slice
   blocks instead of guessing.

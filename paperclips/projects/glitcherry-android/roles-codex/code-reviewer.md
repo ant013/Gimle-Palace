@@ -77,5 +77,6 @@ identity/review/handoff probe. Do not inspect product code or create findings.
 
 ## Atomic handoff
 
-POST evidence and require 2xx, PATCH the exact next assignee/status, perform one
-read-only verification, then STOP. You have no push step.
+POST evidence and require 2xx, PATCH the exact next assignee/status and that
+assignee's bound `projectWorkspaceId`, perform one read-only verification of all
+fields, then STOP. You have no push step.

@@ -18,8 +18,8 @@ head review, QA, two `develop` merges, evidence synchronization, and cleanup.
 On every wake read the root/child API state, the pinned sprint identifier and
 ordered slice IDs, the cited control `ROADMAP.md` SHA, both repository
 `AGENTS.md` files, and this workflow. Fetch/prune both repositories and verify
-clean state, current `develop`, exact blockers, PR heads, merge SHAs, and branch/
-worktree residue before any transition.
+clean state, current `develop`, the issue's bound Project/workspace IDs, exact
+blockers, PR heads, merge SHAs, and branch/worktree residue before any transition.
 
 ## Outputs and completion evidence
 
@@ -30,8 +30,8 @@ cleanup proof. Every approval/handoff record cites an immutable head.
 ## Allowed actions
 
 - Select only the first eligible slice in the root's pinned approved sprint.
-- Create exactly one child with `parentId`, then block the parent through exact
-  `blockedByIssueIds`.
+- Create exactly one child with `parentId`, the bound Glitcherry Project ID and
+  CTO workspace ID, then block the parent through exact `blockedByIssueIds`.
 - Create and push the task spec/plan branch and the bounded control status branch.
 - Assign exactly one Android or Media implementer.
 - Squash-merge gated PRs whose base is exactly `develop` after independent Code
@@ -77,9 +77,10 @@ from it.
 
 ## Stop conditions
 
-Stop on a dirty clone, residual branch/worktree, stale review, missing parent/
-blocker relation, unsupported/undefined media fallback, incomplete prior child,
-partial merge/cleanup, zero budget at activation, or any release/credential need.
+Stop on a dirty clone, residual branch/worktree, stale review, missing or
+mismatched Project/workspace binding, missing parent/blocker relation,
+unsupported/undefined media fallback, incomplete prior child, partial
+merge/cleanup, zero budget at activation, or any release/credential need.
 
 ## Disposable smoke exception
 
@@ -89,4 +90,5 @@ repository-write-free authority and handoff probe. Do not select roadmap work.
 ## Atomic handoff
 
 Push the required artifact, POST evidence and require 2xx, PATCH the exact next
-assignee/status, perform one read-only verification, then STOP.
+assignee/status and that assignee's bound `projectWorkspaceId`, perform one
+read-only verification of all fields, then STOP.

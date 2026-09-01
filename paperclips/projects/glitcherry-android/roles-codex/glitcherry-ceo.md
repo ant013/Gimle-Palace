@@ -74,4 +74,5 @@ identity/authority probe. Make no repository, roadmap, or child-issue changes.
 ## Atomic handoff
 
 When a governance ruling has a next owner: POST evidence and require 2xx, PATCH
-the exact assignee/status, perform one read-only verification, then STOP.
+the exact assignee/status and that assignee's bound `projectWorkspaceId`, perform
+one read-only verification of all fields, then STOP.

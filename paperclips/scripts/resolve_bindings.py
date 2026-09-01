@@ -152,7 +152,18 @@ def _read_bindings_yaml(path: Path) -> dict[str, Any]:
     agents = raw.get("agents", {})
     if not isinstance(agents, dict):
         raise ValueError(f"{path}: agents must be mapping")
-    return {"company_id": raw.get("company_id"), "agents": agents}
+    workspaces = raw.get("workspaces", {})
+    if not isinstance(workspaces, dict):
+        raise ValueError(f"{path}: workspaces must be mapping")
+    project_id = raw.get("project_id")
+    if project_id is not None and not isinstance(project_id, str):
+        raise ValueError(f"{path}: project_id must be string or null")
+    return {
+        "company_id": raw.get("company_id"),
+        "project_id": project_id,
+        "agents": agents,
+        "workspaces": workspaces,
+    }
 
 
 def resolve_all(
@@ -172,7 +183,12 @@ def resolve_all(
         legacy = _read_legacy_env(legacy_env_path)
         sources_used.append("legacy")
 
-    bindings: dict[str, Any] = {"company_id": None, "agents": {}}
+    bindings: dict[str, Any] = {
+        "company_id": None,
+        "project_id": None,
+        "agents": {},
+        "workspaces": {},
+    }
     if bindings_yaml_path is not None and bindings_yaml_path.is_file():
         bindings = _read_bindings_yaml(bindings_yaml_path)
         sources_used.append("bindings")
@@ -224,7 +240,9 @@ def resolve_all(
 
     return {
         "company_id": bindings.get("company_id"),
+        "project_id": bindings.get("project_id"),
         "agents": merged,
+        "workspaces": bindings.get("workspaces", {}),
         "sources_used": sources_used,
         "conflicts": conflicts,
     }
