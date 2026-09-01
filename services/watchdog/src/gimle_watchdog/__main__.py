@@ -267,7 +267,7 @@ def _cmd_status(args: argparse.Namespace) -> int:
 
     try:
         result = subprocess.run(
-            ["ps", "-ao", "pid,command"], capture_output=True, text=True, check=True
+            ["ps", "-axo", "pid,command"], capture_output=True, text=True, check=True
         )
         process_counts = detection.count_agent_commands(result.stdout)
     except Exception:

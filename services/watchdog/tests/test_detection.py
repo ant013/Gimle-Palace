@@ -394,6 +394,35 @@ def _make_config(died_min: int = 3, cooldowns: CooldownsConfig | None = None) ->
     )
 
 
+def test_scan_idle_hangs_includes_no_tty_codex_processes():
+    """The host sampler must include detached Paperclip workers on macOS."""
+    import unittest.mock as _mock
+
+    ps_output = (
+        "  PID  PPID     ELAPSED        TIME COMMAND\n"
+        "49574  6814     2:00:00     0:00:01 /usr/local/bin/codex exec --json\n"
+    )
+    completed = det.subprocess.CompletedProcess(args=[], returncode=0, stdout=ps_output)
+
+    with (
+        _mock.patch.object(det.subprocess, "run", return_value=completed) as run,
+        _mock.patch.object(det, "read_process_command", return_value="node paperclipai run"),
+        _mock.patch.object(det, "read_paperclip_identity", return_value=_codex_identity()),
+        _mock.patch.object(det, "last_stream_event_age_seconds", return_value=None),
+    ):
+        hangs = det.scan_idle_hangs(_make_config())
+
+    run.assert_called_once_with(
+        ["ps", "-axo", "pid,ppid,etime,time,command"],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=10,
+    )
+    assert [proc.pid for proc in hangs] == [49574]
+    assert hangs[0].runtime == "codex"
+
+
 def _issue(
     *,
     id: str = "issue-1",
