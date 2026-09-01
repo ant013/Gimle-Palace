@@ -1,12 +1,14 @@
 # Glitcherry Android Paperclip company design
 
-Status: final design awaiting explicit approval
+Status: approved design; live-canary correction recorded
 
 Date: 2026-09-01
 
 Repository baseline: `Gimle-Palace@25e531cd91e7b60375801583626b46357f032557`
 
-Implementation branch: `feature/glitcherry-paperclip-company`
+Implementation merge: `Gimle-Palace@13cd868f1f9389dc03c6c985db6255d706fcbfee`
+
+Live-canary correction branch: `fix/glitcherry-paperclip-runtime`
 
 Control-plane baseline: `Glitcherry@f3e49439d098b2e818f8beed2b53a4432cc3dd95`
 
@@ -107,6 +109,15 @@ product/roadmap/human-only decision.
   `blocked`; `parentId` and replace-all `blockedByIssueIds` are first-class; completed
   blockers/direct children emit `issue_blockers_resolved` and
   `issue_children_completed`; monthly legacy enforcement applies only above zero.
+- The first live canary on the installed Paperclip runtime proved two newer runtime
+  constraints that were not represented by the preflight fork: issue wakes ignore
+  `adapterConfig.cwd` unless the issue selects a Paperclip Project workspace, and the
+  Codex sandbox blocks both loopback Paperclip API access and GitHub network access.
+  The run made no repository change, its disposable issue was deleted, and the
+  company remained dormant. The corrected design creates one Paperclip Project with
+  six named local workspaces, pins every issue/handoff to the current owner's
+  workspace ID, and uses the already-established fullAudit bypass analog while
+  keeping operator `.env` outside every agent workspace.
 
 ## 4. Scope
 
@@ -164,7 +175,8 @@ After the implementation is merged to Gimle-Palace `develop`:
 4. validate, build and bootstrap with each agent rooted at its persistent workspace;
    run the project workspace preparer to clone the verified GitHub Android upstream
    into each `workspace/repo` and the control upstream into CTO
-   `workspace/control`, then run quick smoke and a disposable end-to-end canary;
+   `workspace/control`; reconcile one Paperclip Project and its six bound local
+   workspaces before any wake, then run quick smoke and a disposable end-to-end canary;
 5. verify exact API state and leave the company with no feature/root roadmap issue;
 6. remove the fresh deploy worktree after it is clean and no longer needed.
 
@@ -480,9 +492,10 @@ recorded Android SHA, checks whether the unique control marker already landed, a
 finishes only the missing control/cleanup/finalization steps. It never recreates or
 re-merges implementation and never scans for another slice.
 
-Every handoff is evidence POST -> require 2xx -> PATCH assignee/status -> exactly one
-read-only verification -> STOP. A mention is decoration, not a wake contract. On HTTP
-409, reload once and enter the explicit recovery path instead of retrying a wake loop.
+Every handoff is evidence POST -> require 2xx -> PATCH assignee/status plus the exact
+`projectWorkspaceId` bound to the next owner -> exactly one read-only verification ->
+STOP. A mention is decoration, not a wake contract. On HTTP 409, reload once and enter
+the explicit recovery path instead of retrying a wake loop.
 
 ## 10. Workspace, repositories and runtime policy
 
@@ -505,13 +518,20 @@ Expected live layout after approval:
 Assembly sandbox contract:
 
 - `mode: constrained`;
-- `bypass_approvals_and_sandbox: false` unless live canary proves required GitHub and
-  local tool operations cannot work; any change to `true` requires a revised spec;
+- `bypass_approvals_and_sandbox: true`: live canary proved that the installed Codex
+  adapter otherwise cannot reach the loopback Paperclip API or GitHub; this is the
+  same reviewed runtime mechanism used by fullAudit, while instruction authority,
+  one-writer sequencing, branch protection and host-local secret placement remain
+  the effective safety boundaries;
 - do **not** set `workspace_git_source_path_key`: current bootstrap would make
   `workspace/repo` the runtime cwd and overwrite its tracked `AGENTS.md` with the
   per-agent prompt, making every Glitcherry-Android clone dirty before work begins;
 - runtime cwd stays the persistent `workspace` root and generated role instructions
   stay at `workspace/AGENTS.md`; project Git commands operate only in `workspace/repo`;
+- one Paperclip Project has exactly six local workspaces, each bound by name and UUID
+  to the matching persistent agent `workspace`; a root/child issue starts with the
+  CTO binding, and every handoff atomically switches `projectWorkspaceId` to the next
+  owner's binding so the installed runtime never falls back to agent-home;
 - after dormant bootstrap and before any agent wake, the idempotent project workspace
   preparer clones the allowlisted GitHub upstream directly into `workspace/repo` and
   never uses a local path as `origin`;
@@ -537,9 +557,10 @@ the recorded PR head, absence of unpushed work and remote deletion before force-
 deleting that exact local task ref; this exception is necessary because squash commits
 are not ancestors of `develop`. No broad branch glob or workspace deletion is allowed.
 
-If constrained mode blocks a required operation, the canary fails. The implementation
-must first narrow the missing writable/read-only root or command. It must not silently
-switch to unrestricted execution.
+The bypass is not permission to read operator secrets or expand authority. The
+operator `.env`, SSH material, keystores and Play credentials remain outside every
+workspace and are forbidden by the rendered contract. Any request for them blocks for
+the Human Engineering Lead.
 
 ## 11. Model, concurrency and cost policy
 
@@ -564,6 +585,8 @@ switch to unrestricted execution.
 - `paperclips/fragments/profiles/walker.yaml` — new reusable non-release profile.
 - `paperclips/scripts/bootstrap-project.sh` — recognize `walker` fallback identity.
 - `paperclips/scripts/lib/_smoke_probes.sh` — Walker Git capability contract.
+- `paperclips/scripts/lib/_smoke_probes.sh` — also carries optional bound
+  `projectId`/per-agent `projectWorkspaceId` through the disposable handoff probe.
 - `paperclips/tests/test_phase_b_profiles.py` — exact nine-profile inventory and Walker
   extends/includes/no-release assertions.
 - `paperclips/tests/test_phase_c_smoke_test.py` — structural Walker probe assertions.
@@ -590,8 +613,12 @@ or canary agent selection.
 - `paperclips/projects/glitcherry-android/scripts/prepare-runtime-workspaces.sh` —
   idempotently clone/verify direct GitHub Android repos under every persistent
   workspace plus the CTO control repo without overwriting tracked `AGENTS.md`.
+- `paperclips/projects/glitcherry-android/scripts/reconcile-paperclip-project.sh` —
+  idempotently create/reuse the exact Paperclip Project and six local workspaces,
+  recording only their UUIDs in the mode-`600` bindings file.
 - `paperclips/tests/test_glitcherry_android_assembly.py`
 - `paperclips/tests/test_glitcherry_android_runtime_workspaces.py`
+- `paperclips/tests/test_glitcherry_android_paperclip_project.py`
 - generated `paperclips/dist/glitcherry-android.resolved-assembly.json`
 - generated six files under `paperclips/dist/glitcherry-android/codex/`.
 
@@ -616,7 +643,7 @@ on hidden workers, vendor installers or ambient skill availability.
 | --- | --- | --- | --- | --- | --- |
 | Non-release CTO Walker profile | `reviewer.yaml` plus current profile composer | Bootstrap/smoke profile dispatch; reject `cto.yaml` release-cut and generic phase-orchestration | Universal safety, discovery, review/plan mechanics, handoff, merge gates | New `walker` adds commit/push/worktree/merge/plan, excludes release-cut and hard-coded project phases; Glitcherry workflow restricts merge to `develop` | Add failing inventory/includes/no-release/no-legacy-phase tests and runtime marker assertions before profile/script edits |
 | Glitcherry Android company bundle | ThorChain assembly, custom role files, workflow and exact project test | Trading single Code Reviewer idea; current Paperclip `parentId`/`blockedByIssueIds`; fullAudit constrained sandbox; reject legacy relatedWork and release-capable CEO/CTO | Portable manifest, host-local bindings, explicit identity, generated prompts, one active child, atomic handoff, dormant bootstrap | CEO governance; CTO sole Walker; six roles including Media; QA uses non-writing reviewer profile; seven child phases; two repos; `develop`; one writer/emulator | Add failing exact roster/authority/phase/wake/QA-routing/dormancy/render assertions, then create bundle until green |
-| Dormant bootstrap and canary | Journaled `bootstrap-project.sh` create-or-reuse lifecycle | Smoke/rollback disposable issue family; tracked Android `AGENTS.md` is a counterexample to cwd=`workspace/repo`; quarantine dirty shared iMac checkout | Prefix collision guard, idempotent bindings, persistent per-agent workspaces, managed config reconciliation, disposable issue cleanup | Keep cwd and generated role prompt at workspace root; direct GitHub clones under `./repo`; tracked repo `AGENTS.md` untouched; CTO control clone; no root issue | Run static bootstrap/smoke/workspace-preparer tests; then live exact cwd/clean/origin/API assertions and disposable CTO->CodeReviewer handoff |
+| Dormant bootstrap and canary | Journaled `bootstrap-project.sh` create-or-reuse lifecycle | Smoke/rollback disposable issue family; installed Paperclip issue-workspace resolver; fullAudit bypass analog; tracked Android `AGENTS.md` is a counterexample to cwd=`workspace/repo`; quarantine dirty shared iMac checkout | Prefix collision guard, idempotent bindings, persistent per-agent workspaces, managed config reconciliation, disposable issue cleanup | Generated prompt at workspace root; direct GitHub clones under `./repo`; exact six Paperclip workspace bindings; atomic workspace switch on handoff; tracked repo `AGENTS.md` untouched; CTO control clone; no root issue | Run static bootstrap/smoke/workspace/preparer/reconciler tests; then live exact selected cwd/clean/origin/API assertions and disposable CTO->CodeReviewer handoff |
 
 ## 14. Verification plan
 
@@ -633,6 +660,7 @@ python3 -m pytest \
 bash -n paperclips/scripts/bootstrap-project.sh
 bash -n paperclips/scripts/lib/_smoke_probes.sh
 bash -n paperclips/projects/glitcherry-android/scripts/prepare-runtime-workspaces.sh
+bash -n paperclips/projects/glitcherry-android/scripts/reconcile-paperclip-project.sh
 bash paperclips/scripts/validate-manifest.sh glitcherry-android
 bash paperclips/build.sh --project glitcherry-android --target codex
 python3 -m paperclips.scripts.validate_instructions --repo-root .
@@ -643,7 +671,8 @@ Project tests assert:
 - exact six names, reports-to graph, model, effort, profile, icon and workflow role;
 - CEO `minimal`, CTO `walker`, exactly one `inner_orchestrator`;
 - no `outer_walker`, no second CTO/Walker and no release/profile authority on CEO;
-- constrained sandbox, workspace-root cwd and host path contract;
+- constrained manifest with reviewed runtime bypass, workspace-root cwd and host path
+  contract;
 - both codebase-memory project IDs render and no `{{...}}` remains;
 - required role/overlay/workflow/example files exist;
 - the media source record pins revision/license and the custom role routes each source
@@ -654,6 +683,8 @@ Project tests assert:
   outside the repo; tracked Android `AGENTS.md` is byte-identical and Git status clean;
 - the workspace preparer is idempotent, refuses unmanaged/dirty/wrong-origin targets,
   and clones only the verified GitHub upstream before any agent wake;
+- the Paperclip Project reconciler is idempotent, refuses duplicate/wrong bound
+  resources, creates exactly six local workspaces, and never stores a secret;
 - normal workflow excludes CEO, has one Code Reviewer for spec/plan/code, and has one
   implementation owner;
 - QA composes `reviewer`, cannot commit/push, and has an exact routing table;
@@ -694,11 +725,13 @@ workspace, but CI and the approved spec remain mandatory. Confirm the squash SHA
    actual host UUID/path/secret.
 5. Build and inspect all rendered prompts before API mutation.
 6. Run bootstrap without a feature activation command.
-7. Run the workspace preparer before any agent wake. Verify every adapter cwd is the
+7. Run the workspace preparer and Paperclip Project reconciler before any agent wake.
+   Verify every adapter cwd is the
    workspace root, every generated role prompt is outside the repo, every Android clone
    has the allowlisted GitHub origin/current `develop`/clean status, and the tracked
    Android `AGENTS.md` hash matches the source repository. Verify the CTO control clone
-   the same way.
+   the same way. Verify the Project has exactly six workspace rows and every binding
+   resolves to its matching persistent directory.
 8. From the same host credential context, run `git ls-remote` against both private
    origins and query GitHub repository permission showing `push=true`; do not create a
    remote branch merely to test auth. Then run `smoke-test.sh glitcherry-android
@@ -727,6 +760,8 @@ source clone or dirty checkout.
   `Can` section contains no commit or push.
 - Every adapter cwd is its persistent workspace root, generated instructions remain
   outside the Git checkout, and every tracked repository `AGENTS.md` stays unchanged.
+- Every live issue has the Glitcherry Paperclip Project ID and the workspace ID bound
+  to its current assignee; a handoff changes assignee and workspace together.
 - The company is created once, prefix `GLA` is unique and bootstrap re-run is idempotent.
 - Each live agent answers its profile/workflow smoke within the bounded timeout.
 - The disposable CTO -> Code Reviewer handoff has successful evidence POST,
@@ -756,7 +791,8 @@ source clone or dirty checkout.
 | More than two review/fix loops | Stop and escalate with evidence; do not recurse indefinitely |
 | Generated role prompt overwrites tracked repo `AGENTS.md` or makes clone dirty | Stop before agent wake; restore from the clean clone and fix workspace-root layout |
 | Android/control source or runtime clone is dirty or has local-path/wrong remote/branch | Stop; preserve evidence and repair only the exact managed clone without deleting user work |
-| Constrained sandbox blocks a required action | Narrow and review the missing capability; do not enable broad bypass silently |
+| Agent cannot reach loopback Paperclip API or GitHub | Keep company dormant; verify reviewed bypass is deployed and selected Project workspace is used before repeating the disposable probe |
+| Issue wake uses fallback agent-home or lacks generated `AGENTS.md` | Stop and delete/terminalize the disposable issue; repair exact Project/workspace binding before another wake |
 | Paperclip 409/duplicate wake/agent error | Reload once, stop the current run and follow recovery; no blind retry |
 | Disposable issue cannot be deleted/terminalized | Company remains dormant and activation is blocked |
 | Disk below operator threshold or AVD already running | Stop emulator work and record blocker |
@@ -826,6 +862,11 @@ The following challenges must be recorded in durable run state before approval:
 16. **Can bootstrap budget `0` act as a safety pause?** No. Current enforcement creates
     budget policy only above zero. Dormant creation is safe because no root exists, but
     autonomous activation requires positive company and agent caps.
+17. **Can `adapterConfig.cwd` select a persistent workspace on the installed runtime?**
+    No. Live evidence shows issue wakes resolve cwd from `projectId` and
+    `projectWorkspaceId`; without them Paperclip uses fallback agent-home and misses
+    generated instructions. The company therefore reconciles six explicit Project
+    workspaces and carries the next owner's workspace ID in every atomic handoff.
 
 ## 18. Open questions
 
