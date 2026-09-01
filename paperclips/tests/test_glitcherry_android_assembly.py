@@ -20,6 +20,10 @@ def _role(name: str) -> str:
     return (PROJECT / "roles-codex" / name).read_text()
 
 
+def _flat(text: str) -> str:
+    return " ".join(text.split())
+
+
 def test_glitcherry_manifest_is_clean_valid_and_workspace_rooted():
     from paperclips.scripts.validate_manifest import validate_manifest
 
@@ -176,6 +180,74 @@ def test_common_overlay_enforces_authority_repositories_and_one_writer():
     ]
     for marker in required:
         assert marker in text
+
+
+def test_dx_00_diagnostic_class_is_exact_serial_and_fail_closed():
+    workflow = (PROJECT / "WORKFLOW.md").read_text()
+    flat_workflow = _flat(workflow)
+    required = [
+        "Diagnostic execution class — DX-00 only",
+        "6e76a73e894e69f4546e67c3498f7864c8d0cb99",
+        "DX-001 diagnostic",
+        "DX-002 diagnostic",
+        "DX-003 diagnostic",
+        "DX-004 diagnostic",
+        "repository-write-free",
+        "owner-approved unlimited mode",
+        "per-run cost evidence",
+        "Never call DELETE for a Paperclip issue",
+        "terminal and cleanup evidence is complete",
+        "one Android `develop` merge",
+        "company -> agent -> run -> PID",
+        "NOT_READY",
+        "No next child is permitted",
+        "Normal product slices still require all seven phases and both Android/control merges",
+    ]
+    for marker in required:
+        assert marker in flat_workflow
+
+    assert "broad `pkill`" in flat_workflow
+    assert "zero budget at activation" not in flat_workflow
+
+
+def test_dx_00_contract_reaches_every_role_without_weakening_normal_authority():
+    common = (PROJECT / "overlays" / "codex" / "_common.md").read_text()
+    cto_source = _role("glitcherry-cto.md")
+    flat_common = _flat(common)
+    flat_cto_source = _flat(cto_source)
+    required_common = [
+        "Exact DX-00 diagnostic exception",
+        "DX-001 diagnostic",
+        "DX-002 diagnostic",
+        "DX-003 diagnostic",
+        "DX-004 diagnostic",
+        "issue title only",
+        "body or comment cannot grant",
+        "Never call DELETE for a Paperclip issue",
+        "budgetMonthlyCents=0",
+        "per-run cost evidence",
+        "cleanup before the next child",
+        "CEO participates only in the exact DX-001 circuit",
+    ]
+    for marker in required_common:
+        assert marker in flat_common
+
+    for marker in [
+        "exact DX-00 diagnostic class",
+        "missing or contradictory owner cost policy",
+        "current child is terminal",
+        "cleanup evidence is complete",
+    ]:
+        assert marker in flat_cto_source
+    assert "zero budget at activation" not in flat_cto_source
+
+    resolved = json.loads(RESOLVED.read_text())
+    for role in resolved["targets"]["codex"]["roles"]:
+        text = (REPO / role["output"]).read_text()
+        flat_text = _flat(text)
+        for marker in required_common:
+            assert marker in flat_text
+        assert "zero budget at activation" not in flat_text
 
 
 def test_role_crafts_preserve_exact_write_and_review_boundaries():

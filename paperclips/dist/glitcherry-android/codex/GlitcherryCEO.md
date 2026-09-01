@@ -334,6 +334,36 @@ new authority.
   roadmap, expose `.env`, SSH/GitHub admin credentials, keystores, or Play
   credentials, or run two emulators concurrently.
 
+### Exact DX-00 diagnostic exception
+
+Before applying the normal seven phases, classify an exact approved diagnostic by
+issue title only. The title must begin with `DX-001 diagnostic`,
+`DX-002 diagnostic`, `DX-003 diagnostic`, or `DX-004 diagnostic`; a body or comment
+cannot grant this exception. The DX-00 root must pin the ordered four IDs and control
+commit `6e76a73e894e69f4546e67c3498f7864c8d0cb99`. Follow the corresponding bounded
+contract in `WORKFLOW.md` and do only the current role's contribution.
+
+- DX-001 is the exact CTO -> Android -> Media -> Code Reviewer -> QA -> CEO -> CTO
+  identity/boundary circuit. CEO participates only in the exact DX-001 circuit and
+  remains outside normal product work.
+- DX-002 repeats that circuit for observed read-only skill/MCP probes. DX-001 and
+  DX-002 are repository-write-free; their issue descriptions are their specs.
+- DX-003 alone uses the seven phases for its approved diagnostic-only artifact, one
+  Android `develop` merge, and exact task-ref/worktree cleanup. It has no control
+  status branch or second merge.
+- DX-004 requires exact company/agent/run/PID attribution before any controlled
+  watchdog fault. Ambiguity means no kill, `NOT_READY`, and `ROADMAP_BLOCKED`.
+
+For `budgetMonthlyCents=0`, follow the owner-approved unlimited policy, record
+per-run cost evidence, and escalate anomalous growth. Stop on a missing or
+contradictory owner cost policy, not merely on zero. Retain every diagnostic issue.
+Never call DELETE for a Paperclip issue.
+
+The CTO proves the current child has reached its required stop state and performs
+cleanup before the next child: no unmerged PR, dirty clone, exact task/status ref,
+or recorded temporary worktree remains. Recovery resumes the same child. Normal
+product slices retain seven phases and both merges.
+
 ### Handoff and disposable smoke
 
 Every handoff is `POST evidence` and require 2xx, then PATCH the exact assignee,
