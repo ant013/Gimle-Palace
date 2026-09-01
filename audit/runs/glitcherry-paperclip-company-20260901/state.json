@@ -403,19 +403,8 @@
       "recorded_at": "2026-09-01T07:54:40+00:00",
       "revision": 1,
       "sha256": "cecfbfdebb500e4221940209770c2ea2ffd61f7e96cb95f842a34ccd83c26afb"
-    }
-  ],
-  "artifacts": {
-    "delta_matrix": {
-      "absolute_path": "/Users/ant013/Data/AI/audit/worktrees/gimle-palace-glitcherry-company/docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
-      "kind": "delta_matrix",
-      "path": "docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
-      "recorded_at": "2026-09-01T07:56:55+00:00",
-      "revision": 1,
-      "sha256": "bf2a3d7a4149eb639a8a5868278cb97ea56a29dcb664f08f597d88f4f3bdff6b"
     },
-    "report": null,
-    "spec": {
+    {
       "absolute_path": "/Users/ant013/Data/AI/audit/worktrees/gimle-palace-glitcherry-company/docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
       "kind": "spec",
       "path": "docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
@@ -423,14 +412,49 @@
       "revision": 1,
       "sha256": "bf2a3d7a4149eb639a8a5868278cb97ea56a29dcb664f08f597d88f4f3bdff6b"
     },
-    "supporting_design": [],
-    "test_plan": {
+    {
+      "absolute_path": "/Users/ant013/Data/AI/audit/worktrees/gimle-palace-glitcherry-company/docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
+      "kind": "delta_matrix",
+      "path": "docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
+      "recorded_at": "2026-09-01T07:56:55+00:00",
+      "revision": 1,
+      "sha256": "bf2a3d7a4149eb639a8a5868278cb97ea56a29dcb664f08f597d88f4f3bdff6b"
+    },
+    {
       "absolute_path": "/Users/ant013/Data/AI/audit/worktrees/gimle-palace-glitcherry-company/docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
       "kind": "test_plan",
       "path": "docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
       "recorded_at": "2026-09-01T07:56:55+00:00",
       "revision": 1,
       "sha256": "bf2a3d7a4149eb639a8a5868278cb97ea56a29dcb664f08f597d88f4f3bdff6b"
+    }
+  ],
+  "artifacts": {
+    "delta_matrix": {
+      "absolute_path": "/Users/ant013/Data/AI/audit/worktrees/gimle-palace-glitcherry-company/docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
+      "kind": "delta_matrix",
+      "path": "docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
+      "recorded_at": "2026-09-01T09:18:28+00:00",
+      "revision": 1,
+      "sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2"
+    },
+    "report": null,
+    "spec": {
+      "absolute_path": "/Users/ant013/Data/AI/audit/worktrees/gimle-palace-glitcherry-company/docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
+      "kind": "spec",
+      "path": "docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
+      "recorded_at": "2026-09-01T09:18:28+00:00",
+      "revision": 1,
+      "sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2"
+    },
+    "supporting_design": [],
+    "test_plan": {
+      "absolute_path": "/Users/ant013/Data/AI/audit/worktrees/gimle-palace-glitcherry-company/docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
+      "kind": "test_plan",
+      "path": "docs/superpowers/specs/2026-09-01-glitcherry-paperclip-company.md",
+      "recorded_at": "2026-09-01T09:18:29+00:00",
+      "revision": 1,
+      "sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2"
     },
     "verification_results": null
   },
@@ -876,6 +900,216 @@
       "spec_revision": 1,
       "spec_sha256": "bf2a3d7a4149eb639a8a5868278cb97ea56a29dcb664f08f597d88f4f3bdff6b",
       "summary": "Start with constrained sandbox and false bypass; treat missing capability as a failed canary."
+    },
+    {
+      "challenge": "Can five agents cover the prototype by folding media into generic Android ownership?",
+      "decision_id": "ADR-ROSTER-7",
+      "evidence": [
+        "Current reviewer fragments already cover spec, plan and architecture compliance, while deterministic 3D render, shader, codec, audio and export work remains a distinct implementation specialty."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T09:19:12+00:00",
+      "required_changes": [],
+      "revision": 3,
+      "spec_revision": 1,
+      "spec_sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2",
+      "summary": "Keep six permanent agents, including a dedicated Media Pipeline Engineer and no duplicative Android Architect."
+    },
+    {
+      "challenge": "Could CEO reuse profile cto and rely on prose not to execute?",
+      "decision_id": "ADR-CEO-MINIMAL",
+      "evidence": [
+        "The cto profile composes plan, merge and release capability that conflicts with the approved governance-only CEO boundary."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T09:19:12+00:00",
+      "required_changes": [],
+      "revision": 3,
+      "spec_revision": 1,
+      "spec_sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2",
+      "summary": "Use profile minimal plus explicit Paperclip CEO identity and a custom governance role craft."
+    },
+    {
+      "challenge": "Could CTO keep cto and ignore release-cut through project instructions?",
+      "decision_id": "ADR-WALKER-PROFILE",
+      "evidence": [
+        "The cto profile includes release-cut and its runtime probe expects release behavior; walker retains task integration while excluding release instructions."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T09:19:13+00:00",
+      "required_changes": [],
+      "revision": 3,
+      "spec_revision": 1,
+      "spec_sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2",
+      "summary": "Add a reusable walker profile rather than reuse cto."
+    },
+    {
+      "challenge": "Would project-only custom fragments be a smaller Walker change?",
+      "decision_id": "ADR-NO-CUSTOM-INCLUDES",
+      "evidence": [
+        "Current manifest nested custom include behavior is not an established contract; profiles are the validated reusable composition unit."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T09:19:13+00:00",
+      "required_changes": [],
+      "revision": 3,
+      "spec_revision": 1,
+      "spec_sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2",
+      "summary": "Use a tested global Walker profile instead of an unverified project custom include list."
+    },
+    {
+      "challenge": "Does walker extending reviewer collapse independent review?",
+      "decision_id": "ADR-CTO-NO-SELF-REVIEW",
+      "evidence": [
+        "Capability composition gives CTO plan feedback and merge-readiness interpretation, while exact role assignment and handoffs prohibit CTO self-approval."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T09:19:13+00:00",
+      "required_changes": [],
+      "revision": 3,
+      "spec_revision": 1,
+      "spec_sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2",
+      "summary": "Allow reviewer mechanics in Walker but route every independent spec, plan and code approval to Code Reviewer."
+    },
+    {
+      "challenge": "Will Platform and Media implementers race on the same branch?",
+      "decision_id": "ADR-ONE-WRITER",
+      "evidence": [
+        "CTO assigns one task-branch writer; the other specialist may provide bounded read-only findings only, and any dual claim stops the child."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T09:19:13+00:00",
+      "required_changes": [],
+      "revision": 3,
+      "spec_revision": 1,
+      "spec_sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2",
+      "summary": "Retain Android and Media implementers with exactly one primary writer per slice."
+    },
+    {
+      "challenge": "Should QA use reviewer to avoid commit capability?",
+      "decision_id": "ADR-QA-PROFILE",
+      "evidence": [
+        "QA needs test, emulator and worktree tooling; the role craft forbids production fixes and routes failures back."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T09:19:14+00:00",
+      "required_changes": [],
+      "revision": 3,
+      "spec_revision": 1,
+      "spec_sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2",
+      "summary": "Use the established qa profile with a custom no-fix role boundary."
+    },
+    {
+      "challenge": "Does two-repository status integration require a new generic workspace abstraction?",
+      "decision_id": "ADR-TWO-REPO-WORKSPACE",
+      "evidence": [
+        "The existing writable per-agent workspace can contain the CTO control sibling without sharing control ownership with other roles."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T09:19:14+00:00",
+      "required_changes": [],
+      "revision": 3,
+      "spec_revision": 1,
+      "spec_sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2",
+      "summary": "Use Android as generated cwd and a CTO-owned sibling control clone."
+    },
+    {
+      "challenge": "Should every role use xhigh because quality outranks schedule?",
+      "decision_id": "ADR-MODEL-EFFORT",
+      "evidence": [
+        "Judgment-heavy orchestration, media and adversarial review retain xhigh; bounded roles remain high and activation still requires a human budget."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T09:19:14+00:00",
+      "required_changes": [],
+      "revision": 3,
+      "spec_revision": 1,
+      "spec_sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2",
+      "summary": "Use gpt-5.6-sol xhigh for Walker, Media and Code Reviewer and high for CEO, Android and QA."
+    },
+    {
+      "challenge": "Should company creation start TP-001 automatically?",
+      "decision_id": "ADR-DORMANT",
+      "evidence": [
+        "Roadmap slices remain human-controlled and disposable repository-write-free canary proves workflow mechanics without product activation."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T09:19:14+00:00",
+      "required_changes": [],
+      "revision": 3,
+      "spec_revision": 1,
+      "spec_sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2",
+      "summary": "Bootstrap and canary leave the company dormant with no product or root issue."
+    },
+    {
+      "challenge": "Will GitHub, Gradle and Maestro work under constrained sandbox?",
+      "decision_id": "ADR-CONSTRAINED",
+      "evidence": [
+        "Workspace writes and loopback Paperclip are explicit; origin, fetch, push-auth, Gradle and device probes must succeed before activation or the spec is revised."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T09:19:14+00:00",
+      "required_changes": [],
+      "revision": 3,
+      "spec_revision": 1,
+      "spec_sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2",
+      "summary": "Start constrained with false bypass and treat missing capability as a failed canary."
+    },
+    {
+      "challenge": "Is a permanent Android Architect needed beside Code Reviewer?",
+      "decision_id": "ADR-NO-PERMANENT-ARCHITECT",
+      "evidence": [
+        "The base reviewer and Code Reviewer role already cover plan and architectural compliance; a second permanent reviewer duplicates ownership and canary routing."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T09:19:15+00:00",
+      "required_changes": [],
+      "revision": 1,
+      "spec_revision": 1,
+      "spec_sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2",
+      "summary": "Use one permanent Code Reviewer for independent spec, plan, architecture-aware code review."
+    },
+    {
+      "challenge": "Can a public media skill replace the custom Media role?",
+      "decision_id": "ADR-MEDIA-SKILL-SOURCES",
+      "evidence": [
+        "Public skills are partial or platform-mismatched; official Media3 remains authoritative and selected shader, Transformer and file-sharing sources contribute knowledge only."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T09:19:15+00:00",
+      "required_changes": [],
+      "revision": 1,
+      "spec_revision": 1,
+      "spec_sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2",
+      "summary": "Build one Glitcherry Media role craft from audited official and revision-pinned domain sources."
+    },
+    {
+      "challenge": "Can LOCAL_BLOCKED park one child while Walker starts another?",
+      "decision_id": "ADR-STRICT-CHILD-LIFECYCLE",
+      "evidence": [
+        "A second child can inherit dirty branch, worktree or evidence state; the current child must recover or await the Human Engineering Lead before parent advancement."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T09:19:15+00:00",
+      "required_changes": [],
+      "revision": 1,
+      "spec_revision": 1,
+      "spec_sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2",
+      "summary": "Keep exactly one non-terminal child and stop on blocker, partial merge or incomplete cleanup."
+    },
+    {
+      "challenge": "Can generated workspaces retain the local seed path as origin?",
+      "decision_id": "ADR-WORKSPACE-GITHUB-ORIGIN",
+      "evidence": [
+        "A local-path origin makes a successful push update the seed clone instead of GitHub; fetch and non-mutating push-auth probes must verify the normalized upstream."
+      ],
+      "outcome": "ACCEPT",
+      "recorded_at": "2026-09-01T09:19:15+00:00",
+      "required_changes": [],
+      "revision": 1,
+      "spec_revision": 1,
+      "spec_sha256": "122de8565c6d5f12e2f69a66f1c7e58c7e2c434ea473e49faf70d6454d3987b2",
+      "summary": "Normalize every generated clone from local seed origin to the verified GitHub upstream before activation."
     }
   ],
   "evidence_claims": [
@@ -1204,6 +1438,21 @@
       "at": "2026-09-01T07:57:23+00:00",
       "phase": "awaiting_approval",
       "reason": "Formatting-clean spec received a fresh adversarial decision revision for every challenge; all outcomes remain ACCEPT."
+    },
+    {
+      "at": "2026-09-01T09:18:28+00:00",
+      "phase": "design",
+      "reason": "User-directed revision removes the duplicative permanent Android Architect, retains a custom Media implementer, adopts strict one-child-until-cleanup lifecycle, and corrects generated Git origins."
+    },
+    {
+      "at": "2026-09-01T09:18:29+00:00",
+      "phase": "adversarial_review",
+      "reason": "Revised design and verification plan are complete; re-evaluate all authority, roster, media-skill, lifecycle, recovery, and workspace-origin challenges against the new spec hash."
+    },
+    {
+      "at": "2026-09-01T09:19:29+00:00",
+      "phase": "awaiting_approval",
+      "reason": "Revised spec has current-hash adversarial decisions for six-agent roster, Code Reviewer consolidation, custom Media skill sources, strict one-child lifecycle, recovery, and GitHub origin normalization."
     }
   ],
   "projects": {
@@ -1225,7 +1474,7 @@
     "worktree_fingerprint": "54589404e794c358"
   },
   "repository_change": true,
-  "revision": 66,
+  "revision": 87,
   "run_id": "glitcherry-paperclip-company-20260901",
   "schema_version": "2.1",
   "skill_versions": {
@@ -1237,6 +1486,6 @@
   },
   "task_id": "GLITCHERRY-PAPERCLIP-COMPANY",
   "trust": "YELLOW",
-  "updated_at": "2026-09-01T07:57:23+00:00",
+  "updated_at": "2026-09-01T09:19:29+00:00",
   "workflow": "analog_change"
 }
