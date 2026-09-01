@@ -9,8 +9,10 @@ import signal
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Awaitable, Callable
 
-from gimle_watchdog.detection import HangedProc, PS_FILTER_TOKENS
+from gimle_watchdog import detection
+from gimle_watchdog.detection import HangedProc
 from gimle_watchdog.models import (
     AlertResult,
     CommentOnlyHandoffFinding,
@@ -42,7 +44,10 @@ class RespawnResult:
 @dataclass(frozen=True)
 class KillResult:
     pid: int
-    status: str  # "clean" | "forced" | "already_dead" | "pid_reused_skip"
+    status: str
+
+
+PreSignalGuard = Callable[[], Awaitable[bool]]
 
 
 async def _sleep(seconds: float) -> None:
@@ -119,19 +124,23 @@ def _read_proc_cmdline(pid: int) -> str | None:
     return result.stdout.strip()
 
 
-async def kill_hanged_proc(proc: HangedProc) -> KillResult:
-    """Kill a hanged claude subprocess with PID-reuse mitigation."""
+async def kill_hanged_proc(
+    proc: HangedProc, pre_signal_guard: PreSignalGuard | None = None
+) -> KillResult:
+    """Kill one exact agent subprocess after local and optional API revalidation."""
     current = _read_proc_cmdline(proc.pid)
     if current is None:
         return KillResult(pid=proc.pid, status="already_dead")
-    if not all(tok in current for tok in PS_FILTER_TOKENS):
+    if not detection.process_snapshot_matches(proc, current_command=current):
         log.warning(
-            "pid_reused pid=%d old_cmd=%r new_cmd=%r",
+            "pid_reused_or_identity_changed pid=%d runtime=%s",
             proc.pid,
-            proc.command[:80],
-            current[:80],
+            proc.runtime,
         )
         return KillResult(pid=proc.pid, status="pid_reused_skip")
+    if pre_signal_guard is not None and not await pre_signal_guard():
+        log.warning("pre_signal_correlation_failed pid=%d runtime=%s", proc.pid, proc.runtime)
+        return KillResult(pid=proc.pid, status="correlation_skip")
 
     try:
         os.kill(proc.pid, signal.SIGTERM)
@@ -141,10 +150,17 @@ async def kill_hanged_proc(proc: HangedProc) -> KillResult:
     await asyncio.sleep(3)
     try:
         os.kill(proc.pid, 0)  # check if still alive
-        os.kill(proc.pid, signal.SIGKILL)
-        return KillResult(pid=proc.pid, status="forced")
     except ProcessLookupError:
         return KillResult(pid=proc.pid, status="clean")
+
+    current_after_term = _read_proc_cmdline(proc.pid)
+    if current_after_term is None or not detection.process_snapshot_matches(
+        proc, current_command=current_after_term
+    ):
+        log.warning("post_term_identity_changed pid=%d runtime=%s", proc.pid, proc.runtime)
+        return KillResult(pid=proc.pid, status="post_term_identity_skip")
+    os.kill(proc.pid, signal.SIGKILL)
+    return KillResult(pid=proc.pid, status="forced")
 
 
 # --- handoff alerts -------------------------------------------------------------

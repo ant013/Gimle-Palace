@@ -22,7 +22,9 @@ from gimle_watchdog.config import (
     PaperclipConfig,
     Thresholds,
 )
+from gimle_watchdog.detection import HangedProc, PaperclipProcessIdentity
 from gimle_watchdog.models import (
+    Agent,
     AlertResult,
     FindingType,
     ReviewOwnedByImplementerFinding,
@@ -189,7 +191,180 @@ async def test_tick_kills_hanged_procs(tmp_path: Path):
         with patch("gimle_watchdog.daemon.actions.kill_hanged_proc", kill_mock):
             with patch("gimle_watchdog.daemon._sleep", new=AsyncMock()):
                 await daemon._tick(cfg, state, client)
-    kill_mock.assert_called_once_with(hanged)
+    kill_mock.assert_called_once_with(hanged, pre_signal_guard=None)
+
+
+def _codex_hang() -> HangedProc:
+    return HangedProc(
+        pid=44465,
+        ppid=6814,
+        etime_s=5000,
+        cpu_s=1,
+        cpu_ratio=0.0002,
+        command="/usr/local/bin/codex exec --json",
+        runtime="codex",
+        identity=PaperclipProcessIdentity(
+            company_id="9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64",
+            agent_id="127068ee-b564-4b37-9370-616c81c63f35",
+            issue_id="32c71ede-f45a-4f0c-84a7-676ff200c72e",
+            run_id="bf1e351b-44e1-4903-82ba-869fda596feb",
+            workspace_id="e339e270-d7ce-4dec-a49e-32b4fc8d4e27",
+        ),
+    )
+
+
+@pytest.mark.asyncio
+async def test_codex_correlation_accepts_exact_company_agent_issue_and_active_run(tmp_path: Path):
+    cfg = _cfg(tmp_path)
+    proc = _codex_hang()
+    identity = proc.identity
+    assert identity is not None
+    client = MagicMock()
+    client.list_active_issues = AsyncMock(
+        return_value=[
+            Issue(
+                id=identity.issue_id,
+                assignee_agent_id=identity.agent_id,
+                execution_run_id=identity.run_id,
+                active_run_id=identity.run_id,
+                status="in_progress",
+                updated_at=datetime(2026, 9, 1, 17, 0, tzinfo=timezone.utc),
+            )
+        ]
+    )
+    client.list_company_agents = AsyncMock(
+        return_value=[Agent(id=identity.agent_id, name="cto", status="running")]
+    )
+
+    result = await daemon._correlate_codex_process(cfg, client, proc)
+
+    assert result.ok is True
+    assert result.reason == "exact_active_run"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("issue_mutation", "reason"),
+    [
+        ({"assignee_agent_id": "wrong-agent"}, "no_exact_active_run"),
+        ({"active_run_id": "wrong-run"}, "no_exact_active_run"),
+        ({"status": "done"}, "no_exact_active_run"),
+    ],
+)
+async def test_codex_correlation_rejects_stale_or_mismatched_issue(
+    tmp_path: Path, issue_mutation: dict[str, str], reason: str
+):
+    import dataclasses
+
+    cfg = _cfg(tmp_path)
+    proc = _codex_hang()
+    identity = proc.identity
+    assert identity is not None
+    exact_issue = Issue(
+        id=identity.issue_id,
+        assignee_agent_id=identity.agent_id,
+        execution_run_id=identity.run_id,
+        active_run_id=identity.run_id,
+        status="in_progress",
+        updated_at=datetime(2026, 9, 1, 17, 0, tzinfo=timezone.utc),
+    )
+    client = MagicMock()
+    client.list_active_issues = AsyncMock(
+        return_value=[dataclasses.replace(exact_issue, **issue_mutation)]
+    )
+    client.list_company_agents = AsyncMock(
+        return_value=[Agent(id=identity.agent_id, name="cto", status="running")]
+    )
+
+    result = await daemon._correlate_codex_process(cfg, client, proc)
+
+    assert result.ok is False
+    assert result.reason == reason
+
+
+@pytest.mark.asyncio
+async def test_codex_correlation_rejects_unknown_agent_and_api_failure(tmp_path: Path):
+    cfg = _cfg(tmp_path)
+    proc = _codex_hang()
+    identity = proc.identity
+    assert identity is not None
+    exact_issue = Issue(
+        id=identity.issue_id,
+        assignee_agent_id=identity.agent_id,
+        execution_run_id=identity.run_id,
+        active_run_id=identity.run_id,
+        status="in_progress",
+        updated_at=datetime(2026, 9, 1, 17, 0, tzinfo=timezone.utc),
+    )
+    client = MagicMock()
+    client.list_active_issues = AsyncMock(return_value=[exact_issue])
+    client.list_company_agents = AsyncMock(return_value=[])
+
+    result = await daemon._correlate_codex_process(cfg, client, proc)
+    assert result.ok is False
+    assert result.reason == "unknown_company_agent"
+
+    client.list_active_issues = AsyncMock(side_effect=RuntimeError("api down"))
+    result = await daemon._correlate_codex_process(cfg, client, proc)
+    assert result.ok is False
+    assert result.reason == "paperclip_api_unavailable"
+
+
+@pytest.mark.asyncio
+async def test_codex_correlation_timeout_fails_closed(tmp_path: Path):
+    cfg = _cfg(tmp_path)
+    proc = _codex_hang()
+    client = MagicMock()
+
+    async def never_returns(*_args: object) -> list[object]:
+        await asyncio.sleep(60)
+        return []
+
+    client.list_active_issues = never_returns
+    client.list_company_agents = never_returns
+
+    with patch.object(daemon, "CODEX_CORRELATION_TIMEOUT_SECONDS", 0.001):
+        result = await daemon._correlate_codex_process(cfg, client, proc)
+
+    assert result.ok is False
+    assert result.reason == "paperclip_api_unavailable"
+
+
+@pytest.mark.asyncio
+async def test_codex_correlation_applies_its_company_threshold(tmp_path: Path):
+    import dataclasses
+
+    cfg = _cfg(tmp_path)
+    proc = dataclasses.replace(_codex_hang(), etime_s=3599)
+    client = MagicMock()
+
+    result = await daemon._correlate_codex_process(cfg, client, proc)
+
+    assert result.ok is False
+    assert result.reason == "company_threshold_not_met"
+    client.list_active_issues.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_tick_skips_duplicate_codex_identity_without_signalling(tmp_path: Path):
+    import dataclasses
+
+    cfg = _cfg(tmp_path)
+    state = State.load(tmp_path / "state.json")
+    first = _codex_hang()
+    second = dataclasses.replace(first, pid=44466)
+    client = MagicMock()
+    client.list_active_issues = AsyncMock(return_value=[])
+    kill_mock = AsyncMock()
+
+    with (
+        patch("gimle_watchdog.daemon.detection.scan_idle_hangs", return_value=[first, second]),
+        patch("gimle_watchdog.daemon.actions.kill_hanged_proc", kill_mock),
+        patch("gimle_watchdog.daemon._sleep", new=AsyncMock()),
+    ):
+        await daemon._tick(cfg, state, client)
+
+    kill_mock.assert_not_called()
 
 
 @pytest.mark.asyncio

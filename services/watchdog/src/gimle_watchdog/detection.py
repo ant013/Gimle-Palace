@@ -5,7 +5,9 @@ from __future__ import annotations
 import datetime as _dt
 import logging
 import re
+import shlex
 import subprocess
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,7 +21,38 @@ from gimle_watchdog.state import State
 log = logging.getLogger("watchdog.detection")
 
 
-PS_FILTER_TOKENS = ("append-system-prompt-file", "paperclip-skills")
+CLAUDE_FILTER_TOKENS = ("append-system-prompt-file", "paperclip-skills")
+# Backward-compatible public name used by older operators/tests.
+PS_FILTER_TOKENS = CLAUDE_FILTER_TOKENS
+_PAPERCLIP_IDENTITY_KEYS = {
+    "company_id": "PAPERCLIP_COMPANY_ID",
+    "agent_id": "PAPERCLIP_AGENT_ID",
+    "issue_id": "PAPERCLIP_TASK_ID",
+    "run_id": "PAPERCLIP_RUN_ID",
+    "workspace_id": "PAPERCLIP_WORKSPACE_ID",
+}
+_UUID_VALUE_RE = (
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}"
+)
+
+
+@dataclass(frozen=True)
+class PaperclipProcessIdentity:
+    company_id: str
+    agent_id: str
+    issue_id: str
+    run_id: str
+    workspace_id: str
+
+    @property
+    def correlation_key(self) -> tuple[str, str, str, str, str]:
+        return (
+            self.company_id,
+            self.agent_id,
+            self.issue_id,
+            self.run_id,
+            self.workspace_id,
+        )
 
 
 @dataclass(frozen=True)
@@ -29,6 +62,9 @@ class HangedProc:
     cpu_s: int
     cpu_ratio: float
     command: str
+    runtime: str = "claude"
+    ppid: int = 0
+    identity: PaperclipProcessIdentity | None = None
     stream_event_age_s: int | None = None  # None means no log file found
 
 
@@ -90,6 +126,134 @@ def _parse_time(s: str) -> int:
     return value + (1 if rounded_up else 0)
 
 
+def classify_agent_command(command: str) -> str | None:
+    """Return the supported Paperclip runtime shape without broad substring matching."""
+    if all(marker in command for marker in CLAUDE_FILTER_TOKENS):
+        return "claude"
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return None
+    if len(tokens) >= 2 and Path(tokens[0]).name == "codex" and tokens[1] == "exec":
+        return "codex"
+    return None
+
+
+def count_agent_commands(ps_output: str) -> dict[str, int]:
+    """Count supported command shapes without reading or returning process environments."""
+    counts = {"claude": 0, "codex": 0}
+    for line in ps_output.splitlines()[1:]:
+        fields = line.split(None, 1)
+        if len(fields) != 2:
+            continue
+        runtime = classify_agent_command(fields[1])
+        if runtime is not None:
+            counts[runtime] += 1
+    return counts
+
+
+def parse_paperclip_identity(process_text: str) -> PaperclipProcessIdentity | None:
+    """Extract only allowlisted UUID identity fields from a raw process environment.
+
+    The raw input may include PAPERCLIP_API_KEY and wake payloads. Callers must never
+    log or persist it; this function returns only non-secret UUID fields.
+    """
+    values: dict[str, str] = {}
+    for field_name, environment_key in _PAPERCLIP_IDENTITY_KEYS.items():
+        pattern = rf"(?:^|\s){re.escape(environment_key)}=({_UUID_VALUE_RE})(?=\s|$)"
+        matches = re.findall(pattern, process_text)
+        if len(matches) != 1:
+            return None
+        values[field_name] = matches[0].lower()
+    return PaperclipProcessIdentity(**values)
+
+
+def read_process_command(pid: int) -> str | None:
+    result = subprocess.run(
+        ["ps", "-p", str(pid), "-o", "command="],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        return None
+    return result.stdout.strip()
+
+
+def read_process_ppid(pid: int) -> int | None:
+    result = subprocess.run(
+        ["ps", "-p", str(pid), "-o", "ppid="],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+    try:
+        return int(result.stdout.strip())
+    except ValueError:
+        return None
+
+
+def _read_process_environment_text(pid: int) -> str | None:
+    if sys.platform.startswith("linux"):
+        try:
+            return (
+                Path(f"/proc/{pid}/environ")
+                .read_bytes()
+                .replace(b"\0", b" ")
+                .decode("utf-8", errors="replace")
+            )
+        except OSError:
+            return None
+    try:
+        result = subprocess.run(
+            ["ps", "eww", "-p", str(pid), "-o", "command="],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return None
+    if result.returncode != 0 or not result.stdout.strip():
+        return None
+    return result.stdout
+
+
+def read_paperclip_identity(pid: int) -> PaperclipProcessIdentity | None:
+    process_text = _read_process_environment_text(pid)
+    if process_text is None:
+        return None
+    return parse_paperclip_identity(process_text)
+
+
+def is_paperclip_parent_command(command: str | None) -> bool:
+    if command is None:
+        return False
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return False
+    for index, token in enumerate(tokens[:-1]):
+        if Path(token).name == "paperclipai" and tokens[index + 1] == "run":
+            return True
+    return False
+
+
+def process_snapshot_matches(proc: HangedProc, current_command: str | None = None) -> bool:
+    """Revalidate a discovered process without ever returning its raw environment."""
+    command = current_command if current_command is not None else read_process_command(proc.pid)
+    if command is None or classify_agent_command(command) != proc.runtime:
+        return False
+    if proc.runtime != "codex":
+        return True
+    if proc.identity is None or proc.ppid <= 1:
+        return False
+    if read_process_ppid(proc.pid) != proc.ppid:
+        return False
+    if not is_paperclip_parent_command(read_process_command(proc.ppid)):
+        return False
+    return read_paperclip_identity(proc.pid) == proc.identity
+
+
 def last_stream_event_age_seconds(pid: int) -> int | None:
     """Return seconds since last stream-json write for the given PID, or None if not found.
 
@@ -143,24 +307,44 @@ def parse_ps_output(
     idle_cpu_ratio_max: float,
     hang_stream_idle_max_s: int,
 ) -> list[HangedProc]:
-    """Parse `ps -ao pid,etime,time,command` output, return hanged procs.
+    """Parse host process output and return attributable, idle agent processes.
 
-    Hanged = command matches PS_FILTER_TOKENS AND etime >= etime_min_s AND
-    (cpu_ratio < idle_cpu_ratio_max OR stream_event_age > hang_stream_idle_max_s).
+    Claude keeps its established command signature. Codex additionally requires a
+    Paperclip parent and a complete sanitized Paperclip process identity.
     """
     hangs: list[HangedProc] = []
     lines = ps_output.splitlines()
+    if not lines:
+        return hangs
+    header = lines[0].split()
+    has_ppid = len(header) >= 2 and header[1] == "PPID"
     for line in lines[1:]:  # skip header
-        fields = line.split(None, 3)
-        if len(fields) < 4:
-            continue
-        pid_str, etime_str, time_str, command = fields
-        if not all(tok in command for tok in PS_FILTER_TOKENS):
+        if has_ppid:
+            fields = line.split(None, 4)
+            if len(fields) < 5:
+                continue
+            pid_str, ppid_str, etime_str, time_str, command = fields
+        else:
+            fields = line.split(None, 3)
+            if len(fields) < 4:
+                continue
+            pid_str, etime_str, time_str, command = fields
+            ppid_str = "0"
+        runtime = classify_agent_command(command)
+        if runtime is None:
             continue
         try:
             pid = int(pid_str)
+            ppid = int(ppid_str)
         except ValueError:
             continue
+        identity: PaperclipProcessIdentity | None = None
+        if runtime == "codex":
+            if ppid <= 1 or not is_paperclip_parent_command(read_process_command(ppid)):
+                continue
+            identity = read_paperclip_identity(pid)
+            if identity is None:
+                continue
         etime_s = _parse_etime(etime_str)
         cpu_s = _parse_time(time_str)
         if etime_s < etime_min_s:
@@ -177,6 +361,9 @@ def parse_ps_output(
                     cpu_s=cpu_s,
                     cpu_ratio=cpu_ratio,
                     command=command,
+                    runtime=runtime,
+                    ppid=ppid,
+                    identity=identity,
                     stream_event_age_s=stream_age,
                 )
             )
@@ -187,13 +374,13 @@ def parse_ps_output(
 
 
 def scan_idle_hangs(config: Config) -> list[HangedProc]:
-    """Run ps on host, filter for hung paperclip claude subprocesses."""
+    """Run ps on host, filter for attributable hung Paperclip agent subprocesses."""
     etime_min_s = min(c.thresholds.hang_etime_min for c in config.companies) * 60
     idle_cpu_ratio_max = min(c.thresholds.idle_cpu_ratio_max for c in config.companies)
     hang_stream_idle_max_s = min(c.thresholds.hang_stream_idle_max_s for c in config.companies)
     try:
         result = subprocess.run(
-            ["ps", "-ao", "pid,etime,time,command"],
+            ["ps", "-ao", "pid,ppid,etime,time,command"],
             capture_output=True,
             text=True,
             check=True,
