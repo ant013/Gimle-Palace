@@ -13,7 +13,7 @@ import subprocess
 import sys
 import tempfile
 from contextlib import contextmanager
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -38,11 +38,11 @@ class ContractError(RuntimeError):
 
 
 def _now() -> datetime:
-    return datetime.now(UTC)
+    return datetime.now(timezone.utc)
 
 
 def _iso(value: datetime) -> str:
-    return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
+    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _parse_iso(value: str) -> datetime:

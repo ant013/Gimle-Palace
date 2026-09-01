@@ -46,6 +46,15 @@ def test_glitcherry_manifest_is_clean_valid_and_workspace_rooted():
         "runtime_env": {"PAPERCLIP_API_URL": "paperclip_runtime_api_url"},
     }
     assert data["smoke"] == {"e2e_timeout_seconds": 360}
+    required_directories = set(data["host_paths"]["required_existing"])
+    assert "slice_controller_path" not in required_directories
+    assert {
+        "project_root",
+        "primary_repo_root",
+        "control_repo_root",
+        "task_worktree_root",
+        "task_state_root",
+    } <= required_directories
     assert "workspace_git_source_path_key" not in text
     for forbidden in ["/Users/", "/home/", "company_id:", "agent_id:"]:
         assert forbidden not in text
