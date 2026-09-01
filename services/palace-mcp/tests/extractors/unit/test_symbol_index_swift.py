@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
+import socket
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,6 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from palace_mcp.extractors.base import (
+    ExtractorExecutionMode,
     ExtractorOutcome,
     ExtractorRunContext,
     ExtractorStats,
@@ -47,6 +50,12 @@ from palace_mcp.extractors.symbol_index_swift import (
     _write_file_body_hashes,
     _with_access_modifiers,
 )
+from palace_mcp.swift_scip_provenance import (
+    SWIFT_SCIP_EMITTER_NAME,
+    SWIFT_SCIP_EMITTER_VERSION,
+    swift_scip_file_digest,
+    swift_scip_metadata_path,
+)
 from tests.extractors.fixtures.scip_factory import (
     build_swift_scip_index_with_symbol_infos,
     write_scip_fixture,
@@ -58,16 +67,56 @@ def extractor() -> SymbolIndexSwift:
     return SymbolIndexSwift()
 
 
+def _ensure_test_repo(repo_path: Path) -> str:
+    result = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=repo_path,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        return result.stdout.strip()
+    _run(["git", "init", "-q", "-b", "main"], cwd=repo_path)
+    _run(["git", "config", "user.email", "t@t"], cwd=repo_path)
+    _run(["git", "config", "user.name", "T"], cwd=repo_path)
+    (repo_path / "Package.swift").write_text("// swift-tools-version: 6.0\n")
+    _run(["git", "add", "Package.swift"], cwd=repo_path)
+    _run(["git", "commit", "-q", "-m", "initial"], cwd=repo_path)
+    return _run_text(["git", "rev-parse", "HEAD"], cwd=repo_path)
+
+
+def _write_test_scip_metadata(
+    *, repo_path: Path, scip_path: Path, slug: str = "uw-ios-mini"
+) -> str:
+    head = _ensure_test_repo(repo_path)
+    metadata = {
+        "slug": slug,
+        "repo_head_sha": head,
+        "emitter_name": SWIFT_SCIP_EMITTER_NAME,
+        "emitter_version": SWIFT_SCIP_EMITTER_VERSION,
+        "artifact_origin": "local",
+        "package_path": "Package.swift",
+        "generator_host": socket.gethostname(),
+        "source_repo_path": str(repo_path.resolve()),
+        "destination_repo_path": str(repo_path.resolve()),
+    }
+    swift_scip_metadata_path(scip_path).write_text(json.dumps(metadata))
+    return head
+
+
 @pytest.fixture
 def scip_fixture(tmp_path: Path) -> Path:
     # Use the fixture with SymbolInformation so write_symbol_nodes is exercised
     # and nodes_written reflects actual Neo4j :Symbol count (3 symbols).
     index = build_swift_scip_index_with_symbol_infos()
-    return write_scip_fixture(index, tmp_path / "test.scip")
+    scip_path = write_scip_fixture(index, tmp_path / "test.scip")
+    _write_test_scip_metadata(repo_path=tmp_path, scip_path=scip_path)
+    return scip_path
 
 
 @pytest.fixture
 def run_ctx(tmp_path: Path) -> ExtractorRunContext:
+    _ensure_test_repo(tmp_path)
     return ExtractorRunContext(
         project_slug="uw-ios-mini",
         group_id="project/uw-ios-mini",
@@ -99,6 +148,7 @@ def _swift_symbol_baseline(
     state_version: int = 1,
     commit_sha: str = "baseline-sha",
     body_hash_manifest_digest: str = "sha256:manifest",
+    scip_digest: str = "sha256:scip",
     invalid_reason: str | None = None,
 ) -> ExtractorBaseline:
     return ExtractorBaseline(
@@ -109,7 +159,7 @@ def _swift_symbol_baseline(
         state_version=state_version,
         commit_sha=commit_sha,
         indexed_commit=commit_sha,
-        scip_digest="sha256:scip",
+        scip_digest=scip_digest,
         scip_path="index.scip",
         scip_document_count=1,
         scip_occurrence_count=2,
@@ -368,7 +418,7 @@ class TestSymbolIndexSwiftErrorHandling:
         assert exc_info.value.error_code == ExtractorErrorCode.SCIP_PATH_REQUIRED
 
     @pytest.mark.asyncio
-    async def test_scip_file_not_found_raises(
+    async def test_scip_file_not_found_fails_before_schema_setup(
         self,
         extractor: SymbolIndexSwift,
         run_ctx: ExtractorRunContext,
@@ -384,16 +434,43 @@ class TestSymbolIndexSwiftErrorHandling:
         settings.palace_max_occurrences_per_symbol = 5_000
         settings.palace_recency_decay_days = 30.0
 
+        schema_mock = AsyncMock()
+        create_run_mock = AsyncMock()
+        previous_error_mock = AsyncMock()
+        parse_mock = MagicMock()
+        bridge_mock = MagicMock()
+        refresh_mock = AsyncMock()
+        write_baseline_mock = AsyncMock()
         with (
             patch("palace_mcp.mcp_server.get_driver", return_value=_make_driver()),
             patch("palace_mcp.mcp_server.get_settings", return_value=settings),
             patch(
                 "palace_mcp.extractors.symbol_index_swift.ensure_custom_schema",
-                AsyncMock(),
+                schema_mock,
             ),
             patch(
                 "palace_mcp.extractors.symbol_index_swift.create_ingest_run",
-                AsyncMock(),
+                create_run_mock,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift._get_previous_error_code",
+                previous_error_mock,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift.parse_scip_file",
+                parse_mock,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift.TantivyBridge",
+                bridge_mock,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift._refresh_graph_state",
+                refresh_mock,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift._write_swift_symbol_baseline",
+                write_baseline_mock,
             ),
             patch(
                 "palace_mcp.extractors.symbol_index_swift.finalize_ingest_run",
@@ -409,8 +486,18 @@ class TestSymbolIndexSwiftErrorHandling:
                 return_value={},
             ),
         ):
-            with pytest.raises(FileNotFoundError):
+            with pytest.raises(ExtractorError) as exc_info:
                 await extractor.run(graphiti=MagicMock(), ctx=run_ctx)
+
+        assert exc_info.value.error_code == ExtractorErrorCode.SCIP_ARTIFACT_STALE
+        assert exc_info.value.context["reason"] == "scip_artifact_missing"
+        schema_mock.assert_not_awaited()
+        create_run_mock.assert_not_awaited()
+        previous_error_mock.assert_not_awaited()
+        parse_mock.assert_not_called()
+        bridge_mock.assert_not_called()
+        refresh_mock.assert_not_awaited()
+        write_baseline_mock.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_ctx_scip_path_override_bypasses_settings_lookup(
@@ -795,10 +882,13 @@ class TestSymbolIndexSwiftHappyPath:
                 "palace_mcp.extractors.symbol_index_swift.load_extractor_baseline",
                 new=AsyncMock(
                     return_value=_swift_symbol_baseline(
-                        commit_sha="unknown",
+                        commit_sha=_run_text(
+                            ["git", "rev-parse", "HEAD"], cwd=run_ctx.repo_path
+                        ),
                         body_hash_manifest_digest=_body_hash_manifest_digest(
                             current_hashes
                         ),
+                        scip_digest=swift_scip_file_digest(scip_fixture) or "missing",
                     )
                 ),
             ),
@@ -818,6 +908,116 @@ class TestSymbolIndexSwiftHappyPath:
         write_baseline_mock.assert_not_awaited()
         bridge_mock.add_or_replace_async.assert_not_called()
         finalize_mock.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_run_fully_reprocesses_same_head_replacement_scip(
+        self,
+        extractor: SymbolIndexSwift,
+        run_ctx: ExtractorRunContext,
+        scip_fixture: Path,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        tantivy_dir = tmp_path / "tantivy"
+        tantivy_dir.mkdir()
+        settings = MagicMock()
+        settings.palace_scip_index_paths = {"uw-ios-mini": str(scip_fixture)}
+        settings.palace_tantivy_index_path = str(tantivy_dir)
+        settings.palace_tantivy_heap_mb = 100
+        settings.palace_max_occurrences_total = 50_000_000
+        settings.palace_max_occurrences_per_project = 10_000_000
+        settings.palace_importance_threshold_use = 0.0
+        settings.palace_max_occurrences_per_symbol = 5_000
+        settings.palace_recency_decay_days = 30.0
+        settings.palace_incremental_ingest = True
+
+        current_hashes = {"Sources/App/File.swift": "stable-hash"}
+        current_scip_digest = swift_scip_file_digest(scip_fixture)
+        assert current_scip_digest is not None
+        bridge_mock = AsyncMock()
+        bridge_mock.__aenter__ = AsyncMock(return_value=bridge_mock)
+        bridge_mock.__aexit__ = AsyncMock(return_value=False)
+        refresh_mock = AsyncMock(return_value=(3, 1, 0))
+        write_baseline_mock = AsyncMock()
+        caplog.set_level(
+            logging.INFO, logger="palace_mcp.extractors.symbol_index_swift"
+        )
+
+        with (
+            patch("palace_mcp.mcp_server.get_driver", return_value=_make_driver()),
+            patch("palace_mcp.mcp_server.get_settings", return_value=settings),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift.TantivyBridge",
+                return_value=bridge_mock,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift.ensure_custom_schema",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift._get_previous_error_code",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift.create_ingest_run",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift.write_checkpoint",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift.finalize_ingest_run",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift._build_file_body_hashes",
+                return_value=current_hashes,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift._read_existing_file_body_hashes",
+                new_callable=AsyncMock,
+                return_value=dict(current_hashes),
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift.load_extractor_baseline",
+                new=AsyncMock(
+                    return_value=_swift_symbol_baseline(
+                        commit_sha=_run_text(
+                            ["git", "rev-parse", "HEAD"], cwd=run_ctx.repo_path
+                        ),
+                        body_hash_manifest_digest=_body_hash_manifest_digest(
+                            current_hashes
+                        ),
+                        scip_digest="sha256:replaced-artifact",
+                    )
+                ),
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift._refresh_graph_state",
+                refresh_mock,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift._write_swift_symbol_baseline",
+                write_baseline_mock,
+            ),
+        ):
+            stats = await extractor.run(graphiti=MagicMock(), ctx=run_ctx)
+
+        assert stats.mode == ExtractorExecutionMode.FULL
+        assert any(
+            getattr(record, "freshness_reason", None) == "scip_digest_mismatch"
+            for record in caplog.records
+        )
+        assert bridge_mock.add_or_replace_async.await_count > 0
+        bridge_mock.delete_by_file_paths_async.assert_not_awaited()
+        refresh_mock.assert_awaited_once()
+        assert refresh_mock.await_args.kwargs["selected_paths"] is None
+        write_baseline_mock.assert_awaited_once()
+        assert (
+            write_baseline_mock.await_args.kwargs["scip_digest"] == current_scip_digest
+        )
 
     @pytest.mark.asyncio
     async def test_run_logs_hash_mismatch_and_reingests(
@@ -904,7 +1104,10 @@ class TestSymbolIndexSwiftHappyPath:
         tantivy_dir = tmp_path / "tantivy"
         tantivy_dir.mkdir()
         settings = MagicMock()
-        settings.palace_scip_index_paths = {"uw-ios-mini": str(tmp_path / "test.scip")}
+        scip_path = tmp_path / "test.scip"
+        scip_path.write_bytes(b"incremental")
+        _write_test_scip_metadata(repo_path=run_ctx.repo_path, scip_path=scip_path)
+        settings.palace_scip_index_paths = {"uw-ios-mini": str(scip_path)}
         settings.palace_tantivy_index_path = str(tantivy_dir)
         settings.palace_tantivy_heap_mb = 100
         settings.palace_max_occurrences_total = 50_000_000
@@ -1167,7 +1370,10 @@ class TestSymbolIndexSwiftHappyPath:
         tantivy_dir = tmp_path / "tantivy"
         tantivy_dir.mkdir()
         settings = MagicMock()
-        settings.palace_scip_index_paths = {"uw-ios-mini": str(tmp_path / "test.scip")}
+        scip_path = tmp_path / "test.scip"
+        scip_path.write_bytes(b"threshold")
+        _write_test_scip_metadata(repo_path=run_ctx.repo_path, scip_path=scip_path)
+        settings.palace_scip_index_paths = {"uw-ios-mini": str(scip_path)}
         settings.palace_tantivy_index_path = str(tantivy_dir)
         settings.palace_tantivy_heap_mb = 100
         settings.palace_max_occurrences_total = 50_000_000
@@ -1295,7 +1501,10 @@ class TestSymbolIndexSwiftHappyPath:
         tantivy_dir = tmp_path / "tantivy"
         tantivy_dir.mkdir()
         settings = MagicMock()
-        settings.palace_scip_index_paths = {"uw-ios-mini": str(tmp_path / "test.scip")}
+        scip_path = tmp_path / "test.scip"
+        scip_path.write_bytes(b"streaming")
+        _write_test_scip_metadata(repo_path=run_ctx.repo_path, scip_path=scip_path)
+        settings.palace_scip_index_paths = {"uw-ios-mini": str(scip_path)}
         settings.palace_tantivy_index_path = str(tantivy_dir)
         settings.palace_tantivy_heap_mb = 100
         settings.palace_max_occurrences_total = 50_000_000

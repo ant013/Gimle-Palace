@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import socket
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
@@ -10,6 +11,18 @@ import httpx
 import pytest
 
 import palace_mcp.cli as cli
+
+
+def _initialize_git_repo(repo_path: Path) -> str:
+    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=repo_path, check=True)
+    subprocess.run(["git", "config", "user.email", "t@t"], cwd=repo_path, check=True)
+    subprocess.run(["git", "config", "user.name", "T"], cwd=repo_path, check=True)
+    (repo_path / "Package.swift").write_text("// swift-tools-version: 6.0\n")
+    subprocess.run(["git", "add", "."], cwd=repo_path, check=True)
+    subprocess.run(["git", "commit", "-q", "-m", "initial"], cwd=repo_path, check=True)
+    return subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=repo_path, text=True
+    ).strip()
 
 
 def test_project_analyze_parser_defaults_to_native_port_8765() -> None:
@@ -649,6 +662,7 @@ def test_project_analyze_uw_ios_app_routes_through_uw_emitter(
 ) -> None:
     repo_path = tmp_path / "unstoppable-wallet-ios"
     repo_path.mkdir()
+    repo_head = _initialize_git_repo(repo_path)
     env_file = tmp_path / ".env"
     env_file.write_text("OPENAI_API_KEY=sk-test\n", encoding="utf-8")
     report_out = tmp_path / "report.md"
@@ -685,7 +699,7 @@ def test_project_analyze_uw_ios_app_routes_through_uw_emitter(
             runtime_calls.append(kwargs["recreate_palace"]) or kwargs["mcp_url"]
         ),
     )
-    monkeypatch.setattr(cli, "_git_head_sha", lambda _path: "abc123")
+    monkeypatch.setattr(cli, "_git_head_sha", lambda _path: repo_head)
     monkeypatch.setattr(cli, "_host_path_requires_staging", lambda _path: False)
     monkeypatch.setattr(
         cli,
@@ -722,7 +736,7 @@ def test_project_analyze_uw_ios_app_routes_through_uw_emitter(
             json.dumps(
                 {
                     "slug": "uw-ios-app",
-                    "repo_head_sha": "abc123",
+                    "repo_head_sha": repo_head,
                     "emitter_name": "palace-swift-scip-emit-cli",
                     "emitter_version": "2026-05-15",
                     "artifact_origin": "remote_copy",
@@ -800,6 +814,7 @@ def test_project_analyze_hs_swift_kit_routes_through_kit_emitter(
 ) -> None:
     repo_path = tmp_path / "BitcoinKit.Swift"
     repo_path.mkdir()
+    repo_head = _initialize_git_repo(repo_path)
     env_file = tmp_path / ".env"
     env_file.write_text("OPENAI_API_KEY=sk-test\n", encoding="utf-8")
     report_out = tmp_path / "report.md"
@@ -836,7 +851,7 @@ def test_project_analyze_hs_swift_kit_routes_through_kit_emitter(
             runtime_calls.append(kwargs["recreate_palace"]) or kwargs["mcp_url"]
         ),
     )
-    monkeypatch.setattr(cli, "_git_head_sha", lambda _path: "abc123")
+    monkeypatch.setattr(cli, "_git_head_sha", lambda _path: repo_head)
     monkeypatch.setattr(cli, "_host_path_requires_staging", lambda _path: False)
     monkeypatch.setattr(
         cli,
@@ -870,12 +885,12 @@ def test_project_analyze_hs_swift_kit_routes_through_kit_emitter(
             json.dumps(
                 {
                     "slug": "bitcoin-kit",
-                    "repo_head_sha": "abc123",
+                    "repo_head_sha": repo_head,
                     "emitter_name": "palace-swift-scip-emit-cli",
                     "emitter_version": "2026-05-15",
                     "artifact_origin": "local",
                     "package_path": "Package.swift",
-                    "generator_host": "local-host",
+                    "generator_host": socket.gethostname(),
                     "source_repo_path": str(repo_path.resolve()),
                     "destination_repo_path": str(repo_path.resolve()),
                 }
@@ -1794,7 +1809,7 @@ def test_project_analyze_hs_swift_kit_emit_failure_stops_before_extractor_cascad
     assert "scip_emit_swift_kit.sh bitcoin-kit" in summary["fallback_command"]
 
 
-def test_ensure_swift_scip_artifact_auto_falls_back_when_stale_artifact_exists(
+def test_ensure_swift_scip_artifact_auto_fails_closed_when_stale_artifact_exists(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -1833,11 +1848,8 @@ def test_ensure_swift_scip_artifact_auto_falls_back_when_stale_artifact_exists(
         ),
     )
 
-    result = cli.ensure_swift_scip_artifact(spec=spec, emit_scip="auto")
-
-    assert result["emitted"] is False
-    assert "toolchain unavailable" in result["reason"]
-    assert result["host_scip_path"] == str(scip_file)
+    with pytest.raises(cli.ScipEmitToolchainUnsupported):
+        cli.ensure_swift_scip_artifact(spec=spec, emit_scip="auto")
 
 
 def test_ensure_swift_scip_artifact_auto_reraises_when_no_artifact_on_disk(
@@ -1883,6 +1895,7 @@ def test_ensure_swift_scip_artifact_auto_reraises_when_no_artifact_on_disk(
 def _make_scip_spec(tmp_path: Path) -> cli.ProjectRuntimeSpec:
     repo_path = tmp_path / "TronKit.Swift"
     repo_path.mkdir(exist_ok=True)
+    _initialize_git_repo(repo_path)
     return cli.ProjectRuntimeSpec(
         repo_path=repo_path,
         slug="tron-kit",
@@ -1901,7 +1914,7 @@ def _make_scip_spec(tmp_path: Path) -> cli.ProjectRuntimeSpec:
     )
 
 
-def test_ensure_swift_scip_artifact_never_succeeds_with_missing_metadata(
+def test_ensure_swift_scip_artifact_never_fails_with_missing_metadata(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -1910,17 +1923,13 @@ def test_ensure_swift_scip_artifact_never_succeeds_with_missing_metadata(
     scip_dir.mkdir(parents=True)
     (scip_dir / "index.scip").write_bytes(b"\x00" * 16)
 
-    monkeypatch.setattr(cli, "_git_head_sha", lambda _: "abc123")
-    monkeypatch.setattr(cli, "_load_scip_metadata", lambda _path: None)
+    with pytest.raises(cli.ProjectAnalyzeCliError) as exc_info:
+        cli.ensure_swift_scip_artifact(spec=spec, emit_scip="never")
 
-    result = cli.ensure_swift_scip_artifact(spec=spec, emit_scip="never")
-
-    assert result["emitted"] is False
-    assert result["stale"] is True
-    assert result["host_scip_path"] == str(scip_dir / "index.scip")
+    assert exc_info.value.error_code == "stale_scip_artifact"
 
 
-def test_ensure_swift_scip_artifact_never_succeeds_with_stale_sha(
+def test_ensure_swift_scip_artifact_never_fails_with_stale_sha(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -1929,15 +1938,36 @@ def test_ensure_swift_scip_artifact_never_succeeds_with_stale_sha(
     scip_dir.mkdir(parents=True)
     (scip_dir / "index.scip").write_bytes(b"\x00" * 16)
 
-    stale_metadata = {"repo_head_sha": "deadbeef"}
-    monkeypatch.setattr(cli, "_git_head_sha", lambda _: "abc123")
-    monkeypatch.setattr(cli, "_load_scip_metadata", lambda _path: stale_metadata)
+    cli._write_scip_metadata(
+        meta_path=scip_dir / "index.scip.meta.json",
+        spec=spec,
+        repo_head_sha="deadbeef",
+    )
+
+    with pytest.raises(cli.ProjectAnalyzeCliError) as exc_info:
+        cli.ensure_swift_scip_artifact(spec=spec, emit_scip="never")
+
+    assert exc_info.value.error_code == "stale_scip_artifact"
+    assert "repo_head_sha_mismatch" in str(exc_info.value)
+
+
+def test_ensure_swift_scip_artifact_never_accepts_current_provenance(
+    tmp_path: Path,
+) -> None:
+    spec = _make_scip_spec(tmp_path)
+    scip_dir = spec.repo_path / "scip"
+    scip_dir.mkdir(parents=True)
+    (scip_dir / "index.scip").write_bytes(b"current")
+    cli._write_scip_metadata(
+        meta_path=scip_dir / "index.scip.meta.json",
+        spec=spec,
+        repo_head_sha=cli._git_head_sha(spec.repo_path),
+    )
 
     result = cli.ensure_swift_scip_artifact(spec=spec, emit_scip="never")
 
     assert result["emitted"] is False
-    assert result["stale"] is True
-    assert result["host_scip_path"] == str(scip_dir / "index.scip")
+    assert result["reason"] == "existing artifact reused"
 
 
 def test_ensure_swift_scip_artifact_never_fails_with_no_index(

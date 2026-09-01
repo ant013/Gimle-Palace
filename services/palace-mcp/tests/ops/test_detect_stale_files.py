@@ -5,10 +5,14 @@ from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from palace_mcp.ops.detect_stale_files import _classify_file
+from palace_mcp.ops.detect_stale_files import detect_project_stale_files
 from palace_mcp.ops.detect_stale_files import _repo_path_for_project
 from palace_mcp.ops.detect_stale_files import _should_ignore
 from palace_mcp.memory.schema import ProjectInfo
@@ -103,3 +107,83 @@ async def test_classify_file_marks_content_change_as_stale(tmp_path: Path) -> No
 
     assert decision.bucket == "stale"
     assert decision.reason == "mtime_newer_than_finished_at"
+
+
+@pytest.mark.parametrize(
+    "reason",
+    ["repo_head_sha_mismatch", "scip_baseline_digest_mismatch"],
+)
+@pytest.mark.asyncio
+async def test_detector_requires_reingest_for_noncurrent_swift_scip_state(
+    tmp_path: Path,
+    reason: str,
+) -> None:
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+    source_path = repo_path / "Sources" / "Wallet.swift"
+    source_path.parent.mkdir(parents=True)
+    source_path.write_text("struct Wallet {}\n", encoding="utf-8")
+    body_hash = hashlib.sha256(source_path.read_bytes()).hexdigest()
+
+    class _Result:
+        def __init__(
+            self,
+            *,
+            single_row: dict[str, Any] | None = None,
+            rows: list[dict[str, Any]] | None = None,
+        ) -> None:
+            self.single_row = single_row
+            self.rows = rows or []
+
+        async def single(self) -> dict[str, Any] | None:
+            return self.single_row
+
+        async def data(self) -> list[dict[str, Any]]:
+            return self.rows
+
+    async def _run(query: str, **_params: Any) -> _Result:
+        if "IngestRun" in query:
+            return _Result(
+                single_row={
+                    "run_id": "run-1",
+                    "finished_at": "2099-01-01T00:00:00+00:00",
+                }
+            )
+        return _Result(rows=[{"path": "Sources/Wallet.swift", "body_hash": body_hash}])
+
+    session = MagicMock()
+    session.run = _run
+    session.__aenter__ = AsyncMock(return_value=session)
+    session.__aexit__ = AsyncMock(return_value=None)
+    driver = MagicMock()
+    driver.session.return_value = session
+    project = ProjectInfo(
+        slug="swift-kit",
+        name="Swift Kit",
+        tags=[],
+        repo_path=str(repo_path),
+        language_profile="swift_kit",
+    )
+
+    with patch(
+        "palace_mcp.ops.detect_stale_files.inspect_swift_scip_index_state",
+        new=AsyncMock(
+            return_value=SimpleNamespace(current=False, stale=True, reason=reason)
+        ),
+    ) as inspect_mock:
+        report = await detect_project_stale_files(
+            driver,
+            project=project,
+            workspace_root=tmp_path,
+            ignore_globs=[],
+        )
+
+    assert report.stale_files == []
+    assert report.requires_reingest is True
+    assert report.project_reason == reason
+    inspect_mock.assert_awaited_once_with(
+        driver,
+        project_slug="swift-kit",
+        project_id="project/swift-kit",
+        repo_path=repo_path,
+    )
