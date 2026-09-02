@@ -377,6 +377,21 @@ def test_ios_qa_bundle_treats_known_imac_runtime_gaps_as_non_material():
         assert "Never use `blocked` merely" in text
 
 
+def test_ios_infra_bundle_treats_known_imac_toolchain_gap_as_non_material():
+    paths = (
+        REPO / "paperclips/projects/uaudit/overlays/codex/UWIInfraEngineer.md",
+        REPO / "paperclips/dist/uaudit/codex/UWIInfraEngineer.md",
+    )
+    for path in paths:
+        text = path.read_text()
+        assert "old iMac has Command Line Tools only" in text
+        assert "`material=false`" in text
+        assert "`audit_status=complete`" in text
+        assert "`needs_runtime_verification=true`" in text
+        assert "Use `partial` only" in text
+        assert "Never use `blocked` merely" in text
+
+
 def test_pr_coordinators_use_helper_owned_russian_delivery_contract():
     expected = {
         "UWISwiftAuditor": "uaudit-swift-audit-specialist",
