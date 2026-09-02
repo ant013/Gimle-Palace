@@ -49,6 +49,10 @@ sandbox:
   runtime_env:
     PAPERCLIP_API_URL: paperclip_runtime_api_url
 
+recovery:
+  model: gpt-5.6-terra
+  preserve_primary_reasoning_effort: true
+
 smoke:
   e2e_timeout_seconds: 360
 
