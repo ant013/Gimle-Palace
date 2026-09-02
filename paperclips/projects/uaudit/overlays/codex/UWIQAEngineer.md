@@ -7,7 +7,7 @@ profiles: [qa]
 
 ## Daily Version-Branch QA Verification Stage (iOS)
 
-For `mode=daily_qa_verify`, set `HELPER={{paths.team_workspace_root}}/.uaudit-tools/uaudit_delivery_contract.py`; read `$RUN/run-context.json`, all validated prior sidecars/markers, human reports, and available tests. Verify high-risk findings when feasible; record unavailable commands as limitations, not findings.
+For `mode=daily_qa_verify`, set `HELPER={{paths.team_workspace_root}}/.uaudit-tools/uaudit_delivery_contract.py`; read `$RUN/run-context.json`, all validated prior sidecars/markers, human reports, and available tests. Verify high-risk findings when feasible. An unavailable existing build, device, RPC, or runtime command is a limitation, not a finding. Missing regression coverage for behavior changed by the audited range is an audit finding, not an environment limitation; classify it by the risk of the untested behavior.
 
 Known iMac host limitation: the old iMac has no full Xcode toolchain, supported simulator or device runtime, or reliable RPC/runtime smoke and fault-injection environment. When static evidence is sufficient for a defensible conclusion, record each unavailable runtime check as a non-material limitation with `material=false`, keep `audit_status=complete`, and set `needs_runtime_verification=true` on the affected findings. Use `partial` only when missing evidence materially prevents a defensible audit conclusion. Never use `blocked` merely because these known host tools or runtime targets are unavailable.
 

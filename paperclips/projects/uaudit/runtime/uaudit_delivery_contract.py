@@ -865,7 +865,13 @@ def _pr_number(source_ref: Mapping[str, Any]) -> str:
     return match.group(1)
 
 
-def _render_telegram(binding: Mapping[str, Any], status: str, counts: Mapping[str, int], verdict: str) -> bytes:
+def _render_telegram(
+    binding: Mapping[str, Any],
+    status: str,
+    counts: Mapping[str, int],
+    verdict: str,
+    limitations: Sequence[Mapping[str, Any]] = (),
+) -> bytes:
     platform = _platform_ru(binding["platform"])
     ref = binding["source_ref"]
     state = "завершён" if status == "complete" else "выполнен частично"
@@ -882,12 +888,17 @@ def _render_telegram(binding: Mapping[str, Any], status: str, counts: Mapping[st
             f"Важные: {counts['important']} · Наблюдения: {counts['observation']}"
         ),
     ]
+    warning_count = sum(1 for item in limitations if not item["material"])
+    if warning_count:
+        lines.append(f"Предупреждения: {warning_count}")
     if verdict == "inconclusive":
         lines.append("Вердикт не вынесен: проверка неполная")
     else:
         lines.append(f"Вердикт: {_verdict_ru(verdict)}")
     if status == "partial":
         lines.append("Покрытие неполное — ограничения указаны в отчёте")
+    elif limitations:
+        lines.append("Предупреждения указаны в отчёте")
     elif total == 0:
         lines.append("Итоговый отчёт не формировался")
     raw = ("\n".join(lines) + "\n").encode("utf-8")
@@ -920,6 +931,8 @@ def _render_report(
     counts: Mapping[str, int],
     verdict: str,
     sidecars: Sequence[Mapping[str, Any]],
+    *,
+    include_non_material: bool = True,
 ) -> bytes:
     binding = canonical["run_binding"]
     ref = binding["source_ref"]
@@ -966,6 +979,11 @@ def _render_report(
     if material:
         lines.extend(["## Ограничения", ""])
         lines.extend(f"- {item['text']}" for item in material)
+        lines.append("")
+    warnings = [item for item in canonical["limitations"] if not item["material"]]
+    if include_non_material and warnings:
+        lines.extend(["## Предупреждения", ""])
+        lines.extend(f"- {item['text']}" for item in warnings)
         lines.append("")
     diff_name = "pr.diff" if binding["audit_kind"] == "pr" else "diff.patch"
     files, additions, deletions = _diff_counts(run_dir / diff_name)
@@ -1088,14 +1106,23 @@ def _validate_summary(run_dir: Path) -> tuple[dict[str, Any], dict[str, Any], st
         "material_limitations", "telegram_text", "findings", "report", "created_at",
     )
     current_keys = legacy_keys[:-1] + ("english_report", "created_at")
+    warning_keys = current_keys[:-1] + ("warning_count", "created_at")
     if set(summary) == set(legacy_keys):
         # Old persisted receipts must remain readable; they predate bilingual
         # daily delivery and therefore have no English report field.
         legacy_summary = True
+        warnings_rendered = False
         english_report = None
+    elif set(summary) == set(current_keys):
+        # Summaries produced before non-material limitations became delivered
+        # warnings retain their original deterministic message/report bytes.
+        legacy_summary = False
+        warnings_rendered = False
+        english_report = summary["english_report"]
     else:
         legacy_summary = False
-        _exact_keys(summary, current_keys, where="delivery-summary.json")
+        warnings_rendered = True
+        _exact_keys(summary, warning_keys, where="delivery-summary.json")
         english_report = summary["english_report"]
     if summary["schema_version"] != SCHEMA_VERSION:
         _fail("unsupported summary schema_version")
@@ -1151,6 +1178,12 @@ def _validate_summary(run_dir: Path) -> tuple[dict[str, Any], dict[str, Any], st
     expected_material = [item["text"] for item in canonical["limitations"] if item["material"]]
     if summary["material_limitations"] != expected_material:
         _fail("summary material limitations mismatch")
+    expected_warning_count = sum(1 for item in canonical["limitations"] if not item["material"])
+    if warnings_rendered:
+        if not _is_int(summary["warning_count"]) or summary["warning_count"] < 0:
+            _fail("summary warning_count must be a non-negative integer")
+        if summary["warning_count"] != expected_warning_count:
+            _fail("summary warning_count mismatch canonical limitations")
     text_ref = _expect_object(summary["telegram_text"], "summary.telegram_text")
     _exact_keys(text_ref, ("file", "sha256"), where="summary.telegram_text")
     if text_ref["file"] != "telegram-summary.txt":
@@ -1162,11 +1195,22 @@ def _validate_summary(run_dir: Path) -> tuple[dict[str, Any], dict[str, Any], st
         _fail("telegram text bytes are not canonical or bounded")
     if _sha256_bytes(text_raw) != text_ref["sha256"]:
         _fail("telegram text digest mismatch")
-    expected_text = _render_telegram(binding, summary["audit_status"], counts, summary["verdict"])
+    rendered_limitations = canonical["limitations"] if warnings_rendered else ()
+    expected_text = _render_telegram(
+        binding,
+        summary["audit_status"],
+        counts,
+        summary["verdict"],
+        rendered_limitations,
+    )
     if text_raw != expected_text:
         _fail("telegram text does not match deterministic rendering")
     report_ref = summary["report"]
-    needs_report = summary["audit_status"] == "partial" or summary["finding_count"] > 0
+    needs_report = (
+        summary["audit_status"] == "partial"
+        or summary["finding_count"] > 0
+        or (warnings_rendered and bool(canonical["limitations"]))
+    )
     if needs_report:
         report = _expect_object(report_ref, "summary.report")
         _exact_keys(report, ("file", "sha256"), where="summary.report")
@@ -1180,7 +1224,14 @@ def _validate_summary(run_dir: Path) -> tuple[dict[str, Any], dict[str, Any], st
         report_raw = _read_bytes(report_path)
         if _sha256_bytes(report_raw) != report["sha256"]:
             _fail("summary report digest mismatch")
-        expected_report = _render_report(run_dir, canonical, counts, summary["verdict"], sidecars)
+        expected_report = _render_report(
+            run_dir,
+            canonical,
+            counts,
+            summary["verdict"],
+            sidecars,
+            include_non_material=warnings_rendered,
+        )
         if report_raw != expected_report:
             _fail("report does not match deterministic rendering")
         if binding["audit_kind"] == "pr":
@@ -1347,10 +1398,10 @@ def aggregate(args: argparse.Namespace) -> dict[str, Any]:
     if finding_count != sum(counts.values()):
         _fail("internal finding count mismatch")
     verdict = _verdict(status, counts)
-    telegram_raw = _render_telegram(binding, status, counts, verdict)
+    telegram_raw = _render_telegram(binding, status, counts, verdict, canonical["limitations"])
     _atomic_write(run_dir / "telegram-summary.txt", telegram_raw)
     report_ref: dict[str, str] | None
-    if status == "partial" or finding_count > 0:
+    if status == "partial" or finding_count > 0 or canonical["limitations"]:
         report_name = "audit.md" if binding["audit_kind"] == "pr" else "audit-final.md"
         report_raw = _render_report(run_dir, canonical, counts, verdict, sidecars)
         if binding["audit_kind"] != "pr":
@@ -1389,6 +1440,7 @@ def aggregate(args: argparse.Namespace) -> dict[str, Any]:
         "severity_counts": counts,
         "verdict": verdict,
         "material_limitations": [item["text"] for item in canonical["limitations"] if item["material"]],
+        "warning_count": sum(1 for item in canonical["limitations"] if not item["material"]),
         "telegram_text": {"file": "telegram-summary.txt", "sha256": _sha256_bytes(telegram_raw)},
         "findings": {"file": "canonical-findings.json", "sha256": _sha256_bytes(canonical_raw)},
         "report": report_ref,
@@ -1423,7 +1475,7 @@ def finalize_translation(args: argparse.Namespace) -> dict[str, Any]:
     canonical = _validate_canonical(json.loads(canonical_raw), binding)
     counts = _counts(canonical["findings"])
     status = canonical["audit_status"]
-    if status != "partial" and not canonical["findings"]:
+    if status != "partial" and not canonical["findings"] and not canonical["limitations"]:
         _fail("complete zero-result audits have no bilingual report")
     research_filename = RESEARCH_STAGE[binding["platform"]][2]
     research_required = binding["audit_kind"] == "daily_delta" and (run_dir / research_filename).exists()
@@ -1437,7 +1489,7 @@ def finalize_translation(args: argparse.Namespace) -> dict[str, Any]:
     if _read_bytes(run_dir / "audit-final.ru.md") != russian_raw:
         _fail("Russian audit-final does not match canonical rendering")
     english_result, _ = _validate_translation(run_dir, binding_sha, russian_raw)
-    telegram_raw = _render_telegram(binding, status, counts, verdict)
+    telegram_raw = _render_telegram(binding, status, counts, verdict, canonical["limitations"])
     if _read_bytes(run_dir / "telegram-summary.txt", maximum=899) != telegram_raw:
         _fail("telegram summary does not match canonical rendering")
     summary = {
@@ -1452,6 +1504,7 @@ def finalize_translation(args: argparse.Namespace) -> dict[str, Any]:
         "severity_counts": counts,
         "verdict": verdict,
         "material_limitations": [item["text"] for item in canonical["limitations"] if item["material"]],
+        "warning_count": sum(1 for item in canonical["limitations"] if not item["material"]),
         "telegram_text": {"file": "telegram-summary.txt", "sha256": _sha256_bytes(telegram_raw)},
         "findings": {"file": "canonical-findings.json", "sha256": _sha256_bytes(canonical_raw)},
         "report": {"file": "audit-final.ru.md", "sha256": _sha256_bytes(russian_raw)},

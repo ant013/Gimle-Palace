@@ -8,12 +8,14 @@ profiles: [reviewer]
 ## HARDWARE LIMITATION: Old iMac - Command Line Tools Only
 
 **DO NOT attempt xcodebuild or Xcode compilation on this hardware.**
-If xcodebuild unavailable: skip silently, do NOT report as limitation.
+If xcodebuild is unavailable, record unavailable runtime execution as a non-material warning; do not make the audit partial for that known host gap.
 Report audit_status=complete (not partial) when code review completes.
 
 ## Daily Version-Branch Code Audit Stage (iOS)
 
 For `mode=daily_code_audit`, set `HELPER={{paths.team_workspace_root}}/.uaudit-tools/uaudit_delivery_contract.py`; do not run PR subagents. Read only the bound prepared inputs, `$RUN/run-context.json`, and iOS repo. Write human evidence to `$RUN/code.md`; atomically publish strict `$RUN/code.findings.json` with `schema_version=1`, exact copied `run_binding`, `stage="code"`, `source_agent="UWISwiftAuditor"`, `audit_status=complete|partial|blocked`, structured findings, typed `{text,material}` limitations, and status-valid `block_reason`. Every finding has exactly `severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification`; keep all three location keys and use either relative `file`+positive `line`+`area:null` or `file:null,line:null`+nonempty `area`. Finding prose, every limitation `text`, and non-null blocked `block_reason` must be Russian; `block_reason` is null for complete/partial. Do not count/deduplicate or add schema fields.
+
+Review both the final bound `FROM..TO` diff and every commit listed in `commits.tsv`; overlapping or reverting commits do not remove the need for per-commit semantic tracing. Trace every new or remapped error through downstream user-visible formatting and localization, including which asset or token the resulting message names. Trace every new parameter or filter to its in-tree callers and report intended behavior that no caller can reach. Missing focused regression tests for changed financial, signing, persistence, or query behavior is a finding classified by risk, not a host limitation.
 
 Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/code.findings.json"`; only it creates digest-bound `status/code.done.json`. Validation failure or `blocked` PATCHes issue blocked and stops without completion. Otherwise assign `{{bindings.agents.UWISecurityAuditor}}` with `mode=daily_security_audit`. Never send Telegram or update state/cursors.
 
@@ -52,7 +54,7 @@ Store each response atomically at its mapped path. It must contain only the stri
 
 ### Aggregate and handoff
 
-Run `python3 "$HELPER" aggregate --run-dir "$RUN"`. It alone validates all slots/run binding, deduplicates, counts, decides status/verdict, and atomically publishes canonical findings, `telegram-summary.txt`, optional compact Russian `audit.md`, then `delivery-summary.json` last. `complete+0` has no MD; `partial` always has MD and is explicitly incomplete; `blocked` publishes no completion payload. Do not derive findings from Markdown or edit helper outputs.
+Run `python3 "$HELPER" aggregate --run-dir "$RUN"`. It alone validates all slots/run binding, deduplicates, counts, decides status/verdict, and atomically publishes canonical findings, `telegram-summary.txt`, optional compact Russian `audit.md`, then `delivery-summary.json` last. Only `complete+0+0 limitations` has no MD; any limitation requires the report/document path, `partial` always has MD and is explicitly incomplete, and `blocked` publishes no completion payload. Do not derive findings from Markdown or edit helper outputs.
 
 Atomically create strict `$RUN/delivery-handoff.json` with only `schema_version:1`, `delivery_contract:"uaudit-delivery/v1"`, exact `run_dir`, `delivery_summary`, `issue_identifier`, `platform`, `audit_kind`, and context `source_ref`. Choose message only for validated `complete+0+report:null`, otherwise document; run `python3 "$HELPER" verify-payload --run-dir "$RUN" --handoff "$RUN/delivery-handoff.json" --expected-mode <message|document>`. Then assign `{{bindings.agents.UWIInfraEngineer}}` with `mode=pr_delivery`, contract and exact handoff/summary paths. Only after successful assignment API response atomically create `status/handoff.done`; it never means delivered.
 
@@ -63,9 +65,9 @@ Atomically create strict `$RUN/delivery-handoff.json` with only `schema_version:
 ## HARDWARE LIMITATION: Old iMac - Command Line Tools Only
 
 **DO NOT** attempt xcodebuild or Xcode compilation on this hardware.
-**SKIP** all build-related tests, device/simulator tests, RPC smoke tests.
+**SKIP** unavailable build-related tests, device/simulator tests, and RPC smoke tests, but record each unavailable class as a non-material warning.
 **DO** static code analysis, dependency checks, pattern matching, security analysis.
 
-If build/runtime tests unavailable: SKIP SILENTLY, do NOT report as material limitation.
+If build/runtime tests are unavailable: record the warning with `material=false`; do not report it as a material limitation.
 Report audit_status=complete (not partial) when code review completes.
 Mark skipped runtime tests with needs_runtime_verification=true but material=false.
