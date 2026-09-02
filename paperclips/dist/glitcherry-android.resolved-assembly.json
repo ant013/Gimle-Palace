@@ -89,16 +89,16 @@
         {
           "agentId": "",
           "agentName": "GlitcherryCTO",
-          "bytes": 29659,
+          "bytes": 31051,
           "family": "cto",
-          "lines": 659,
+          "lines": 681,
           "output": "paperclips/dist/glitcherry-android/codex/GlitcherryCTO.md",
           "platform": "",
           "profiles": [
             "walker"
           ],
           "roleId": "codex:glitcherry-cto",
-          "sha256": "a557d1864f482fcd0de2b19b5fb16860e8e24c298428af7214f37df37e4da5bd",
+          "sha256": "967675e8de95969df64ac6058b32da56f333d964054eff432f58534155b0087f",
           "source": "paperclips/projects/glitcherry-android/roles-codex/glitcherry-cto.md",
           "workspaceCwd": ""
         },
@@ -137,16 +137,16 @@
         {
           "agentId": "",
           "agentName": "GlitcherryCodeReviewer",
-          "bytes": 23419,
+          "bytes": 24540,
           "family": "reviewer",
-          "lines": 522,
+          "lines": 539,
           "output": "paperclips/dist/glitcherry-android/codex/GlitcherryCodeReviewer.md",
           "platform": "",
           "profiles": [
             "reviewer"
           ],
           "roleId": "codex:glitcherry-code-reviewer",
-          "sha256": "10e0d6d5aead893c1339bff43bcd53fa64ac82cc7df577c6acecef7d014a68cc",
+          "sha256": "dd95ccc3c6b92c9325951ed93643beb7464437ad4e6a90823e6c47ff588e7bf5",
           "source": "paperclips/projects/glitcherry-android/roles-codex/code-reviewer.md",
           "workspaceCwd": ""
         },

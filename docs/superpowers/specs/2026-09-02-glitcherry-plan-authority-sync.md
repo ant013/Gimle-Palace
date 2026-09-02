@@ -1,7 +1,7 @@
 # Glitcherry plan authority and Paperclip mirror synchronization
 
 Date: 2026-09-02
-Status: Proposed
+Status: Approved by Human Engineering Lead
 Branch: `fix/glitcherry-plan-authority-sync`
 Baseline: `479dd2d0aac7da99f818886ad9d1c4b1d185e879`
 
@@ -141,6 +141,10 @@ revision that satisfies the recorded delegation classifier above.
     explicit delegation.
 - `paperclips/tests/test_glitcherry_android_assembly.py`
   - assert that source and assembled role instructions retain the contract.
+- `paperclips/dist/glitcherry-android.resolved-assembly.json`
+- `paperclips/dist/glitcherry-android/codex/GlitcherryCTO.md`
+- `paperclips/dist/glitcherry-android/codex/GlitcherryCodeReviewer.md`
+  - mechanically regenerated assembly outputs for the two changed roles.
 
 No controller Python change is expected.
 
@@ -160,7 +164,9 @@ No controller Python change is expected.
    implementation, and sprint-smoke-only-after-all-slices rules are unchanged.
 7. Assembly tests prove the markers exist in `WORKFLOW.md`, CTO role, reviewer
    role, and generated Codex instructions.
-8. No live Paperclip issue/interaction/controller state or Android repository is
+8. The changed-path set is limited to this spec, the four source/test files, and
+   the three mechanically regenerated Glitcherry assembly outputs named above.
+9. No live Paperclip issue/interaction/controller state or Android repository is
    mutated by this change.
 
 ## Verification plan
@@ -174,8 +180,8 @@ No controller Python change is expected.
 - Generate/inspect assembled CTO and Code Reviewer instructions and verify the
   plan-mirror and confirmation-classifier markers are present.
 - Run `git diff --check`.
-- Verify the changed-path set is limited to this spec and the four affected
-  implementation/test files above.
+- Verify the changed-path set is limited to this spec, the four affected
+  source/test files, and the three named generated assembly outputs above.
 
 ## Risks and recovery
 

@@ -27,6 +27,23 @@ invariants; later passes cover the correction delta and affected invariants unle
 a structural rewrite is recorded. Cite exact commands/results and acceptance/test
 coverage. Never edit, commit, push, or fix the branch.
 
+Before plan content review, verify the plan mirror before technical review. The
+controller-recorded tracked `docs/plans/...` file at the exact Android HEAD is
+the authority; the Paperclip `plan` revision must be byte-identical. Verify the
+recorded HEAD, tracked-plan SHA-256, mirrored-body SHA-256, revision ID, and
+revision number. Return an absent, stale, or divergent mirror to CTO as one
+consolidated process finding before evaluating the plan itself.
+
+Require exact-revision Human Engineering Lead confirmation when product
+behavior, roadmap or slice scope/order, production dependency, toolchain, API
+floor, quality threshold or pass/fail meaning, accepted ADR or architecture
+decision, or another HEL-reserved choice changes. You must not request duplicate
+human confirmation when a structured Human Engineering Lead delegation already
+covers the named bounded correction, all listed decision dimensions remain
+unchanged, the plan is byte-identical in both locations, and your independent
+review approves the exact changed HEAD. Ambiguity returns one structured
+question to HEL; never infer a broader delegation.
+
 ## Code and architecture lens
 
 Review Kotlin correctness, lifecycle/concurrency, boundaries, regression risk,

@@ -32,6 +32,28 @@ lease, task worktree, and refs before transitioning.
   task/status refs after both merges.
 - Stop the sprint root at `SPRINT_SMOKE_REQUIRED` and fixed candidate SHA for QA.
 
+## Plan authority and synchronization
+
+The tracked `docs/plans/...` file at the controller-recorded task HEAD is the
+implementation authority. The Paperclip `plan` document is its byte-identical
+mirror, not a second authoring surface. Before every `plan_review` handoff,
+commit the plan, prove the worktree clean, record the exact Android HEAD, and
+publish the exact tracked bytes with the current `baseRevisionId`, then read back the
+created revision. Require the tracked-plan and mirrored-body SHA-256 values to
+match. Record the exact HEAD, both SHA-256 hashes, and Paperclip revision ID and
+revision number before controller and Paperclip handoff. A conflict, stale base,
+missing read-back, mismatch, or second writer stops the handoff without creating
+a replacement issue or plan.
+
+Request exact-revision Human Engineering Lead confirmation for changes to
+product behavior, roadmap or slice scope/order, production dependency,
+toolchain, API floor, quality threshold or pass/fail meaning, accepted ADR or
+architecture decision, or another HEL-reserved choice. Do not request duplicate
+confirmation when a structured Human Engineering Lead delegation explicitly
+covers the named bounded correction, every listed decision dimension is
+unchanged, the mirror is byte-identical, and the independent reviewer approves
+the exact changed HEAD. Ambiguity returns one structured question to HEL.
+
 ## Forbidden actions
 
 Never change future roadmap, promote `DRAFT -> READY`, implement application

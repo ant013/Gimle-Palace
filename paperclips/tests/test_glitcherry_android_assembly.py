@@ -189,6 +189,50 @@ def test_workflow_is_the_single_worktree_parent_child_contract():
         assert marker not in text
 
 
+def test_plan_authority_mirror_and_confirmation_classifier_are_explicit():
+    workflow = _flat((PROJECT / "WORKFLOW.md").read_text())
+    cto = _flat(_role("glitcherry-cto.md"))
+    reviewer = _flat(_role("code-reviewer.md"))
+
+    for marker in [
+        "tracked `docs/plans/...` file",
+        "implementation authority",
+        "Paperclip `plan` document",
+        "byte-identical mirror",
+        "`baseRevisionId`",
+        "tracked-plan SHA-256",
+        "mirrored-body SHA-256",
+        "revision ID and revision number",
+        "product behavior",
+        "roadmap or slice scope/order",
+        "production dependency, toolchain, or API floor",
+        "quality threshold or pass/fail meaning",
+        "accepted ADR or architecture decision",
+        "structured Human Engineering Lead delegation",
+    ]:
+        assert marker in workflow
+
+    for marker in [
+        "Before every `plan_review` handoff",
+        "byte-identical mirror",
+        "`baseRevisionId`",
+        "read back",
+        "both SHA-256 hashes",
+        "revision ID and revision number",
+        "structured Human Engineering Lead delegation",
+    ]:
+        assert marker in cto
+
+    for marker in [
+        "verify the plan mirror before technical review",
+        "absent, stale, or divergent",
+        "byte-identical",
+        "must not request duplicate human confirmation",
+        "structured Human Engineering Lead delegation",
+    ]:
+        assert marker in reviewer
+
+
 def test_common_overlay_enforces_authority_repositories_and_one_writer():
     text = (PROJECT / "overlays" / "codex" / "_common.md").read_text()
     required = [
@@ -341,12 +385,24 @@ def test_rendered_glitcherry_roles_have_no_templates_or_forbidden_authority():
 
     ceo = rendered["GlitcherryCEO"]
     cto = rendered["GlitcherryCTO"]
+    reviewer = rendered["GlitcherryCodeReviewer"]
     qa = rendered["GlitcherryQAEngineer"]
     assert "## Plan Producer" not in ceo
     assert "## Commit and Push" not in ceo
     assert "## CTO Merge Authority" not in ceo
     assert "release-cut" not in cto.lower()
     assert "develop -> main" not in cto.lower()
+    for marker in [
+        "Before every `plan_review` handoff",
+        "byte-identical mirror",
+        "both SHA-256 hashes",
+    ]:
+        assert marker in _flat(cto)
+    for marker in [
+        "verify the plan mirror before technical review",
+        "must not request duplicate human confirmation",
+    ]:
+        assert marker in _flat(reviewer)
     assert "## Commit and Push" not in qa
     assert "commit push" not in qa.lower()
     for text in rendered.values():
