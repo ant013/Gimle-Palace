@@ -198,13 +198,15 @@ def test_daily_dispatchers_resolve_direct_release_successors_before_intake():
             assert "origin/*" in text
 
 
-def test_uaudit_bootstrap_deploy_does_not_require_partial_approvers():
+def test_uaudit_bootstrap_deploy_preserves_verified_helper_install():
     text = (SCRIPTS / "bootstrap-project.sh").read_text()
     assert "partial-approvers.json" not in text
     assert "approver_actor_ids" not in text
     assert "install_uaudit_delivery_helper \"$team_root\"" in text
     assert 'cp "$source" "$destination"' in text
-    assert 'rm -f "$install_manifest" "$pending_install"' in text
+    assert "UAudit delivery helper installed directly" not in text
+    assert "adopted manifest-less UAudit delivery helper" in text
+    assert 'verify-install --manifest "$install_manifest"' in text
 
 
 def test_uaudit_codex_agents_get_an_explicit_supported_model_when_unset():
