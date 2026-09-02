@@ -26,6 +26,7 @@ SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 OWNER_RE = re.compile(r"^Glitcherry[A-Za-z0-9]+$")
 RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 SHA_RE = re.compile(r"^[0-9a-fA-F]{7,64}$")
+FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 TERMINAL_PHASES = {"cleaned", "cancelled"}
 MAX_REJECTIONS = 3
 CTO = "GlitcherryCTO"
@@ -372,6 +373,7 @@ def _create(args: argparse.Namespace) -> dict[str, Any]:
             "control_branch": None,
             "control_merge_sha": None,
             "recovery": [],
+            "checkpoint_adoptions": [],
             "recovery_resume_owner": None,
             "recovery_resume_phase": None,
             "created_at": _iso(_now()),
@@ -680,6 +682,133 @@ def _recover(args: argparse.Namespace) -> dict[str, Any]:
         return state
 
 
+def _adopt_recovery_checkpoint(args: argparse.Namespace) -> dict[str, Any]:
+    _, _, worktree_root, state_root, _, _, _ = _context(args)
+    operator = _validate_owner(args.operator)
+    operator_run_id = _validate_run_id(args.run_id)
+    evidence = args.evidence.strip()
+    old_head = args.expected_old_head
+    new_head = args.new_head
+    if operator != CTO:
+        raise ContractError("only GlitcherryCTO may adopt a recovery checkpoint")
+    if len(evidence) < 12:
+        raise ContractError("checkpoint adoption requires bounded human evidence")
+    if not FULL_SHA_RE.fullmatch(old_head) or not FULL_SHA_RE.fullmatch(new_head):
+        raise ContractError("checkpoint adoption requires full lowercase commit SHAs")
+    if old_head == new_head:
+        raise ContractError("recovery checkpoint must advance HEAD")
+
+    state_path = _state_path(state_root, args.issue_key)
+    with _state_lock(state_path):
+        state = _read_state(state_path)
+        if (
+            state.get("phase") != "recovery"
+            or state.get("expected_owner") != CTO
+            or state.get("lease") is not None
+        ):
+            raise ContractError(
+                "checkpoint adoption requires unleased CTO recovery state"
+            )
+        if any(
+            state.get(field)
+            for field in ("android_merge_sha", "control_merge_sha", "cleaned_at")
+        ):
+            raise ContractError(
+                "checkpoint adoption is forbidden after merge or cleanup starts"
+            )
+        if state.get("head_sha") != old_head:
+            raise ContractError("expected old HEAD does not match controller state")
+
+        recovery = state.get("recovery")
+        if (
+            not isinstance(recovery, list)
+            or not recovery
+            or not isinstance(recovery[-1], dict)
+        ):
+            raise ContractError(
+                "checkpoint adoption requires exact-run recovery evidence"
+            )
+        latest_recovery = recovery[-1]
+        recovered_owner = latest_recovery.get("owner")
+        recovered_run_id = latest_recovery.get("run_id")
+        recovery_recorded_at = latest_recovery.get("recorded_at")
+        recovery_phase = state.get("recovery_resume_phase")
+        if (
+            recovered_owner not in IMPLEMENTERS
+            or recovered_owner != state.get("primary_implementer")
+            or recovered_owner != state.get("recovery_resume_owner")
+            or not isinstance(recovered_run_id, str)
+            or not isinstance(recovery_recorded_at, str)
+            or recovery_phase
+            not in {
+                "implementation",
+                "implementation_fix",
+                IMPLEMENTATION_RECOVERY_PHASE,
+            }
+        ):
+            raise ContractError(
+                "recovery record does not identify the primary implementation path"
+            )
+
+        adoptions = state.get("checkpoint_adoptions", [])
+        if not isinstance(adoptions, list):
+            raise ContractError("checkpoint adoption audit state is invalid")
+        if any(
+            isinstance(adoption, dict)
+            and adoption.get("recovery_recorded_at") == recovery_recorded_at
+            and adoption.get("recovered_run_id") == recovered_run_id
+            for adoption in adoptions
+        ):
+            raise ContractError("latest recovery record already adopted a checkpoint")
+
+        head = _verify_worktree(state, worktree_root)
+        if head != new_head:
+            raise ContractError("new HEAD does not match the clean task worktree")
+        worktree = _worktree_path(state, worktree_root)
+        if (
+            _git(
+                worktree,
+                "merge-base",
+                "--is-ancestor",
+                old_head,
+                new_head,
+                check=False,
+            ).returncode
+            != 0
+        ):
+            raise ContractError(
+                "recovery checkpoint is not a descendant of recorded HEAD"
+            )
+        merge_commits = _git(
+            worktree, "rev-list", "--merges", f"{old_head}..{new_head}"
+        )
+        if merge_commits.stdout.strip():
+            raise ContractError("recovery checkpoint range contains a merge commit")
+        if _verify_worktree(state, worktree_root) != new_head:
+            raise ContractError("task worktree changed during checkpoint validation")
+
+        adopted_at = _iso(_now())
+        adoptions.append(
+            {
+                "old_head_sha": old_head,
+                "new_head_sha": new_head,
+                "operator": operator,
+                "operator_run_id": operator_run_id,
+                "evidence": evidence,
+                "recovered_owner": recovered_owner,
+                "recovered_run_id": recovered_run_id,
+                "recovery_phase": recovery_phase,
+                "recovery_recorded_at": recovery_recorded_at,
+                "recorded_at": adopted_at,
+            }
+        )
+        state["checkpoint_adoptions"] = adoptions
+        state["head_sha"] = new_head
+        state["updated_at"] = adopted_at
+        _write_state(state_path, state)
+        return state
+
+
 def _commit_is_on_develop(repo: Path, sha: str) -> None:
     if not SHA_RE.fullmatch(sha):
         raise ContractError("merge SHA has an unsafe format")
@@ -848,6 +977,14 @@ def _parser() -> argparse.ArgumentParser:
     recover.add_argument("--operator", required=True)
     recover.add_argument("--evidence", required=True)
 
+    adopt_checkpoint = sub.add_parser("adopt-recovery-checkpoint")
+    adopt_checkpoint.add_argument("--issue-key", required=True)
+    adopt_checkpoint.add_argument("--operator", required=True)
+    adopt_checkpoint.add_argument("--run-id", required=True)
+    adopt_checkpoint.add_argument("--expected-old-head", required=True)
+    adopt_checkpoint.add_argument("--new-head", required=True)
+    adopt_checkpoint.add_argument("--evidence", required=True)
+
     merge = sub.add_parser("record-merge")
     _add_identity(merge)
     merge.add_argument("--kind", choices=("android", "control"), required=True)
@@ -874,6 +1011,7 @@ def main() -> int:
         "block": _block,
         "resume-blocked": _resume_blocked,
         "recover": _recover,
+        "adopt-recovery-checkpoint": _adopt_recovery_checkpoint,
         "record-merge": _record_merge,
         "cleanup": _cleanup,
         "show": _show,
