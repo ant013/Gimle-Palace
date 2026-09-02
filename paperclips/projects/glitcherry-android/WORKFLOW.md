@@ -83,6 +83,34 @@ the exact `company -> agent -> run -> PID`, prove the prior run stopped or was
 terminated, preserve dirty/unmerged state, record evidence, and resume the same
 slice. Never use broad process-name matching or broad `pkill`.
 
+## Human decision pause — do not controller-block
+
+Needing a product or technical decision from the Human Engineering Lead is a
+pause, not a terminal controller failure. Do not call the controller `block`
+command merely to wait for a Board answer.
+
+1. The current owner records the concrete question and evidence. If its worktree
+   is dirty, only the primary implementer creates one clearly named local WIP
+   commit containing the current slice work. Do not push or open a PR.
+2. Hand the clean exact HEAD to `GlitcherryCTO / plan_revision` in the same
+   issue, branch, and worktree.
+3. The CTO claims that HEAD, creates the structured Board interaction, then
+   releases its lease by handing the unchanged HEAD to itself in
+   `plan_revision`. Set the Paperclip child to `in_review` and stop.
+4. The answered interaction wakes the same CTO-owned child. The new CTO run
+   claims the same worktree, applies the decision to the existing plan, commits,
+   and routes the exact plan HEAD through independent review before returning
+   implementation to the recorded primary implementer.
+
+Use controller `block` only when there is genuinely no safe next transition.
+When a previously blocked decision is later resolved, never edit controller JSON
+or the Paperclip database and never create a replacement child or worktree. CTO
+uses `resume-blocked` with the decision evidence. A clean worktree resumes to
+`GlitcherryCTO / plan_revision`; a dirty worktree resumes only to its recorded
+primary implementer in `implementation_recovery`. That implementer preserves the
+files in one local WIP commit and hands the resulting clean HEAD to
+`GlitcherryCTO / plan_revision`.
+
 ## Six child phases
 
 ### Phase 1 — Create worktree and materialize spec
