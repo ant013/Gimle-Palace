@@ -160,6 +160,50 @@ def _claim(
     )
 
 
+def _block(
+    fixture: dict[str, Path], owner: str, run_id: str
+) -> subprocess.CompletedProcess[str]:
+    return _run(
+        fixture,
+        "block",
+        "--issue-key",
+        "GLA-123",
+        "--owner",
+        owner,
+        "--run-id",
+        run_id,
+        "--reason",
+        "LOCAL_BLOCKED: bounded fixture decision is required",
+    )
+
+
+def _resume_blocked(
+    fixture: dict[str, Path],
+    next_owner: str,
+    next_phase: str,
+    *,
+    operator: str = "GlitcherryCTO",
+    run_id: str = "run-cto-resume",
+    evidence: str = "answered interaction fixture-decision-123",
+) -> subprocess.CompletedProcess[str]:
+    return _run(
+        fixture,
+        "resume-blocked",
+        "--issue-key",
+        "GLA-123",
+        "--operator",
+        operator,
+        "--run-id",
+        run_id,
+        "--next-owner",
+        next_owner,
+        "--next-phase",
+        next_phase,
+        "--evidence",
+        evidence,
+    )
+
+
 def _route_to_implementation(
     fixture: dict[str, Path],
 ) -> tuple[Path, str]:
@@ -328,6 +372,173 @@ def test_recovery_requires_exact_run_and_preserves_dirty_work(tmp_path: Path) ->
     assert state["phase"] == "recovery"
     assert state["expected_owner"] == "GlitcherryCTO"
     assert state["recovery_resume_phase"] == "spec"
+
+
+def test_clean_blocked_slice_resumes_to_cto_plan_revision(tmp_path: Path) -> None:
+    fixture = _fixture(tmp_path)
+    created = _create(fixture)
+
+    blocked = _block(fixture, "GlitcherryCTO", "run-cto-0")
+    assert blocked.returncode == 0, blocked.stderr
+    state = _state(fixture)
+    assert state["phase"] == "blocked"
+    assert state["blocked_from_phase"] == "spec"
+    assert state["blocked_by_owner"] == "GlitcherryCTO"
+    assert state["blocked_head_sha"] == created["head_sha"]
+
+    resumed = _resume_blocked(fixture, "GlitcherryCTO", "plan_revision")
+    assert resumed.returncode == 0, resumed.stderr
+    state = _state(fixture)
+    assert state["phase"] == "plan_revision"
+    assert state["expected_owner"] == "GlitcherryCTO"
+    assert state["lease"] is None
+    assert state["block_reason"].startswith("LOCAL_BLOCKED:")
+    assert state["blocked_resumes"][-1]["dirty"] is False
+    assert state["blocked_resumes"][-1]["operator"] == "GlitcherryCTO"
+    assert state["blocked_resumes"][-1]["operator_run_id"] == "run-cto-resume"
+
+    claimed = _claim(fixture, "GlitcherryCTO", "run-cto-plan-revision")
+    assert claimed.returncode == 0, claimed.stderr
+
+
+def test_dirty_blocked_slice_requires_primary_implementer_recovery(
+    tmp_path: Path,
+) -> None:
+    fixture = _fixture(tmp_path)
+    _create(fixture)
+    worktree, engineer_run = _route_to_implementation(fixture)
+    dirty = worktree / "unfinished.txt"
+    dirty.write_text("must survive blocked resume\n")
+
+    blocked = _block(fixture, "GlitcherryAndroidEngineer", engineer_run)
+    assert blocked.returncode == 0, blocked.stderr
+    state_path = fixture["states"] / "GLA-123.json"
+    blocked_state = state_path.read_bytes()
+
+    wrong_owner = _resume_blocked(fixture, "GlitcherryCTO", "plan_revision")
+    assert wrong_owner.returncode != 0
+    assert "primary implementer" in wrong_owner.stderr.lower()
+    assert state_path.read_bytes() == blocked_state
+    assert dirty.read_text() == "must survive blocked resume\n"
+
+    resumed = _resume_blocked(
+        fixture,
+        "GlitcherryAndroidEngineer",
+        "implementation_recovery",
+    )
+    assert resumed.returncode == 0, resumed.stderr
+    state = _state(fixture)
+    assert state["phase"] == "implementation_recovery"
+    assert state["expected_owner"] == "GlitcherryAndroidEngineer"
+    assert state["lease"] is None
+    assert state["blocked_resumes"][-1]["dirty"] is True
+    assert dirty.read_text() == "must survive blocked resume\n"
+
+    wrong_claim = _claim(fixture, "GlitcherryCTO", "run-cto-wrong-owner")
+    assert wrong_claim.returncode != 0
+    claimed = _claim(
+        fixture,
+        "GlitcherryAndroidEngineer",
+        "run-engineer-recovery",
+    )
+    assert claimed.returncode == 0, claimed.stderr
+    assert dirty.read_text() == "must survive blocked resume\n"
+
+    dirty_handoff = _handoff(
+        fixture,
+        "GlitcherryAndroidEngineer",
+        "run-engineer-recovery",
+        "GlitcherryCTO",
+        "plan_revision",
+    )
+    assert dirty_handoff.returncode != 0
+    assert "dirty" in dirty_handoff.stderr.lower()
+
+    _git("add", "unfinished.txt", cwd=worktree)
+    _git("commit", "-m", "GLA-123 preserve recovery work", cwd=worktree)
+    handed_off = _handoff(
+        fixture,
+        "GlitcherryAndroidEngineer",
+        "run-engineer-recovery",
+        "GlitcherryCTO",
+        "plan_revision",
+    )
+    assert handed_off.returncode == 0, handed_off.stderr
+    assert _claim(
+        fixture,
+        "GlitcherryCTO",
+        "run-cto-plan-revision",
+    ).returncode == 0
+
+
+def test_blocked_resume_rejections_leave_state_unchanged(tmp_path: Path) -> None:
+    fixture = _fixture(tmp_path)
+    _create(fixture)
+    assert _block(fixture, "GlitcherryCTO", "run-cto-0").returncode == 0
+    state_path = fixture["states"] / "GLA-123.json"
+    blocked_state = state_path.read_bytes()
+
+    attempts = (
+        _resume_blocked(
+            fixture,
+            "GlitcherryCTO",
+            "plan_revision",
+            operator="GlitcherryCodeReviewer",
+        ),
+        _resume_blocked(
+            fixture,
+            "GlitcherryCTO",
+            "plan_revision",
+            run_id="unsafe run id",
+        ),
+        _resume_blocked(
+            fixture,
+            "GlitcherryCTO",
+            "plan_revision",
+            evidence="too short",
+        ),
+        _resume_blocked(
+            fixture,
+            "GlitcherryCodeReviewer",
+            "plan_revision",
+        ),
+    )
+
+    assert all(attempt.returncode != 0 for attempt in attempts)
+    assert state_path.read_bytes() == blocked_state
+
+
+def test_blocked_resume_rejects_changed_head(tmp_path: Path) -> None:
+    fixture = _fixture(tmp_path)
+    created = _create(fixture)
+    assert _block(fixture, "GlitcherryCTO", "run-cto-0").returncode == 0
+    state_path = fixture["states"] / "GLA-123.json"
+    blocked_state = state_path.read_bytes()
+    worktree = Path(created["worktree_path"])
+
+    (worktree / "unexpected.txt").write_text("unexpected commit\n")
+    _git("add", "unexpected.txt", cwd=worktree)
+    _git("commit", "-m", "unexpected head", cwd=worktree)
+    changed_head = _resume_blocked(fixture, "GlitcherryCTO", "plan_revision")
+    assert changed_head.returncode != 0
+    assert "head" in changed_head.stderr.lower()
+    assert state_path.read_bytes() == blocked_state
+
+
+def test_blocked_resume_rejects_started_merge_state(tmp_path: Path) -> None:
+    fixture = _fixture(tmp_path)
+    _create(fixture)
+    assert _block(fixture, "GlitcherryCTO", "run-cto-0").returncode == 0
+    state_path = fixture["states"] / "GLA-123.json"
+    state = _state(fixture)
+    state["android_merge_sha"] = "1234567"
+    state_path.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n")
+    state_path.chmod(0o600)
+    merge_state = state_path.read_bytes()
+    merging = _resume_blocked(fixture, "GlitcherryCTO", "plan_revision")
+    assert merging.returncode != 0
+    assert "merge or cleanup" in merging.stderr.lower()
+    assert state_path.read_bytes() == merge_state
 
 
 def test_review_rejection_ceiling_stops_fourth_cycle(tmp_path: Path) -> None:

@@ -31,6 +31,8 @@ MAX_REJECTIONS = 3
 CTO = "GlitcherryCTO"
 REVIEWER = "GlitcherryCodeReviewer"
 IMPLEMENTERS = {"GlitcherryAndroidEngineer", "GlitcherryMediaPipelineEngineer"}
+IMPLEMENTATION_RECOVERY_PHASE = "implementation_recovery"
+PLAN_REVISION_PHASE = "plan_revision"
 
 
 class ContractError(RuntimeError):
@@ -399,7 +401,10 @@ def _claim(args: argparse.Namespace) -> dict[str, Any]:
             raise ContractError("active lease is held by another owner or run")
         if state.get("expected_owner") != owner:
             raise ContractError("claim owner does not match expected owner")
-        head = _verify_worktree(state, worktree_root)
+        dirty_recovery = state["phase"] == IMPLEMENTATION_RECOVERY_PHASE
+        if dirty_recovery and state.get("primary_implementer") != owner:
+            raise ContractError("dirty recovery is reserved for the primary implementer")
+        head = _verify_worktree(state, worktree_root, clean=not dirty_recovery)
         if head != state["head_sha"]:
             raise ContractError("task worktree HEAD differs from handed-off HEAD")
         state["lease"] = _new_lease(owner, run_id, lease_seconds)
@@ -431,6 +436,15 @@ def _handoff(args: argparse.Namespace) -> dict[str, Any]:
     with _state_lock(state_path):
         state = _read_state(state_path)
         _require_lease(state, owner, run_id)
+        if state["phase"] == IMPLEMENTATION_RECOVERY_PHASE and (
+            owner != state.get("primary_implementer")
+            or next_owner != CTO
+            or args.next_phase != PLAN_REVISION_PHASE
+        ):
+            raise ContractError(
+                "implementation recovery must hand off from the primary implementer "
+                "to GlitcherryCTO plan revision"
+            )
         head = _verify_worktree(state, worktree_root)
         if state["phase"] == "implementation_fix" and head == state.get("last_rejected_head"):
             raise ContractError("review correction handoff requires a new commit")
@@ -516,7 +530,7 @@ def _approve(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _block(args: argparse.Namespace) -> dict[str, Any]:
-    _, _, _, state_root, _, _, _ = _context(args)
+    _, _, worktree_root, state_root, _, _, _ = _context(args)
     owner = _validate_owner(args.owner)
     run_id = _validate_run_id(args.run_id)
     if len(args.reason.strip()) < 8:
@@ -525,13 +539,102 @@ def _block(args: argparse.Namespace) -> dict[str, Any]:
     with _state_lock(state_path):
         state = _read_state(state_path)
         _require_lease(state, owner, run_id)
+        head = _verify_worktree(state, worktree_root, clean=False)
+        if head != state["head_sha"]:
+            raise ContractError("task worktree HEAD differs from recorded HEAD")
+        blocked_at = _iso(_now())
+        state.setdefault("block_history", []).append(
+            {
+                "from_phase": state["phase"],
+                "owner": owner,
+                "run_id": run_id,
+                "head_sha": head,
+                "reason": args.reason.strip(),
+                "recorded_at": blocked_at,
+            }
+        )
         state.update(
             {
                 "phase": "blocked",
                 "expected_owner": None,
                 "lease": None,
                 "block_reason": args.reason.strip(),
-                "updated_at": _iso(_now()),
+                "blocked_from_phase": state["phase"],
+                "blocked_by_owner": owner,
+                "blocked_head_sha": head,
+                "updated_at": blocked_at,
+            }
+        )
+        _write_state(state_path, state)
+        return state
+
+
+def _resume_blocked(args: argparse.Namespace) -> dict[str, Any]:
+    _, _, worktree_root, state_root, _, _, _ = _context(args)
+    operator = _validate_owner(args.operator)
+    operator_run_id = _validate_run_id(args.run_id)
+    next_owner = _validate_owner(args.next_owner)
+    evidence = args.evidence.strip()
+    if operator != CTO:
+        raise ContractError("only GlitcherryCTO may resume a blocked slice")
+    if len(evidence) < 12:
+        raise ContractError("blocked resume requires resolved-decision evidence")
+
+    state_path = _state_path(state_root, args.issue_key)
+    with _state_lock(state_path):
+        state = _read_state(state_path)
+        if state["phase"] != "blocked":
+            raise ContractError("only a blocked slice may be resumed")
+        if state.get("expected_owner") is not None or state.get("lease") is not None:
+            raise ContractError("blocked slice still has an owner or lease")
+        if any(
+            state.get(field)
+            for field in ("android_merge_sha", "control_merge_sha", "cleaned_at")
+        ):
+            raise ContractError("blocked slice merge or cleanup has already started")
+
+        head = _verify_worktree(state, worktree_root, clean=False)
+        if head != state["head_sha"]:
+            raise ContractError("task worktree HEAD differs from recorded HEAD")
+        worktree = _worktree_path(state, worktree_root)
+        dirty = bool(
+            _git(worktree, "status", "--porcelain", "--untracked-files=all").stdout
+        )
+
+        if dirty:
+            if (
+                next_owner != state.get("primary_implementer")
+                or args.next_phase != IMPLEMENTATION_RECOVERY_PHASE
+            ):
+                raise ContractError(
+                    "dirty blocked worktree must resume to its primary implementer "
+                    "for implementation recovery"
+                )
+        elif next_owner != CTO or args.next_phase != PLAN_REVISION_PHASE:
+            raise ContractError(
+                "clean blocked worktree must resume to GlitcherryCTO plan revision"
+            )
+
+        resumed_at = _iso(_now())
+        state.setdefault("blocked_resumes", []).append(
+            {
+                "block_reason": state.get("block_reason"),
+                "operator": operator,
+                "operator_run_id": operator_run_id,
+                "evidence": evidence,
+                "dirty": dirty,
+                "next_owner": next_owner,
+                "next_phase": args.next_phase,
+                "head_sha": head,
+                "recorded_at": resumed_at,
+            }
+        )
+        state.update(
+            {
+                "phase": args.next_phase,
+                "expected_owner": next_owner,
+                "lease": None,
+                "updated_at": resumed_at,
             }
         )
         _write_state(state_path, state)
@@ -729,6 +832,14 @@ def _parser() -> argparse.ArgumentParser:
     _add_identity(block)
     block.add_argument("--reason", required=True)
 
+    resume_blocked = sub.add_parser("resume-blocked")
+    resume_blocked.add_argument("--issue-key", required=True)
+    resume_blocked.add_argument("--operator", required=True)
+    resume_blocked.add_argument("--run-id", required=True)
+    resume_blocked.add_argument("--next-owner", required=True)
+    resume_blocked.add_argument("--next-phase", required=True)
+    resume_blocked.add_argument("--evidence", required=True)
+
     recover = sub.add_parser("recover")
     recover.add_argument("--issue-key", required=True)
     recover.add_argument("--expected-owner", required=True)
@@ -761,6 +872,7 @@ def main() -> int:
         "reject": _reject,
         "approve": _approve,
         "block": _block,
+        "resume-blocked": _resume_blocked,
         "recover": _recover,
         "record-merge": _record_merge,
         "cleanup": _cleanup,
