@@ -102,6 +102,14 @@ command merely to wait for a Board answer.
    and routes the exact plan HEAD through independent review before returning
    implementation to the recorded primary implementer.
 
+An answered structured Human Engineering Lead delegation may authorize a named,
+bounded correction class for CTO plus independent Code Reviewer. A plan revision
+inside that delegation proceeds without duplicate confirmation only when product
+behavior, roadmap or slice scope/order, production dependency, toolchain, or API
+floor, quality threshold or pass/fail meaning, and every accepted ADR or
+architecture decision are unchanged. Ambiguity returns one structured question
+to the Human Engineering Lead; agents never broaden the delegation themselves.
+
 Use controller `block` only when there is genuinely no safe next transition.
 When a previously blocked decision is later resolved, never edit controller JSON
 or the Paperclip database and never create a replacement child or worktree. CTO
@@ -155,11 +163,38 @@ Human Engineering Lead.
 
 Owners in sequence: `GlitcherryCTO`, then `GlitcherryCodeReviewer`.
 
+The tracked `docs/plans/...` file at the controller-recorded task HEAD is the
+slice implementation authority. The Paperclip `plan` document is a
+byte-identical mirror of those exact bytes, never a separately authored source
+of requirements.
+
 The CTO claims the same worktree, adds a plan mapping every acceptance criterion
-to ownership, implementation, tests, verification, and commits, commits locally,
-and hands the exact HEAD to the reviewer. The reviewer stays read-only and either
-approves the exact plan HEAD for one named implementer or returns one consolidated
-finding list to the CTO.
+to ownership, implementation, tests, and verification, then commits locally.
+Before every `plan_review` handoff the CTO must prove the worktree clean, record
+the exact Android HEAD, hash the tracked plan bytes, and create or update the
+Paperclip mirror using the current `baseRevisionId`. It must read back the exact
+created revision and prove the mirrored-body SHA-256 equals the tracked-plan
+SHA-256. The handoff evidence records Android HEAD, tracked-plan SHA-256,
+mirrored-body SHA-256, and the Paperclip revision ID and revision number. An API
+conflict, stale `baseRevisionId`, missing read-back, hash mismatch, or second
+writer stops the handoff; it never creates a replacement plan or issue.
+
+Exact-revision Human Engineering Lead confirmation is mandatory when a revision
+introduces or changes product behavior, roadmap or slice scope/order, a
+production dependency, toolchain, or API floor, a quality threshold or
+pass/fail meaning, an accepted ADR or architecture decision, or another choice
+reserved to the Human Engineering Lead. No additional confirmation is required
+when a structured Human Engineering Lead delegation explicitly covers the named
+correction, the revision remains within it, all those decision dimensions are
+unchanged, the mirror is byte-identical, and the independent reviewer approves
+the exact changed HEAD.
+
+The reviewer stays read-only. It first verifies the exact HEAD/hash/revision
+tuple and returns an absent, stale, or divergent mirror as one consolidated
+process finding to CTO before technical review. Once synchronized, it either
+approves the exact plan HEAD for one named implementer or returns one
+consolidated technical finding list. It must not add a duplicate human gate when
+the recorded delegation classifier above is fully satisfied.
 
 ### Phase 4 — Implementation by exactly one engineer
 
