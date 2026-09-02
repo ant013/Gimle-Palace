@@ -53,7 +53,7 @@ Only `UAudit forced full-range audit` with `mode: forced_full_range`, `daily_lim
 
 On `mode=daily_aggregate`, require bound v1 `code.findings.json`, `security.findings.json`, `crypto.findings.json`, `infra.findings.json`, `qa-verify.findings.json`; research only if invoked. Human MD never supplies counts.
 
-Run `python3 "$HELPER" aggregate --run-dir "$RUN"` (`--research-required` iff invoked); never count/render. `complete+0` is ready as a message. Other daily/forced-full runs write canonical findings, Russian `audit-final.ru.md`, and `translation-input.json`, then return `translation_required` with no delivery summary; assign `a881b5bd-f1ef-4023-bdd7-5d9b567642d0` `mode=daily_audit_translation`.
+Run `python3 "$HELPER" aggregate --run-dir "$RUN"` (`--research-required` iff invoked); never count/render. Only `complete+0+0 limitations` is ready as a message. Any limitation requires the report/document path. Other daily/forced-full runs write canonical findings, Russian `audit-final.ru.md`, and `translation-input.json`, then return `translation_required` with no delivery summary; assign `a881b5bd-f1ef-4023-bdd7-5d9b567642d0` `mode=daily_audit_translation`.
 
 On `mode=daily_finalize_translation`, run `python3 "$HELPER" finalize-translation --run-dir "$RUN"`; it validates English and publishes summary last. When ready, atomically write v1 `$RUN/delivery-handoff.json` with `schema_version,delivery_contract,run_dir,delivery_summary,issue_identifier,platform,audit_kind,source_ref`; run `python3 "$HELPER" verify-payload --run-dir "$RUN" --handoff "$RUN/delivery-handoff.json" --expected-mode <message|document>`, assign `339e9d3f-48c0-4348-a8da-5337e6f29491` `mode=daily_delivery`.
 

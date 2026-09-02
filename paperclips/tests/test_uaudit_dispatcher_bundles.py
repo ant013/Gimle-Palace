@@ -394,6 +394,36 @@ def test_ios_infra_bundle_treats_known_imac_toolchain_gap_as_non_material():
         assert "Never use `blocked` merely" in text
 
 
+def test_ios_review_bundles_surface_warnings_and_trace_changed_behavior():
+    qa_paths = (
+        REPO / "paperclips/projects/uaudit/overlays/codex/UWIQAEngineer.md",
+        REPO / "paperclips/dist/uaudit/codex/UWIQAEngineer.md",
+    )
+    for path in qa_paths:
+        text = path.read_text()
+        assert "Missing regression coverage for behavior changed by the audited range" in text
+        assert "is an audit finding, not an environment limitation" in text
+
+    swift_paths = (
+        REPO / "paperclips/projects/uaudit/overlays/codex/UWISwiftAuditor.md",
+        REPO / "paperclips/dist/uaudit/codex/UWISwiftAuditor.md",
+    )
+    for path in swift_paths:
+        text = path.read_text()
+        assert "downstream user-visible formatting and localization" in text
+        assert "new parameter or filter to its in-tree callers" in text
+        assert "record unavailable runtime execution as a non-material warning" in text
+
+    dispatcher_paths = (
+        REPO / "paperclips/projects/uaudit/roles-codex/uwi-platform-dispatcher.md",
+        REPO / "paperclips/dist/uaudit/codex/UWICTO.md",
+    )
+    for path in dispatcher_paths:
+        text = path.read_text()
+        assert "complete+0+0 limitations" in text
+        assert "Any limitation requires the report/document path" in text
+
+
 def test_pr_coordinators_use_helper_owned_russian_delivery_contract():
     expected = {
         "UWISwiftAuditor": "uaudit-swift-audit-specialist",

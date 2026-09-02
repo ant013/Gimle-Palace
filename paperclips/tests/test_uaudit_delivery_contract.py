@@ -482,15 +482,15 @@ def test_complete_zero_removes_stale_reports_and_uses_message_receipt(tmp_path: 
     assert stored["route_source"] == "file_route"
 
 
-def test_ios_non_material_runtime_limitation_delivers_and_advances_cursor(tmp_path: Path):
+def test_ios_non_material_runtime_warning_is_delivered_and_advances_cursor(tmp_path: Path):
+    warning = "На старом iMac недоступны полный Xcode и проверка на устройстве."
     fixture = prepare_run(
         tmp_path,
         kind="daily_delta",
-        findings={"qa_verify": [finding(runtime=True)]},
         limitations={
             "qa_verify": [
                 {
-                    "text": "На старом iMac недоступны полный Xcode и проверка на устройстве.",
+                    "text": warning,
                     "material": False,
                 }
             ]
@@ -499,8 +499,16 @@ def test_ios_non_material_runtime_limitation_delivers_and_advances_cursor(tmp_pa
 
     result = aggregate(fixture)
     assert result["audit_status"] == "complete"
-    assert result["finding_count"] == 1
+    assert result["finding_count"] == 0
     assert result["mode"] == "document"
+    summary = read_json(fixture["run"] / "delivery-summary.json")
+    assert summary["warning_count"] == 1
+    telegram = (fixture["run"] / "telegram-summary.txt").read_text()
+    assert "Предупреждения: 1" in telegram
+    assert "Итоговый отчёт не формировался" not in telegram
+    report = (fixture["run"] / "audit-final.ru.md").read_text()
+    assert "## Предупреждения" in report
+    assert warning in report
     record(fixture, "document")
 
     cursor = tmp_path / "state" / "ios-version-audit.json"
@@ -534,6 +542,66 @@ def test_ios_non_material_runtime_limitation_delivers_and_advances_cursor(tmp_pa
         RECONCILED_AT,
     )
     assert resumed["status"] == "already_applied"
+
+
+def test_legacy_complete_zero_warning_summary_remains_verifiable(tmp_path: Path):
+    fixture = prepare_run(
+        tmp_path,
+        kind="daily_delta",
+        limitations={
+            "qa_verify": [
+                {
+                    "text": "На старом iMac недоступна проверка на устройстве.",
+                    "material": False,
+                }
+            ]
+        },
+    )
+    aggregate(fixture)
+    run = fixture["run"]
+    summary = read_json(run / "delivery-summary.json")
+    summary.pop("warning_count")
+    summary["report"] = None
+    summary["english_report"] = None
+    for name in (
+        "audit-final.ru.md",
+        "audit-final.en.md",
+        "translation-input.json",
+        "translation-result.json",
+    ):
+        (run / name).unlink(missing_ok=True)
+    branch = fixture["binding"]["source_ref"]["branch"]
+    legacy_telegram = (
+        f"Аудит iOS {branch} {BASE_SHA[:7]}..{HEAD_SHA[:7]} завершён\n"
+        "Найдено замечаний: 0\n"
+        "Критические: 0 · Блокирующие: 0 · Важные: 0 · Наблюдения: 0\n"
+        "Вердикт: можно принимать\n"
+        "Итоговый отчёт не формировался\n"
+    )
+    (run / "telegram-summary.txt").write_text(legacy_telegram)
+    summary["telegram_text"]["sha256"] = sha256_path(run / "telegram-summary.txt")
+    write_json(run / "delivery-summary.json", summary)
+    write_json(
+        run / "status/aggregate.done",
+        {
+            "schema_version": 1,
+            "summary_sha256": sha256_path(run / "delivery-summary.json"),
+            "run_binding_sha256": summary["run_binding_sha256"],
+        },
+    )
+
+    handoff = write_handoff(fixture)
+    payload = call(
+        fixture["helper"],
+        "verify-payload",
+        "--run-dir",
+        run,
+        "--handoff",
+        handoff,
+        "--expected-mode",
+        "message",
+    )
+    assert payload["mode"] == "message"
 
 
 def test_daily_aggregate_streams_diff_larger_than_generic_file_limit(tmp_path: Path):
@@ -623,6 +691,7 @@ def test_existing_single_language_daily_summary_remains_reconcilable(tmp_path: P
     (run / "translation-input.json").unlink()
     (run / "translation-result.json").unlink()
     summary.pop("english_report")
+    summary.pop("warning_count")
     summary["report"] = {"file": "audit-final.md", "sha256": sha256_path(run / "audit-final.md")}
     write_json(run / "delivery-summary.json", summary)
     summary_sha = sha256_path(run / "delivery-summary.json")
