@@ -128,6 +128,23 @@ def test_explicit_paperclip_identity_overrides_profile_fallback():
     assert "profile fallback" in text.lower()
 
 
+def test_optional_recovery_model_profile_preserves_reasoning_and_runtime_config():
+    text = SCRIPT.read_text()
+
+    assert "recovery.model" in text
+    assert "preserve_primary_reasoning_effort: true" in text
+    assert "--arg effort \"$agent_effort\"" in text
+    assert "modelProfiles: {cheap: $recoveryProfile}" in text
+    assert ".runtimeConfig.modelProfiles.cheap // null" in text
+    assert "(.runtimeConfig // {})" in text
+    assert ".modelProfiles = ((.modelProfiles // {}) + {cheap: $profile})" in text
+    assert "agent_recovery_profile_reconcile" in text
+
+    managed_start = text.index("managed_config_filter='")
+    managed_end = text.index("current_managed=", managed_start)
+    assert "runtimeConfig" not in text[managed_start:managed_end]
+
+
 def test_canary_cto_uses_workflow_role():
     text = SCRIPT.read_text()
     assert 'workflow_role == "inner_orchestrator"' in text

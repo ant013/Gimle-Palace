@@ -45,6 +45,10 @@ def test_glitcherry_manifest_is_clean_valid_and_workspace_rooted():
         "bypass_approvals_and_sandbox": True,
         "runtime_env": {"PAPERCLIP_API_URL": "paperclip_runtime_api_url"},
     }
+    assert data["recovery"] == {
+        "model": "gpt-5.6-terra",
+        "preserve_primary_reasoning_effort": True,
+    }
     assert data["smoke"] == {"e2e_timeout_seconds": 360}
     required_directories = set(data["host_paths"]["required_existing"])
     assert "slice_controller_path" not in required_directories
@@ -89,7 +93,9 @@ def test_glitcherry_roster_is_exactly_the_approved_six_agents():
         role, icon, profile, workflow_role, effort, reports_to = expected[agent["agent_name"]]
         assert agent["target"] == "codex"
         assert agent["model"] == "gpt-5.6-sol"
+        assert not agent["model"].startswith("gpt-5.3")
         assert agent["modelReasoningEffort"] == effort
+        assert agent["modelReasoningEffort"] != "low"
         assert agent["paperclip_role"] == role
         assert agent["paperclip_icon"] == icon
         assert agent["profile"] == profile

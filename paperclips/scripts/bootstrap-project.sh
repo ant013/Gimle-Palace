@@ -616,6 +616,20 @@ for agent_name in $hire_order; do
     end
   ')
   agent_effort=$(echo "$agent_meta" | jq -r '.modelReasoningEffort // "medium"')
+  recovery_model=$(yq -r '.recovery.model // ""' "$manifest")
+  recovery_profile='null'
+  if [ -n "$recovery_model" ] && [ "$recovery_model" != "null" ]; then
+    [[ "$recovery_model" =~ ^[A-Za-z0-9._-]+$ ]] || \
+      die "recovery.model contains unsupported characters"
+    recovery_preserve_effort=$(yq -r \
+      '.recovery.preserve_primary_reasoning_effort // false' "$manifest")
+    [ "$recovery_preserve_effort" = "true" ] || \
+      die "recovery.model requires preserve_primary_reasoning_effort: true"
+    recovery_profile=$(jq -n \
+      --arg model "$recovery_model" \
+      --arg effort "$agent_effort" \
+      '{enabled:true,adapterConfig:{model:$model,modelReasoningEffort:$effort}}')
+  fi
   sandbox_mode=$(yq -r '.sandbox.mode // "legacy"' "$manifest")
   sandbox_bypass=true
   writable_roots='[]'
@@ -725,6 +739,7 @@ for agent_name in $hire_order; do
     --argjson writable "$writable_roots" \
     --argjson readonly "$read_only_roots" \
     --argjson env "$adapter_env" \
+    --argjson recoveryProfile "$recovery_profile" \
     '{
       name: $name, role: $role, title: $title, icon: $icon,
       capabilities: "default",
@@ -737,12 +752,14 @@ for agent_name in $hire_order; do
         dangerouslyBypassApprovalsAndSandbox: $bypass,
         writableRoots: $writable, sourceRootsReadOnly: $readonly, env: $env
       },
-      runtimeConfig: {
+      runtimeConfig: ({
         heartbeat: {
           enabled: false, intervalSec: 14400, wakeOnDemand: true,
           maxConcurrentRuns: 1, cooldownSec: 10
         }
-      },
+      } + (if $recoveryProfile == null then {} else {
+        modelProfiles: {cheap: $recoveryProfile}
+      } end)),
       budgetMonthlyCents: 0
     } + (if $reportsTo == "" then {} else {reportsTo: $reportsTo} end)')
 
@@ -778,6 +795,36 @@ for agent_name in $hire_order; do
         --arg n "$agent_name" --arg id "$existing" \
         '{kind:"agent_config_reconcile",name:$n,id:$id}')"
       log ok "reconciled managed config for $agent_name"
+    fi
+
+    # Paperclip requests the built-in profile key `cheap` during automatic
+    # terminal-run recovery. An opted-in project owns the actual model behind
+    # that key. Merge only this profile into the live runtime config so
+    # heartbeat settings and future unrelated Paperclip keys are preserved.
+    desired_recovery_profile=$(echo "$payload" | jq -cS \
+      '.runtimeConfig.modelProfiles.cheap // null') || \
+      die "cannot build recovery profile for existing agent $agent_name"
+    if [ "$desired_recovery_profile" != "null" ]; then
+      current_recovery_profile=$(echo "$existing_agent_config" | jq -cS \
+        '.runtimeConfig.modelProfiles.cheap // null') || \
+        die "cannot read recovery profile for existing agent $agent_name"
+      if [ "$current_recovery_profile" = "$desired_recovery_profile" ]; then
+        log info "agent $agent_name recovery model profile already current"
+      else
+        desired_runtime_config=$(echo "$existing_agent_config" | jq -c \
+          --argjson profile "$desired_recovery_profile" \
+          '(.runtimeConfig // {})
+          | .modelProfiles = ((.modelProfiles // {}) + {cheap: $profile})') || \
+          die "cannot preserve runtime config for existing agent $agent_name"
+        recovery_patch=$(jq -n --argjson runtime "$desired_runtime_config" \
+          '{runtimeConfig:$runtime}')
+        paperclip_update_agent_config "$existing" "$recovery_patch" >/dev/null || \
+          die "failed to reconcile recovery profile for existing agent $agent_name ($existing)"
+        journal_record "$journal" "$(jq -n \
+          --arg n "$agent_name" --arg id "$existing" \
+          '{kind:"agent_recovery_profile_reconcile",name:$n,id:$id}')"
+        log ok "reconciled recovery model profile for $agent_name"
+      fi
     fi
     continue
   fi
