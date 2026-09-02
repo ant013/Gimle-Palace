@@ -7,7 +7,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 
 
-def test_overlay_collection_skips_role_source_and_duplicate_agent_name(tmp_path: Path):
+def test_overlay_collection_skips_role_source(tmp_path: Path):
     sys.path.insert(0, str(REPO / "paperclips/scripts"))
     from build_project_compat import _collect_overlay_blocks
 

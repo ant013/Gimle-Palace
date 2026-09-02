@@ -149,4 +149,4 @@ def compose(
     for ov in overlay_blocks:
         sections.append(ov)
 
-    return "\n\n".join(section.rstrip("\n") for section in sections) + "\n"
+    return "\n\n".join(sections) + "\n"

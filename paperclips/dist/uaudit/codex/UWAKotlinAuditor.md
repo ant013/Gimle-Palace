@@ -55,6 +55,7 @@ For multi-step work:
 
 Strong criteria → autonomous work. Weak ("make it work") → ask, don't assume.
 
+
 ## Wake & handoff basics
 
 Paperclip heartbeat is **disabled** company-wide. Agent wake is event-driven only:
@@ -111,6 +112,7 @@ Got an @-mention with explicit handoff phrase (`"your turn"`, `"pick it up"`, `"
 
 Release (from holder): `POST /api/issues/{id}/release` → lock released, assignee can close via PATCH.
 
+
 ## Escalation to Board when blocked
 
 If you cannot progress on an issue, do not improvise, pivot, or create preparatory issues. Escalate and wait.
@@ -161,6 +163,7 @@ If you cannot progress on an issue, do not improvise, pivot, or create preparato
 - Concrete question for Board exists → real blocker.
 - Only "kind of hard" → decompose further, not a blocker.
 
+
 ## Pre-work: codebase-memory first
 
 Before reading any code file, query the codebase-memory MCP graph:
@@ -174,6 +177,7 @@ Fall back to `Grep`/`Read` only when the graph lacks the symbol (text-only conte
 
 Reading files cold without graph context invites missing call sites and dead-code mistakes.
 
+
 ## Pre-work: sequential-thinking
 
 For tasks with 3+ logical steps, branching paths, or unclear dependencies, invoke `mcp__sequential-thinking__sequentialthinking` BEFORE writing code or tests:
@@ -184,6 +188,7 @@ For tasks with 3+ logical steps, branching paths, or unclear dependencies, invok
 
 Skip for trivial mechanical edits (rename, format, single-line fix). Use for: new feature, refactor across files, anything touching async/state machines.
 
+
 ## Git: merge-readiness check (cto / reviewer)
 
 Before approving or merging a PR, verify:
@@ -192,6 +197,7 @@ Before approving or merging a PR, verify:
 2. **CR APPROVE on Paperclip.**
 3. **No conflict markers in diff:** `gh pr diff <PR> | grep -E '^(<<<<<<<|=======|>>>>>>>)'` → empty.
 4. **Spec/plan references valid:** if PR references `docs/superpowers/plans/...`, that file exists on the branch.
+
 
 ## Git: mergeStateStatus decoder (cto / reviewer)
 
@@ -208,6 +214,7 @@ Before approving or merging a PR, verify:
 | `BEHIND` + `BLOCKED` simultaneously | Multi-cause | Address whichever is fixable; recheck |
 
 Never merge while `DIRTY` or `BEHIND`. `UNSTABLE` is judgment call — document the override in PR comment.
+
 
 ## Code review: APPROVE format (reviewer)
 
@@ -245,11 +252,13 @@ APPROVED. Reassigning to <next agent>.
 - Approving own PR (self-approval blocked at branch protection level too).
 - Approving without `git diff --stat` against plan file count (silent scope reduction risk — codified after UNS-114).
 
+
 ### Plan-first discipline
 - [ ] Multi-agent tasks (3+ subtasks): plan file exists at `docs/superpowers/plans/YYYY-MM-DD-UNS-NN-*.md`
 - [ ] PR description references the plan file (link), doesn't duplicate scope from issue body
 - [ ] Plan steps marked done as progress is made (checkbox in plan file matches reality)
 - [ ] If the plan changed mid-flight — diff the plan file in the PR (no silent scope creep)
+
 
 ## Handoff basics (iron rule)
 
@@ -341,6 +350,7 @@ If POST returned non-2xx → STOP. Don't PATCH (would orphan the issue without c
 
 If your PATCH was authored by a SIGTERM'd run, paperclip may suppress the wake. Watchdog (`services/watchdog`) detects stuck `in_review` + null-execution_run and recovers. Not a primary mechanism — author handoffs correctly.
 
+
 ## Daily Version-Branch Code Audit Stage (Android)
 
 For `mode=daily_code_audit`, set `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py`; do not run PR subagents. Read only the bound prepared inputs, `$RUN/run-context.json`, and Android repo. Write human evidence to `$RUN/code.md`; atomically publish strict `$RUN/code.findings.json` with `schema_version=1`, exact copied `run_binding`, `stage="code"`, `source_agent="UWAKotlinAuditor"`, `audit_status=complete|partial|blocked`, structured findings, typed `{text,material}` limitations, and status-valid `block_reason`. Every finding has exactly `severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification`; keep all three location keys and use either relative `file`+positive `line`+`area:null` or `file:null,line:null`+nonempty `area`. Finding prose, every limitation `text`, and non-null blocked `block_reason` must be Russian; `block_reason` is null for complete/partial. Include variant impact in evidence where relevant. Do not count/deduplicate or add schema fields.
@@ -389,6 +399,7 @@ Atomically create strict `$RUN/delivery-handoff.json` with only `schema_version:
 ### Smoke mode
 
 `UAudit subagent smoke` is not v1 completion. Use synthetic `smoke/{pr.json,pr.diff,subagents/,summary.json}`, the same exact-agent/timeouts, and block on missing/malformed/secret-reading/writing reviewers. Summary records expected/completed count, exact names, generic/default usage, and one outcome each without diff/secrets. Hand it to `UWAInfraEngineer`; unversioned delivery requires the exact legacy allowlist/report digest or fails closed.
+
 
 
 ## UAudit Runtime Scope

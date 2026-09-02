@@ -55,6 +55,7 @@ For multi-step work:
 
 Strong criteria → autonomous work. Weak ("make it work") → ask, don't assume.
 
+
 ## Wake & handoff basics
 
 Paperclip heartbeat is **disabled** company-wide. Agent wake is event-driven only:
@@ -111,6 +112,7 @@ Got an @-mention with explicit handoff phrase (`"your turn"`, `"pick it up"`, `"
 
 Release (from holder): `POST /api/issues/{id}/release` → lock released, assignee can close via PATCH.
 
+
 ## Escalation to Board when blocked
 
 If you cannot progress on an issue, do not improvise, pivot, or create preparatory issues. Escalate and wait.
@@ -161,6 +163,7 @@ If you cannot progress on an issue, do not improvise, pivot, or create preparato
 - Concrete question for Board exists → real blocker.
 - Only "kind of hard" → decompose further, not a blocker.
 
+
 ## Git: commit & push (implementer / qa)
 
 ### Fresh-fetch on wake
@@ -201,6 +204,7 @@ uv run ruff check && uv run mypy src/ && uv run pytest
 
 For other targets, see project AGENTS.md. Don't push commits that fail local checks — CI will block, and you'll loop.
 
+
 ## Worktree discipline (implementer / reviewer / qa)
 
 ### Per-team isolated worktree
@@ -221,6 +225,7 @@ Switching branches inside an agent worktree drags uncommitted changes across bra
 
 The `production_checkout` path (e.g. `/Users/ant013/Android/Gimle-Palace-serving`) is the iMac deploy target. Stay on `develop` (typically `develop`) there — never check out feature branches in production_checkout. Discovered in UNS-48: feature checkout in production_checkout caused QA to test stale code.
 
+
 ## Pre-work: codebase-memory first
 
 Before reading any code file, query the codebase-memory MCP graph:
@@ -234,6 +239,7 @@ Fall back to `Grep`/`Read` only when the graph lacks the symbol (text-only conte
 
 Reading files cold without graph context invites missing call sites and dead-code mistakes.
 
+
 ## Pre-work: sequential-thinking
 
 For tasks with 3+ logical steps, branching paths, or unclear dependencies, invoke `mcp__sequential-thinking__sequentialthinking` BEFORE writing code or tests:
@@ -243,6 +249,7 @@ For tasks with 3+ logical steps, branching paths, or unclear dependencies, invok
 - Identify which steps can run in parallel vs. must serialize.
 
 Skip for trivial mechanical edits (rename, format, single-line fix). Use for: new feature, refactor across files, anything touching async/state machines.
+
 
 ## Pre-work: existing field semantics
 
@@ -254,6 +261,7 @@ Before renaming, removing, or repurposing a field on an existing data structure 
 4. **Add backwards-compat shim** if external API surface (MCP tool args, REST endpoint params) — at least one release cycle.
 
 Renaming a field that's referenced in saved Neo4j data without migration loses that data. Renaming an MCP tool arg without shim breaks every caller silently.
+
 
 ## Handoff basics (iron rule)
 
@@ -345,6 +353,7 @@ If POST returned non-2xx → STOP. Don't PATCH (would orphan the issue without c
 
 If your PATCH was authored by a SIGTERM'd run, paperclip may suppress the wake. Watchdog (`services/watchdog`) detects stuck `in_review` + null-execution_run and recovers. Not a primary mechanism — author handoffs correctly.
 
+
 ## Daily Version-Branch Crypto Audit Stage (iOS)
 
 For `mode=daily_crypto_audit`, set `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py`; read the immutable `$RUN/run-context.json`, prepared inputs, validated prior sidecars/markers, their human MD, and the iOS repo. Audit wallet, chain, signing, transaction, key-management, address, fee, and balance semantics in the bound FROM..TO range.
@@ -352,6 +361,7 @@ For `mode=daily_crypto_audit`, set `HELPER=/Users/Shared/UnstoppableAudit/runs/.
 Write human evidence to `$RUN/crypto.md`. Atomically publish `$RUN/crypto.findings.json` as the strict v1 envelope: exact copied `run_binding`; `stage="crypto"`; `source_agent="UWICryptoAuditor"`; `audit_status=complete|partial|blocked`; structured findings; typed `{text,material}` limitations; status-valid `block_reason`. Every finding has exactly `severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification`; location is either relative file+positive line+null area or null file/line+nonempty area. Finding prose, limitation text and non-null blocked reason are Russian; complete/partial use null block reason. Do not count, deduplicate, or add schema fields.
 
 Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/crypto.findings.json"`; only it creates digest-bound `status/crypto.done.json`. Validation failure or `blocked` PATCHes issue blocked and stops without a completion message. Otherwise comment ready, PATCH `339e9d3f-48c0-4348-a8da-5337e6f29491` with `mode=daily_infra_audit`, and stop. Never send Telegram or update state/cursors.
+
 
 
 ## UAudit Runtime Scope

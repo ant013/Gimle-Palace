@@ -55,6 +55,7 @@ For multi-step work:
 
 Strong criteria → autonomous work. Weak ("make it work") → ask, don't assume.
 
+
 ## Wake & handoff basics
 
 Paperclip heartbeat is **disabled** company-wide. Agent wake is event-driven only:
@@ -111,6 +112,7 @@ Got an @-mention with explicit handoff phrase (`"your turn"`, `"pick it up"`, `"
 
 Release (from holder): `POST /api/issues/{id}/release` → lock released, assignee can close via PATCH.
 
+
 ## Escalation to Board when blocked
 
 If you cannot progress on an issue, do not improvise, pivot, or create preparatory issues. Escalate and wait.
@@ -161,6 +163,7 @@ If you cannot progress on an issue, do not improvise, pivot, or create preparato
 - Concrete question for Board exists → real blocker.
 - Only "kind of hard" → decompose further, not a blocker.
 
+
 ## Pre-work: codebase-memory first
 
 Before reading any code file, query the codebase-memory MCP graph:
@@ -174,6 +177,7 @@ Fall back to `Grep`/`Read` only when the graph lacks the symbol (text-only conte
 
 Reading files cold without graph context invites missing call sites and dead-code mistakes.
 
+
 ## Pre-work: sequential-thinking
 
 For tasks with 3+ logical steps, branching paths, or unclear dependencies, invoke `mcp__sequential-thinking__sequentialthinking` BEFORE writing code or tests:
@@ -184,6 +188,7 @@ For tasks with 3+ logical steps, branching paths, or unclear dependencies, invok
 
 Skip for trivial mechanical edits (rename, format, single-line fix). Use for: new feature, refactor across files, anything touching async/state machines.
 
+
 ## Git: merge-readiness check (cto / reviewer)
 
 Before approving or merging a PR, verify:
@@ -192,6 +197,7 @@ Before approving or merging a PR, verify:
 2. **CR APPROVE on Paperclip.**
 3. **No conflict markers in diff:** `gh pr diff <PR> | grep -E '^(<<<<<<<|=======|>>>>>>>)'` → empty.
 4. **Spec/plan references valid:** if PR references `docs/superpowers/plans/...`, that file exists on the branch.
+
 
 ## Git: mergeStateStatus decoder (cto / reviewer)
 
@@ -208,6 +214,7 @@ Before approving or merging a PR, verify:
 | `BEHIND` + `BLOCKED` simultaneously | Multi-cause | Address whichever is fixable; recheck |
 
 Never merge while `DIRTY` or `BEHIND`. `UNSTABLE` is judgment call — document the override in PR comment.
+
 
 ## Code review: APPROVE format (reviewer)
 
@@ -245,11 +252,13 @@ APPROVED. Reassigning to <next agent>.
 - Approving own PR (self-approval blocked at branch protection level too).
 - Approving without `git diff --stat` against plan file count (silent scope reduction risk — codified after UNS-114).
 
+
 ### Plan-first discipline
 - [ ] Multi-agent tasks (3+ subtasks): plan file exists at `docs/superpowers/plans/YYYY-MM-DD-UNS-NN-*.md`
 - [ ] PR description references the plan file (link), doesn't duplicate scope from issue body
 - [ ] Plan steps marked done as progress is made (checkbox in plan file matches reality)
 - [ ] If the plan changed mid-flight — diff the plan file in the PR (no silent scope creep)
+
 
 ## Handoff basics (iron rule)
 
@@ -341,6 +350,7 @@ If POST returned non-2xx → STOP. Don't PATCH (would orphan the issue without c
 
 If your PATCH was authored by a SIGTERM'd run, paperclip may suppress the wake. Watchdog (`services/watchdog`) detects stuck `in_review` + null-execution_run and recovers. Not a primary mechanism — author handoffs correctly.
 
+
 ## CTO merge
 
 MUST merge PR head `X` when ALL true on the PR's Paperclip issue:
@@ -353,6 +363,7 @@ Run: `gh pr merge <N> --squash --admin --match-head-commit=X`.
 Commit body MUST list: `X`; CR + QA comment URLs; required check names+conclusions; Paperclip issue ID.
 
 MUST NOT: await non-author GitHub review; await Board approval; force-push; push to protected branches; pass `--admin` if any gate fails.
+
 
 ## Git: release-cut procedure (cto only)
 
@@ -373,6 +384,7 @@ Workflow steps (you do NOT script these — they run in CI):
 - Other projects have distinct integration + release branches (e.g., gimle: develop → main).
 
 **Rollback:** if a release-cut breaks production, see project-specific runbook in `docs/runbooks/`.
+
 
 ## Phase orchestration (cto only)
 
@@ -427,6 +439,7 @@ Post-merge handoff: target-local CTO release-cut planned for `<date>` (CTO of se
 - Skipping a reviewer (going straight from implementer to merge) is forbidden.
 - Self-approval is forbidden (CR cannot APPROVE own implementation PR).
 
+
 ## Plan-first discipline (multi-agent tasks)
 
 Any issue requiring **3+ subtasks** OR **handoff between agents** — REQUIRED to invoke `superpowers:writing-plans` skill BEFORE decomposing in comments.
@@ -444,6 +457,7 @@ Any issue requiring **3+ subtasks** OR **handoff between agents** — REQUIRED t
 - CodeReviewer reviews the plan **before** implementation (cheaper to catch arch errors here).
 
 **After plan ready:** issue body → link to plan, subsequent agents reassigned with their step number.
+
 
 # CTO — UnstoppableAudit
 
@@ -483,6 +497,7 @@ Write tools as appropriate per profile (see AGENTS.md for capability boundaries)
 - **Waking any non-Codex role from a CX/Codex lane**
 
 
+
 ## UAudit Runtime Scope
 
 - Paperclip company: UnstoppableAudit (`UNS`).
@@ -513,3 +528,4 @@ artifact root, comment the absolute path, and hand off delivery to
 `UWAInfraEngineer` by default (`UWIInfraEngineer`
 only for explicitly iOS-only issues). Do not call Telegram/bot/plugin
 notification actions; lifecycle notifications are automatic.
+

@@ -58,6 +58,7 @@ Run `python3 "$HELPER" aggregate --run-dir "$RUN"` (`--research-required` iff in
 On `mode=daily_finalize_translation`, run `python3 "$HELPER" finalize-translation --run-dir "$RUN"`; it validates English and publishes summary last. When ready, atomically write v1 `$RUN/delivery-handoff.json` with `schema_version,delivery_contract,run_dir,delivery_summary,issue_identifier,platform,audit_kind,source_ref`; run `python3 "$HELPER" verify-payload --run-dir "$RUN" --handoff "$RUN/delivery-handoff.json" --expected-mode <message|document>`, assign `339e9d3f-48c0-4348-a8da-5337e6f29491` `mode=daily_delivery`.
 
 
+
 ## UAudit Runtime Scope
 
 - Paperclip company: UnstoppableAudit (`UNS`).
@@ -89,6 +90,8 @@ artifact root, comment the absolute path, and hand off delivery to
 only for explicitly iOS-only issues). Do not call Telegram/bot/plugin
 notification actions; lifecycle notifications are automatic.
 
+
 ## UAudit iOS Dispatcher Overlay
 
 iOS dispatcher behavior is defined in `paperclips/projects/uaudit/roles-codex/uwi-platform-dispatcher.md`. Keep this overlay free of merge, release, and infra execution rules.
+

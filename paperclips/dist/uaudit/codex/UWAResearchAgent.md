@@ -55,6 +55,7 @@ For multi-step work:
 
 Strong criteria → autonomous work. Weak ("make it work") → ask, don't assume.
 
+
 ## Wake & handoff basics
 
 Paperclip heartbeat is **disabled** company-wide. Agent wake is event-driven only:
@@ -111,6 +112,7 @@ Got an @-mention with explicit handoff phrase (`"your turn"`, `"pick it up"`, `"
 
 Release (from holder): `POST /api/issues/{id}/release` → lock released, assignee can close via PATCH.
 
+
 ## Escalation to Board when blocked
 
 If you cannot progress on an issue, do not improvise, pivot, or create preparatory issues. Escalate and wait.
@@ -161,6 +163,7 @@ If you cannot progress on an issue, do not improvise, pivot, or create preparato
 - Concrete question for Board exists → real blocker.
 - Only "kind of hard" → decompose further, not a blocker.
 
+
 ## Pre-work: codebase-memory first
 
 Before reading any code file, query the codebase-memory MCP graph:
@@ -173,6 +176,7 @@ Before reading any code file, query the codebase-memory MCP graph:
 Fall back to `Grep`/`Read` only when the graph lacks the symbol (text-only content, config files, recent commits). If the project is unindexed, run `index_repository` first.
 
 Reading files cold without graph context invites missing call sites and dead-code mistakes.
+
 
 ## Handoff basics (iron rule)
 
@@ -264,6 +268,7 @@ If POST returned non-2xx → STOP. Don't PATCH (would orphan the issue without c
 
 If your PATCH was authored by a SIGTERM'd run, paperclip may suppress the wake. Watchdog (`services/watchdog`) detects stuck `in_review` + null-execution_run and recovers. Not a primary mechanism — author handoffs correctly.
 
+
 ## Daily Version-Branch Research Stage (Android)
 
 For `mode=daily_research`, set `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py`; read `$RUN/run-context.json`, validated prior sidecars/markers and only references needed for open library, protocol, or platform questions. Do not redo prior audits.
@@ -271,6 +276,7 @@ For `mode=daily_research`, set `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaud
 Write cited human context to `$RUN/research-context.md`. Atomically publish `$RUN/research-context.findings.json` as the strict v1 envelope with exact copied `run_binding`, `stage="research_context"`, `source_agent="UWAResearchAgent"`, `audit_status=complete|partial|blocked`, structured findings, typed `{text,material}` limitations, and status-valid `block_reason`. Every finding has exactly `severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification`; location is either relative file+positive line+null area or null file/line+nonempty area. Finding prose, limitation text and non-null blocked reason are Russian; complete/partial use null block reason. Do not count/deduplicate or add fields.
 
 Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/research-context.findings.json"`; only it creates digest-bound `status/research_context.done.json`. Validation failure or `blocked` PATCHes issue blocked and stops without completion. Otherwise comment ready, PATCH `8089992b-8a51-4386-b180-9368b67bbc51` with `mode=daily_qa_verify`, and stop. Never send Telegram or update state/cursors.
+
 
 
 ## UAudit Runtime Scope
