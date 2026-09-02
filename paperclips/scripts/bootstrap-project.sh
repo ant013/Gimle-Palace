@@ -70,16 +70,6 @@ install_uaudit_delivery_helper() {
   mkdir -p "$tools_dir"
   chmod 755 "$tools_dir"
 
-  # UAudit is executed on the iMac.  Deploy the current helper there directly:
-  # an old manifest or an interrupted prior helper update must never prevent a
-  # scheduled audit from starting.
-  rm -f "$destination"
-  cp "$source" "$destination"
-  chmod 555 "$destination"
-  rm -f "$install_manifest" "$pending_install"
-  log ok "UAudit delivery helper installed directly: $destination"
-  return 0
-
   source_sha=$(python3 - "$source" <<'PY'
 import hashlib
 import pathlib
@@ -139,6 +129,44 @@ PY
     else
       [ -z "$pending_previous" ] || \
         die "UAudit helper disappeared during a prepared upgrade"
+    fi
+  fi
+
+  # A short-lived deployment regression copied the current helper read-only but
+  # deleted its manifest. Adopt only those exact trusted source bytes; any
+  # writable, linked, stale, or otherwise inconsistent install still fails in
+  # the immutable-generation checks below.
+  if [ -f "$destination" ] && [ ! -L "$destination" ] && \
+     [ ! -e "$install_manifest" ] && [ ! -L "$install_manifest" ] && \
+     [ ! -e "$pending_install" ] && [ ! -L "$pending_install" ]; then
+    destination_sha=$(python3 - "$destination" <<'PY'
+import hashlib
+import pathlib
+import sys
+
+print(hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest())
+PY
+)
+    if [ "$destination_sha" = "$source_sha" ]; then
+      python3 - "$destination" <<'PY' || \
+        die "manifest-less UAudit delivery helper must be read-only"
+import pathlib
+import sys
+
+raise SystemExit(1 if pathlib.Path(sys.argv[1]).stat().st_mode & 0o222 else 0)
+PY
+      manifest_tmp=$(mktemp "${tools_dir}/.uaudit_delivery_contract.manifest.json.XXXXXX")
+      jq -n \
+        --arg schema_version "uaudit-helper-install/v1" \
+        --arg file "uaudit_delivery_contract.py" \
+        --arg sha256 "$source_sha" \
+        '{schema_version: $schema_version, file: $file, sha256: $sha256}' > "$manifest_tmp"
+      chmod 444 "$manifest_tmp"
+      mv -f "$manifest_tmp" "$install_manifest"
+      python3 "$destination" verify-install --manifest "$install_manifest" || \
+        die "adopted UAudit helper rejected its install manifest"
+      log ok "adopted manifest-less UAudit delivery helper: $destination"
+      return 0
     fi
   fi
 

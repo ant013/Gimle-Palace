@@ -229,6 +229,58 @@ def test_uaudit_helper_install_is_atomic_read_only_and_self_verifying(tmp_path):
     )
 
 
+def test_uaudit_helper_install_adopts_matching_manifestless_deployment(tmp_path):
+    team_root = tmp_path / "team"
+    tools = team_root / ".uaudit-tools"
+    tools.mkdir(parents=True)
+    source = REPO / "paperclips/projects/uaudit/runtime/uaudit_delivery_contract.py"
+    helper = tools / "uaudit_delivery_contract.py"
+    helper.write_bytes(source.read_bytes())
+    helper.chmod(0o555)
+
+    result = _run_helper_install(team_root)
+    assert result.returncode == 0, result.stderr
+
+    manifest_path = tools / "uaudit_delivery_contract.manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    assert manifest["sha256"] == hashlib.sha256(source.read_bytes()).hexdigest()
+    assert manifest_path.stat().st_mode & (
+        stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH
+    ) == 0
+
+
+def test_uaudit_helper_install_rejects_writable_manifestless_deployment(tmp_path):
+    team_root = tmp_path / "team"
+    tools = team_root / ".uaudit-tools"
+    tools.mkdir(parents=True)
+    source = REPO / "paperclips/projects/uaudit/runtime/uaudit_delivery_contract.py"
+    helper = tools / "uaudit_delivery_contract.py"
+    helper.write_bytes(source.read_bytes())
+    helper.chmod(0o644)
+
+    result = _run_helper_install(team_root)
+    assert result.returncode != 0
+    assert "must be read-only" in result.stderr
+    assert not (tools / "uaudit_delivery_contract.manifest.json").exists()
+
+
+def test_uaudit_helper_install_rejects_dangling_manifest_symlink(tmp_path):
+    team_root = tmp_path / "team"
+    tools = team_root / ".uaudit-tools"
+    tools.mkdir(parents=True)
+    source = REPO / "paperclips/projects/uaudit/runtime/uaudit_delivery_contract.py"
+    helper = tools / "uaudit_delivery_contract.py"
+    helper.write_bytes(source.read_bytes())
+    helper.chmod(0o555)
+    manifest = tools / "uaudit_delivery_contract.manifest.json"
+    manifest.symlink_to(tmp_path / "missing-manifest.json")
+
+    result = _run_helper_install(team_root)
+    assert result.returncode != 0
+    assert "helper/manifest pair required" in result.stderr
+    assert manifest.is_symlink()
+
+
 def test_uaudit_helper_install_fails_closed_after_tampering(tmp_path):
     team_root = tmp_path / "team"
     first = _run_helper_install(team_root)
