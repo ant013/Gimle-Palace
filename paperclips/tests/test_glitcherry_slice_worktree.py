@@ -204,6 +204,33 @@ def _resume_blocked(
     )
 
 
+def _adopt_recovery_checkpoint(
+    fixture: dict[str, Path],
+    old_head: str,
+    new_head: str,
+    *,
+    operator: str = "GlitcherryCTO",
+    run_id: str = "run-cto-adopt",
+    evidence: str = "Board approved retained checkpoint after exact terminated run",
+) -> subprocess.CompletedProcess[str]:
+    return _run(
+        fixture,
+        "adopt-recovery-checkpoint",
+        "--issue-key",
+        "GLA-123",
+        "--operator",
+        operator,
+        "--run-id",
+        run_id,
+        "--expected-old-head",
+        old_head,
+        "--new-head",
+        new_head,
+        "--evidence",
+        evidence,
+    )
+
+
 def _route_to_implementation(
     fixture: dict[str, Path],
 ) -> tuple[Path, str]:
@@ -252,6 +279,37 @@ def _route_to_implementation(
         fixture, "GlitcherryAndroidEngineer", engineer_run
     ).returncode == 0
     return worktree, engineer_run
+
+
+def _recover_advanced_checkpoint(
+    fixture: dict[str, Path],
+) -> tuple[Path, str, str, str]:
+    _create(fixture)
+    worktree, engineer_run = _route_to_implementation(fixture)
+    old_head = _state(fixture)["head_sha"]
+    checkpoint = worktree / "retained-checkpoint.txt"
+    checkpoint.write_text("bounded implementation checkpoint\n")
+    _git("add", checkpoint.name, cwd=worktree)
+    _git("commit", "-m", "GLA-123 retain implementation checkpoint", cwd=worktree)
+    new_head = _git("rev-parse", "HEAD", cwd=worktree).stdout.strip()
+    recovered = _run(
+        fixture,
+        "recover",
+        "--issue-key",
+        "GLA-123",
+        "--expected-owner",
+        "GlitcherryAndroidEngineer",
+        "--expected-run-id",
+        engineer_run,
+        "--terminated-run-id",
+        engineer_run,
+        "--operator",
+        "GlitcherryCTO",
+        "--evidence",
+        "Paperclip run terminated and environment lease released",
+    )
+    assert recovered.returncode == 0, recovered.stderr
+    return worktree, old_head, new_head, engineer_run
 
 
 def _route_to_code_review(fixture: dict[str, Path]) -> tuple[Path, str]:
@@ -372,6 +430,202 @@ def test_recovery_requires_exact_run_and_preserves_dirty_work(tmp_path: Path) ->
     assert state["phase"] == "recovery"
     assert state["expected_owner"] == "GlitcherryCTO"
     assert state["recovery_resume_phase"] == "spec"
+
+
+def test_recovery_adopts_clean_linear_implementation_checkpoint(tmp_path: Path) -> None:
+    fixture = _fixture(tmp_path)
+    worktree, old_head, new_head, engineer_run = _recover_advanced_checkpoint(fixture)
+    assert _state(fixture)["head_sha"] == old_head
+    assert _claim(fixture, "GlitcherryCTO", "run-cto-before-adopt").returncode != 0
+
+    before_status = _git("status", "--porcelain=v2", cwd=worktree).stdout
+    adopted = _adopt_recovery_checkpoint(fixture, old_head, new_head)
+    assert adopted.returncode == 0, adopted.stderr
+
+    state = _state(fixture)
+    assert state["head_sha"] == new_head
+    assert state["phase"] == "recovery"
+    assert state["expected_owner"] == "GlitcherryCTO"
+    assert state["lease"] is None
+    assert state["recovery_resume_owner"] == "GlitcherryAndroidEngineer"
+    assert state["recovery_resume_phase"] == "implementation"
+    adoption = state["checkpoint_adoptions"][-1]
+    assert adoption["old_head_sha"] == old_head
+    assert adoption["new_head_sha"] == new_head
+    assert adoption["operator"] == "GlitcherryCTO"
+    assert adoption["operator_run_id"] == "run-cto-adopt"
+    assert adoption["recovered_owner"] == "GlitcherryAndroidEngineer"
+    assert adoption["recovered_run_id"] == engineer_run
+    assert _git("status", "--porcelain=v2", cwd=worktree).stdout == before_status
+
+    assert _claim(fixture, "GlitcherryCTO", "run-cto-after-adopt").returncode == 0
+    handed_off = _handoff(
+        fixture,
+        "GlitcherryCTO",
+        "run-cto-after-adopt",
+        "GlitcherryCTO",
+        "plan_revision",
+    )
+    assert handed_off.returncode == 0, handed_off.stderr
+
+
+def test_recovery_checkpoint_adoption_rejects_invalid_arguments_without_state_change(
+    tmp_path: Path,
+) -> None:
+    fixture = _fixture(tmp_path)
+    _, old_head, new_head, _ = _recover_advanced_checkpoint(fixture)
+    state_path = fixture["states"] / "GLA-123.json"
+    original_state = state_path.read_bytes()
+
+    attempts = (
+        _adopt_recovery_checkpoint(
+            fixture, old_head, new_head, operator="GlitcherryCodeReviewer"
+        ),
+        _adopt_recovery_checkpoint(
+            fixture, old_head, new_head, run_id="unsafe run id"
+        ),
+        _adopt_recovery_checkpoint(fixture, old_head, new_head, evidence="too short"),
+        _adopt_recovery_checkpoint(fixture, old_head[:-1], new_head),
+        _adopt_recovery_checkpoint(fixture, old_head, new_head.upper()),
+        _adopt_recovery_checkpoint(fixture, "0" * 40, new_head),
+        _adopt_recovery_checkpoint(fixture, old_head, "1" * 40),
+        _adopt_recovery_checkpoint(fixture, old_head, old_head),
+    )
+
+    assert all(attempt.returncode != 0 for attempt in attempts)
+    assert state_path.read_bytes() == original_state
+
+
+def test_recovery_checkpoint_adoption_rejects_invalid_controller_state(
+    tmp_path: Path,
+) -> None:
+    fixture = _fixture(tmp_path)
+    _, old_head, new_head, _ = _recover_advanced_checkpoint(fixture)
+    state_path = fixture["states"] / "GLA-123.json"
+    original_state = _state(fixture)
+
+    mutations = (
+        lambda state: state.update({"phase": "plan_revision"}),
+        lambda state: state.update({"expected_owner": "GlitcherryCodeReviewer"}),
+        lambda state: state.update(
+            {
+                "lease": {
+                    "owner": "GlitcherryCTO",
+                    "run_id": "run-live",
+                    "expires_at": "2099-01-01T00:00:00Z",
+                }
+            }
+        ),
+        lambda state: state.update({"android_merge_sha": "1" * 40}),
+        lambda state: state.update({"recovery": []}),
+        lambda state: state["recovery"][-1].update(
+            {"owner": "GlitcherryMediaPipelineEngineer"}
+        ),
+        lambda state: state.update(
+            {"primary_implementer": "GlitcherryMediaPipelineEngineer"}
+        ),
+        lambda state: state.update(
+            {"recovery_resume_owner": "GlitcherryMediaPipelineEngineer"}
+        ),
+        lambda state: state.update({"recovery_resume_phase": "spec"}),
+        lambda state: state.update(
+            {
+                "checkpoint_adoptions": [
+                    {
+                        "recovery_recorded_at": state["recovery"][-1]["recorded_at"],
+                        "recovered_run_id": state["recovery"][-1]["run_id"],
+                    }
+                ]
+            }
+        ),
+    )
+
+    for mutate in mutations:
+        state = json.loads(json.dumps(original_state))
+        mutate(state)
+        state_path.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n")
+        state_path.chmod(0o600)
+        before = state_path.read_bytes()
+        result = _adopt_recovery_checkpoint(fixture, old_head, new_head)
+        assert result.returncode != 0
+        assert state_path.read_bytes() == before
+
+
+def test_recovery_checkpoint_adoption_rejects_dirty_or_wrong_branch(
+    tmp_path: Path,
+) -> None:
+    dirty_fixture = _fixture(tmp_path / "dirty")
+    dirty_worktree, old_head, new_head, _ = _recover_advanced_checkpoint(dirty_fixture)
+    dirty_state_path = dirty_fixture["states"] / "GLA-123.json"
+    dirty_state = dirty_state_path.read_bytes()
+    dirty_file = dirty_worktree / "uncommitted.txt"
+    dirty_file.write_text("must remain untouched\n")
+    dirty_result = _adopt_recovery_checkpoint(dirty_fixture, old_head, new_head)
+    assert dirty_result.returncode != 0
+    assert "dirty" in dirty_result.stderr.lower()
+    assert dirty_state_path.read_bytes() == dirty_state
+    assert dirty_file.read_text() == "must remain untouched\n"
+
+    branch_fixture = _fixture(tmp_path / "branch")
+    branch_worktree, old_head, new_head, _ = _recover_advanced_checkpoint(branch_fixture)
+    branch_state_path = branch_fixture["states"] / "GLA-123.json"
+    branch_state = branch_state_path.read_bytes()
+    _git("checkout", "-b", "unexpected-branch", cwd=branch_worktree)
+    branch_result = _adopt_recovery_checkpoint(branch_fixture, old_head, new_head)
+    assert branch_result.returncode != 0
+    assert "branch" in branch_result.stderr.lower()
+    assert branch_state_path.read_bytes() == branch_state
+
+
+def test_recovery_checkpoint_adoption_rejects_divergence_merge_and_replay(
+    tmp_path: Path,
+) -> None:
+    divergent_fixture = _fixture(tmp_path / "divergent")
+    divergent_worktree, old_head, _, _ = _recover_advanced_checkpoint(divergent_fixture)
+    divergent_state_path = divergent_fixture["states"] / "GLA-123.json"
+    divergent_state = divergent_state_path.read_bytes()
+    empty_tree = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+    divergent_head = _git(
+        "commit-tree", empty_tree, "-m", "divergent checkpoint", cwd=divergent_worktree
+    ).stdout.strip()
+    _git("reset", "--hard", divergent_head, cwd=divergent_worktree)
+    divergent_result = _adopt_recovery_checkpoint(
+        divergent_fixture, old_head, divergent_head
+    )
+    assert divergent_result.returncode != 0
+    assert "descendant" in divergent_result.stderr.lower()
+    assert divergent_state_path.read_bytes() == divergent_state
+
+    merge_fixture = _fixture(tmp_path / "merge")
+    merge_worktree, old_head, _, _ = _recover_advanced_checkpoint(merge_fixture)
+    merge_state_path = merge_fixture["states"] / "GLA-123.json"
+    _git("checkout", "-b", "checkpoint-side", old_head, cwd=merge_worktree)
+    (merge_worktree / "side.txt").write_text("side\n")
+    _git("add", "side.txt", cwd=merge_worktree)
+    _git("commit", "-m", "side checkpoint", cwd=merge_worktree)
+    _git("checkout", "feature/GLA-123-single-worktree", cwd=merge_worktree)
+    _git("merge", "--no-ff", "checkpoint-side", "-m", "merge checkpoint", cwd=merge_worktree)
+    merge_head = _git("rev-parse", "HEAD", cwd=merge_worktree).stdout.strip()
+    merge_state = merge_state_path.read_bytes()
+    merge_result = _adopt_recovery_checkpoint(merge_fixture, old_head, merge_head)
+    assert merge_result.returncode != 0
+    assert "merge commit" in merge_result.stderr.lower()
+    assert merge_state_path.read_bytes() == merge_state
+
+    replay_fixture = _fixture(tmp_path / "replay")
+    replay_worktree, old_head, first_head, _ = _recover_advanced_checkpoint(replay_fixture)
+    first = _adopt_recovery_checkpoint(replay_fixture, old_head, first_head)
+    assert first.returncode == 0, first.stderr
+    (replay_worktree / "later.txt").write_text("unauthorized later advance\n")
+    _git("add", "later.txt", cwd=replay_worktree)
+    _git("commit", "-m", "later checkpoint", cwd=replay_worktree)
+    later_head = _git("rev-parse", "HEAD", cwd=replay_worktree).stdout.strip()
+    replay_state_path = replay_fixture["states"] / "GLA-123.json"
+    replay_state = replay_state_path.read_bytes()
+    replay = _adopt_recovery_checkpoint(replay_fixture, first_head, later_head)
+    assert replay.returncode != 0
+    assert "already adopted" in replay.stderr.lower()
+    assert replay_state_path.read_bytes() == replay_state
 
 
 def test_clean_blocked_slice_resumes_to_cto_plan_revision(tmp_path: Path) -> None:

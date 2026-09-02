@@ -1,6 +1,6 @@
 # Glitcherry recovery checkpoint adoption
 
-Status: Proposed for Human Engineering Lead review
+Status: Approved by Human Engineering Lead
 
 - Date: 2026-09-02
 - Baseline: `87626106d5029c8ac2e73add600facf37bf8c303`
