@@ -111,6 +111,22 @@ primary implementer in `implementation_recovery`. That implementer preserves the
 files in one local WIP commit and hands the resulting clean HEAD to
 `GlitcherryCTO / plan_revision`.
 
+If a terminated primary-implementer run leaves the recorded task worktree clean
+on committed work but `recover` still records the older handed-off HEAD, this is
+a recovery-checkpoint incident. The CTO must not reset the worktree, edit the
+state file, or weaken normal claim/handoff checks. From the same CTO-owned
+`phase=recovery`, with no lease, use `adopt-recovery-checkpoint` once with the
+exact recorded old HEAD, actual clean new HEAD, current CTO run ID, and the
+Human Engineering Lead's evidence. The controller accepts only a linear,
+non-merge descendant tied to the latest unused recovery record for the recorded
+primary implementer and appends an immutable adoption record.
+
+Checkpoint adoption is bookkeeping, not approval or resumed implementation. It
+keeps the controller in CTO-owned `recovery` with no lease. The CTO then performs
+the ordinary claim and hands the unchanged adopted HEAD to itself in
+`plan_revision`; any revised plan still requires independent review before the
+recorded primary implementer may continue.
+
 ## Six child phases
 
 ### Phase 1 — Create worktree and materialize spec
