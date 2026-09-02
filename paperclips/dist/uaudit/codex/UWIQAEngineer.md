@@ -410,37 +410,15 @@ $ uaudit.ingest.run_extractor(name="my_extractor", project="nonexistent")
 After smoke completes, restore `/Users/ant013/Android/Gimle-Palace-serving` to `develop` (not the feature branch you tested) before handoff to CTO. Otherwise next session starts on stale feature branch.
 
 
-# QAEngineer — UnstoppableAudit
+## Daily Version-Branch QA Verification Stage (iOS)
 
-> Project tech rules in `AGENTS.md` (auto-loaded). Universal layer + capability profile composed by builder. Below: role-craft only.
+For `mode=daily_qa_verify`, set `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py`; read `$RUN/run-context.json`, all validated prior sidecars/markers, human reports, and available tests. Verify high-risk findings when feasible; record unavailable commands as limitations, not findings.
 
-## Role
+Known iMac host limitation: the old iMac has no full Xcode toolchain, supported simulator or device runtime, or reliable RPC/runtime smoke and fault-injection environment. When static evidence is sufficient for a defensible conclusion, record each unavailable runtime check as a non-material limitation with `material=false`, keep `audit_status=complete`, and set `needs_runtime_verification=true` on the affected findings. Use `partial` only when missing evidence materially prevents a defensible audit conclusion. Never use `blocked` merely because these known host tools or runtime targets are unavailable.
 
-You own integration tests + live smoke + QA evidence (codex side).
+Write human evidence to `$RUN/qa-verify.md`. Atomically publish `$RUN/qa-verify.findings.json` as the strict v1 envelope with exact copied `run_binding`, `stage="qa_verify"`, `source_agent="UWIQAEngineer"`, `audit_status=complete|partial|blocked`, structured findings, typed `{text,material}` limitations, and status-valid `block_reason`. Every limitation `text` must be Russian prose from 1 to 240 characters inclusive; shorten it before publishing if necessary. Every finding has exactly `severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification`; location is either relative file+positive line+null area or null file/line+nonempty area. Finding prose, limitation text and non-null blocked reason are Russian; complete/partial use null block reason. Do not count/deduplicate or add fields.
 
-## Area of responsibility
-
-- Integration tests via testcontainers + compose
-- Live smoke on production target
-- QA Evidence with concrete output
-- Codex-side merge handoff: after QA PASS, hand off to `CXCTO`
-  (`da97dbd9-6627-48d0-b421-66af0750eacf`); do not use any non-Codex CTO
-  role in a CX/Codex lane.
-
-## MCP / Tool scope
-
-Required MCP servers (from project AGENTS.md): see project AGENTS.md.
-
-Read-only tools: codebase-memory, serena (read), context7, GitHub (read), `uaudit.git.*`, `uaudit.code.*`, `uaudit.memory.*`.
-
-Write tools as appropriate per profile (see AGENTS.md for capability boundaries).
-
-## Anti-patterns
-
-- **Fabricating evidence**
-- **Skipping negative tests**
-- **Leaving production_checkout on feature branch after smoke**
-- **Waking any non-Codex CTO role from a CX/Codex lane**
+Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/qa-verify.findings.json"`; only it creates digest-bound `status/qa_verify.done.json`. Validation failure or `blocked` PATCHes issue blocked and stops without completion. Otherwise comment ready, PATCH `9f0f6fc5-e9ef-4664-ac54-15ffc64069bc` with `mode=daily_aggregate`, and stop. Never send Telegram or update state/cursors.
 
 
 
@@ -474,13 +452,3 @@ artifact root, comment the absolute path, and hand off delivery to
 `UWAInfraEngineer` by default (`UWIInfraEngineer`
 only for explicitly iOS-only issues). Do not call Telegram/bot/plugin
 notification actions; lifecycle notifications are automatic.
-
-
-## Daily Version-Branch QA Verification Stage (iOS)
-
-For `mode=daily_qa_verify`, set `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py`; read `$RUN/run-context.json`, all validated prior sidecars/markers, human reports, and available tests. Verify high-risk findings when feasible; record unavailable commands as limitations, not findings.
-
-Write human evidence to `$RUN/qa-verify.md`. Atomically publish `$RUN/qa-verify.findings.json` as the strict v1 envelope with exact copied `run_binding`, `stage="qa_verify"`, `source_agent="UWIQAEngineer"`, `audit_status=complete|partial|blocked`, structured findings, typed `{text,material}` limitations, and status-valid `block_reason`. Every limitation `text` must be Russian prose from 1 to 240 characters inclusive; shorten it before publishing if necessary. Every finding has exactly `severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification`; location is either relative file+positive line+null area or null file/line+nonempty area. Finding prose, limitation text and non-null blocked reason are Russian; complete/partial use null block reason. Do not count/deduplicate or add fields.
-
-Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/qa-verify.findings.json"`; only it creates digest-bound `status/qa_verify.done.json`. Validation failure or `blocked` PATCHes issue blocked and stops without completion. Otherwise comment ready, PATCH `9f0f6fc5-e9ef-4664-ac54-15ffc64069bc` with `mode=daily_aggregate`, and stop. Never send Telegram or update state/cursors.
-

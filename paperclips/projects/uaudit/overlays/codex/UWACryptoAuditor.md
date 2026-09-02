@@ -1,3 +1,10 @@
+---
+target: codex
+role_id: codex:uwa-crypto-auditor
+family: implementer
+profiles: [implementer]
+---
+
 ## Daily Version-Branch Crypto Audit Stage (Android)
 
 For `mode=daily_crypto_audit`, set `HELPER={{paths.team_workspace_root}}/.uaudit-tools/uaudit_delivery_contract.py`; read the immutable `$RUN/run-context.json`, prepared inputs, validated prior sidecars/markers, their human MD, and the Android repo. Audit wallet, chain, signing, transaction, key-management, address, fee, and balance semantics in the bound FROM..TO range.

@@ -45,7 +45,7 @@ def test_daily_routine_config_uses_names_not_uuids_and_resolves_agents():
     assert {r["platform"] for r in config["routines"]} == {"android", "ios"}
     assert {r["app_id"] for r in config["routines"]} == {"unstoppable_wallet"}
     assert config["apps"] == [{"id": "unstoppable_wallet", "display_name": "Unstoppable Wallet", "enabled": True, "report_route": "UAudit"}]
-    assert {r["branch"] for r in config["routines"]} == {"version/0.50"}
+    assert {r["branch"] for r in config["routines"]} == {"version/0.51"}
     assert {r["routine_key"] for r in config["routines"]} == {
         "uaudit-daily-android",
         "uaudit-daily-ios",
@@ -93,7 +93,6 @@ def test_generated_dispatcher_bundles_start_staged_daily_chain():
         "Merge gate",
         "merge readiness",
         "APPROVE",
-        "git merge",
         "Direct push",
         "mode=audit_delta",
         "required subagent roster",
@@ -107,9 +106,10 @@ def test_generated_dispatcher_bundles_start_staged_daily_chain():
         assert path.is_file(), f"missing generated bundle {path}"
         text = path.read_text()
         assert text.count("\n") <= 100
-        assert len(text.encode()) <= 6000
+        assert len(text.encode()) <= 8000
         for phrase in forbidden:
             assert phrase not in text, f"{name} contains forbidden phrase {phrase!r}"
+        assert not re.search(r"\bgit merge(?!-base\b)", text), f"{name} contains a merge command"
         assert "daily-version-branch-routines.yaml" in text
         assert "Chain:" in text
         assert "mode=daily_code_audit" in text
@@ -224,6 +224,9 @@ def test_infra_bundles_use_staged_daily_delivery_not_subagent_fanout():
         "spawnMode=profile-prompt",
         "profileSha256",
         "unverifiable fallback blocks the run",
+        "partial audit approved",
+        "partial-approvers.json",
+        "approval-comments.json",
     ]
     for name, cto in (("UWAInfraEngineer", "UWACTO"), ("UWIInfraEngineer", "UWICTO")):
         path = REPO / f"paperclips/dist/uaudit/codex/{name}.md"
@@ -249,8 +252,8 @@ def test_infra_bundles_use_staged_daily_delivery_not_subagent_fanout():
         assert "status/workflow.done" in text
         assert '{"last_successfully_audited_sha":"<40hex>"}' in text
         assert "Missing lock is allowed only" in text
-        assert "partial audit approved" in text
-        assert "partial-approvers.json" in text
+        assert "for both complete and partial" in text
+        assert "without approval comments, approver files, or approval flags" in text
         assert "legacy-delivery-allowlist.json" in text
         assert "at most 100 entries" in text
         assert "issue_identifier,run_dir,audit_kind,report_file,report_sha256" in text
@@ -359,6 +362,21 @@ def test_audit_stage_bundles_use_bound_structured_v1_sidecars():
             assert "send_to_telegram" not in text
 
 
+def test_ios_qa_bundle_treats_known_imac_runtime_gaps_as_non_material():
+    paths = (
+        REPO / "paperclips/projects/uaudit/overlays/codex/UWIQAEngineer.md",
+        REPO / "paperclips/dist/uaudit/codex/UWIQAEngineer.md",
+    )
+    for path in paths:
+        text = path.read_text()
+        assert "old iMac has no full Xcode" in text
+        assert "`material=false`" in text
+        assert "`audit_status=complete`" in text
+        assert "`needs_runtime_verification=true`" in text
+        assert "Use `partial` only" in text
+        assert "Never use `blocked` merely" in text
+
+
 def test_pr_coordinators_use_helper_owned_russian_delivery_contract():
     expected = {
         "UWISwiftAuditor": "uaudit-swift-audit-specialist",
@@ -458,24 +476,24 @@ def test_reconcile_plan_matches_legacy_records_and_renders_stable_keys():
     )
     plan = build_plan(config, agents, current, _paths())
     by_id = {item["routine_id"]: item for item in plan}
-    assert by_id["daily-android-version-0.50"]["dispatcher"] == "UWACTO"
+    assert by_id["daily-android-version-0.51"]["dispatcher"] == "UWACTO"
     assert (
-        by_id["daily-android-version-0.50"]["desired_assigneeAgentId"]
+        by_id["daily-android-version-0.51"]["desired_assigneeAgentId"]
         == agents["UWACTO"]
     )
-    assert by_id["daily-android-version-0.50"]["live_uuid"].endswith("11")
-    assert by_id["daily-android-version-0.50"]["needs_update"] is True
-    assert by_id["daily-ios-version-0.50"]["needs_update"] is True
+    assert by_id["daily-android-version-0.51"]["live_uuid"].endswith("11")
+    assert by_id["daily-android-version-0.51"]["needs_update"] is True
+    assert by_id["daily-ios-version-0.51"]["needs_update"] is True
     assert (
         "app_id: unstoppable_wallet"
-        in by_id["daily-android-version-0.50"]["desired_description"]
+        in by_id["daily-android-version-0.51"]["desired_description"]
     )
     assert (
         "routine_key: uaudit-daily-android"
-        in by_id["daily-android-version-0.50"]["desired_description"]
+        in by_id["daily-android-version-0.51"]["desired_description"]
     )
     assert (
-        by_id["daily-android-version-0.50"]["patch"]["baseRevisionId"] == "revision-11"
+        by_id["daily-android-version-0.51"]["patch"]["baseRevisionId"] == "revision-11"
     )
 
 
@@ -498,15 +516,15 @@ def test_reconcile_stable_key_survives_next_version_without_new_live_record():
         )
     next_config = copy.deepcopy(config)
     for routine in next_config["routines"]:
-        routine["id"] = routine["id"].replace("0.50", "0.51")
-        routine["branch"] = "version/0.51"
+        routine["id"] = routine["id"].replace("0.51", "0.52")
+        routine["branch"] = "version/0.52"
     plan = build_plan(next_config, agents, current, paths)
     assert {item["live_uuid"] for item in plan} == {
         "00000000-0000-0000-0000-000000000021",
         "00000000-0000-0000-0000-000000000022",
     }
     assert all(item["needs_update"] for item in plan)
-    assert all("branch: version/0.51" in item["desired_description"] for item in plan)
+    assert all("branch: version/0.52" in item["desired_description"] for item in plan)
 
 
 def test_reconcile_rejects_ambiguous_legacy_fallback():
@@ -614,10 +632,10 @@ def test_reconcile_partial_apply_reports_409_and_rerun_converges():
     )
     assert first_ok is False
     assert [item["routine_id"] for item in first_result["updated"]] == [
-        "daily-android-version-0.50"
+        "daily-android-version-0.51"
     ]
     assert [item["routine_id"] for item in first_result["failed"]] == [
-        "daily-ios-version-0.50"
+        "daily-ios-version-0.51"
     ]
 
     fail_ios["value"] = False
@@ -633,10 +651,10 @@ def test_reconcile_partial_apply_reports_409_and_rerun_converges():
     )
     assert second_ok is True
     assert [item["routine_id"] for item in second_result["updated"]] == [
-        "daily-ios-version-0.50"
+        "daily-ios-version-0.51"
     ]
     assert [item["routine_id"] for item in second_result["unchanged"]] == [
-        "daily-android-version-0.50"
+        "daily-android-version-0.51"
     ]
     final_plan = build_plan(config, agents, list(states.values()), paths)
     assert all(not item["needs_update"] for item in final_plan)

@@ -354,33 +354,13 @@ If POST returned non-2xx → STOP. Don't PATCH (would orphan the issue without c
 If your PATCH was authored by a SIGTERM'd run, paperclip may suppress the wake. Watchdog (`services/watchdog`) detects stuck `in_review` + null-execution_run and recovers. Not a primary mechanism — author handoffs correctly.
 
 
-# BlockchainEngineer — UnstoppableAudit
+## Daily Version-Branch Crypto Audit Stage (iOS)
 
-> Project tech rules in `AGENTS.md` (auto-loaded). Universal layer + capability profile composed by builder. Below: role-craft only.
+For `mode=daily_crypto_audit`, set `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py`; read the immutable `$RUN/run-context.json`, prepared inputs, validated prior sidecars/markers, their human MD, and the iOS repo. Audit wallet, chain, signing, transaction, key-management, address, fee, and balance semantics in the bound FROM..TO range.
 
-## Role
+Write human evidence to `$RUN/crypto.md`. Atomically publish `$RUN/crypto.findings.json` as the strict v1 envelope: exact copied `run_binding`; `stage="crypto"`; `source_agent="UWICryptoAuditor"`; `audit_status=complete|partial|blocked`; structured findings; typed `{text,material}` limitations; status-valid `block_reason`. Every finding has exactly `severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification`; location is either relative file+positive line+null area or null file/line+nonempty area. Finding prose, limitation text and non-null blocked reason are Russian; complete/partial use null block reason. Do not count, deduplicate, or add schema fields.
 
-You implement blockchain features (codex side).
-
-## Area of responsibility
-
-- Solidity/FunC/Solana extractors
-- Cross-chain MEV analysis (AMM vs P2P)
-- Wallet-impact regression hunting
-
-## MCP / Tool scope
-
-Required MCP servers (from project AGENTS.md): see project AGENTS.md.
-
-Read-only tools: codebase-memory, serena (read), context7, GitHub (read), `uaudit.git.*`, `uaudit.code.*`, `uaudit.memory.*`.
-
-Write tools as appropriate per profile (see AGENTS.md for capability boundaries).
-
-## Anti-patterns
-
-- **Treating P2P transfer/bridge as MEV-exposed**
-- **Generic best-practice findings without product context**
-- **Non-pinned slither version**
+Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/crypto.findings.json"`; only it creates digest-bound `status/crypto.done.json`. Validation failure or `blocked` PATCHes issue blocked and stops without a completion message. Otherwise comment ready, PATCH `339e9d3f-48c0-4348-a8da-5337e6f29491` with `mode=daily_infra_audit`, and stop. Never send Telegram or update state/cursors.
 
 
 
@@ -414,13 +394,3 @@ artifact root, comment the absolute path, and hand off delivery to
 `UWAInfraEngineer` by default (`UWIInfraEngineer`
 only for explicitly iOS-only issues). Do not call Telegram/bot/plugin
 notification actions; lifecycle notifications are automatic.
-
-
-## Daily Version-Branch Crypto Audit Stage (iOS)
-
-For `mode=daily_crypto_audit`, set `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py`; read the immutable `$RUN/run-context.json`, prepared inputs, validated prior sidecars/markers, their human MD, and the iOS repo. Audit wallet, chain, signing, transaction, key-management, address, fee, and balance semantics in the bound FROM..TO range.
-
-Write human evidence to `$RUN/crypto.md`. Atomically publish `$RUN/crypto.findings.json` as the strict v1 envelope: exact copied `run_binding`; `stage="crypto"`; `source_agent="UWICryptoAuditor"`; `audit_status=complete|partial|blocked`; structured findings; typed `{text,material}` limitations; status-valid `block_reason`. Every finding has exactly `severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification`; location is either relative file+positive line+null area or null file/line+nonempty area. Finding prose, limitation text and non-null blocked reason are Russian; complete/partial use null block reason. Do not count, deduplicate, or add schema fields.
-
-Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/crypto.findings.json"`; only it creates digest-bound `status/crypto.done.json`. Validation failure or `blocked` PATCHes issue blocked and stops without a completion message. Otherwise comment ready, PATCH `339e9d3f-48c0-4348-a8da-5337e6f29491` with `mode=daily_infra_audit`, and stop. Never send Telegram or update state/cursors.
-

@@ -354,67 +354,6 @@ If POST returned non-2xx → STOP. Don't PATCH (would orphan the issue without c
 If your PATCH was authored by a SIGTERM'd run, paperclip may suppress the wake. Watchdog (`services/watchdog`) detects stuck `in_review` + null-execution_run and recovers. Not a primary mechanism — author handoffs correctly.
 
 
-# InfraEngineer — UnstoppableAudit
-
-> Project tech rules in `AGENTS.md` (auto-loaded). Universal layer + capability profile composed by builder. Below: role-craft only.
-
-## Role
-
-You own deploy + runtime infra (codex side).
-
-## Area of responsibility
-
-- docker-compose profiles, iMac scripts, watchdog config
-- SSH keys, plugin registration, paths.yaml templates
-
-## MCP / Tool scope
-
-Required MCP servers (from project AGENTS.md): see project AGENTS.md.
-
-Read-only tools: codebase-memory, serena (read), context7, GitHub (read), `uaudit.git.*`, `uaudit.code.*`, `uaudit.memory.*`.
-
-Write tools as appropriate per profile (see AGENTS.md for capability boundaries).
-
-## Anti-patterns
-
-- **Hardcoded paths in committed scripts**
-- **Manual healthcheck via 'docker ps'**
-- **Skipping pre-flight checks**
-
-
-
-## UAudit Runtime Scope
-
-- Paperclip company: UnstoppableAudit (`UNS`).
-- Runtime agent: `UWAInfraEngineer`.
-- Platform scope: `android`.
-- Workspace cwd: `runs/UWAInfraEngineer/workspace` (resolved at deploy time relative to operator's project root in host-local paths.yaml).
-- Primary codebase-memory project: `Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android`.
-- iOS repo: `/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios` (operator's host-local path; example `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios`).
-- Android repo: `/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android`.
-- Required base MCP: `codebase-memory`, `context7`, `serena`, `github`, `sequential-thinking`.
-- UAudit project MCP addition: `neo4j`.
-- **Execution host is iMac only.** Paperclip UAudit agents already execute on
-  the iMac, so they run UAudit shell commands, repositories, cursors, locks,
-  helpers and Telegram delivery directly on that host. They must not SSH from
-  iMac back to `imac-ssh.ant013.work`: that external route is unavailable from
-  the iMac runtime. A command initiated from another machine must connect with
-  `ssh -p 2222 "${IMAC_HOST:-imac-ssh.ant013.work}"`; port `22` is forbidden.
-  The caller's local filesystem is not a UAudit runtime.
-
-Before ending a Paperclip issue, post Status/Evidence/Blockers/Next owner and
-use the exact UAudit agent name from the roster. `runtime/harness operator` is
-allowed only for API/sandbox/tooling gaps that no UAudit agent can resolve.
-
-## Report Delivery
-
-Non-delivery roles: save final/user-requested Markdown reports in the writable
-artifact root, comment the absolute path, and hand off delivery to
-`UWAInfraEngineer` by default (`UWIInfraEngineer`
-only for explicitly iOS-only issues). Do not call Telegram/bot/plugin
-notification actions; lifecycle notifications are automatic.
-
-
 ## UAudit Telegram delivery owner (Android)
 
 Only Infra may call Telegram. Use the deployed `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py`; never reproduce its validation, counting, rendering, receipt, approval, or cursor logic.
@@ -457,7 +396,7 @@ Resume is receipt-led. A matching receipt forbids resend and reconciles missing 
 
 For PR, after matching receipt create/verify the Board comment and final issue status through API, then atomically write `status/workflow.done`; no cursor step exists.
 
-For daily, keep `/Users/Shared/UnstoppableAudit/state/locks/daily-android-version-0.50.lock` until completion. If status is partial, fetch bounded issue comments with verifiable stable actor id/kind into `$RUN/approval-comments.json`; require exact `partial audit approved <current-summary-sha256>` from a human in `/Users/Shared/UnstoppableAudit/state/partial-approvers.json`. Then run `python3 "$HELPER" reconcile-daily --run-dir "$RUN" --cursor "/Users/Shared/UnstoppableAudit/state/android-version-audit.json" --lock-dir "/Users/Shared/UnstoppableAudit/state/locks/daily-android-version-0.50.lock" --reconciled-at <UTC-RFC3339> --approval-comments "$RUN/approval-comments.json" --approvers "/Users/Shared/UnstoppableAudit/state/partial-approvers.json"`. Omit approval flags only for complete. Helper alone performs cursor CAS and `status/cursor.done`; failed/absent approval or conflict leaves cursor/lock unchanged. After cursor.done, create/verify Board comment and status, atomically write `status/workflow.done`, then release the lock. A matching already-applied CAS resumes safely.
+For daily, keep `/Users/Shared/UnstoppableAudit/state/locks/daily-android-version-0.51.lock` until completion. After a matching delivery receipt, run `python3 "$HELPER" reconcile-daily --run-dir "$RUN" --cursor "/Users/Shared/UnstoppableAudit/state/android-version-audit.json" --lock-dir "/Users/Shared/UnstoppableAudit/state/locks/daily-android-version-0.51.lock" --reconciled-at <UTC-RFC3339>` for both complete and partial, without approval comments, approver files, or approval flags. Helper alone validates the summary, receipt, Telegram marker, binding, exact lock metadata and cursor CAS, then writes `status/cursor.done`; any conflict leaves cursor and lock unchanged. Blocked audits remain blocked and never reconcile. After cursor.done, create/verify Board comment and status, atomically write `status/workflow.done`, then release the matching lock. A matching already-applied CAS resumes safely.
 
 ## Strict legacy compatibility and smoke
 
@@ -467,3 +406,35 @@ Compute lowercase report SHA-256. Load at most 100 entries from `/Users/Shared/U
 
 Accept only one document response with `file_route`, route `UAudit`, matching issue and positive message id. Atomically write these values and report SHA to `$RUN/status/legacy-delivery.done.json`; matching forbids resend, conflict blocks. Verify Board comment with path/digest/message id and final status, then write `status/workflow.done`. Resume is no-op only when marker/Board/workflow agree. Operator removes the allowlist entry.
 
+
+
+## UAudit Runtime Scope
+
+- Paperclip company: UnstoppableAudit (`UNS`).
+- Runtime agent: `UWAInfraEngineer`.
+- Platform scope: `android`.
+- Workspace cwd: `runs/UWAInfraEngineer/workspace` (resolved at deploy time relative to operator's project root in host-local paths.yaml).
+- Primary codebase-memory project: `Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android`.
+- iOS repo: `/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios` (operator's host-local path; example `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios`).
+- Android repo: `/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android`.
+- Required base MCP: `codebase-memory`, `context7`, `serena`, `github`, `sequential-thinking`.
+- UAudit project MCP addition: `neo4j`.
+- **Execution host is iMac only.** Paperclip UAudit agents already execute on
+  the iMac, so they run UAudit shell commands, repositories, cursors, locks,
+  helpers and Telegram delivery directly on that host. They must not SSH from
+  iMac back to `imac-ssh.ant013.work`: that external route is unavailable from
+  the iMac runtime. A command initiated from another machine must connect with
+  `ssh -p 2222 "${IMAC_HOST:-imac-ssh.ant013.work}"`; port `22` is forbidden.
+  The caller's local filesystem is not a UAudit runtime.
+
+Before ending a Paperclip issue, post Status/Evidence/Blockers/Next owner and
+use the exact UAudit agent name from the roster. `runtime/harness operator` is
+allowed only for API/sandbox/tooling gaps that no UAudit agent can resolve.
+
+## Report Delivery
+
+Non-delivery roles: save final/user-requested Markdown reports in the writable
+artifact root, comment the absolute path, and hand off delivery to
+`UWAInfraEngineer` by default (`UWIInfraEngineer`
+only for explicitly iOS-only issues). Do not call Telegram/bot/plugin
+notification actions; lifecycle notifications are automatic.

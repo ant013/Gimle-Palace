@@ -269,33 +269,13 @@ If POST returned non-2xx → STOP. Don't PATCH (would orphan the issue without c
 If your PATCH was authored by a SIGTERM'd run, paperclip may suppress the wake. Watchdog (`services/watchdog`) detects stuck `in_review` + null-execution_run and recovers. Not a primary mechanism — author handoffs correctly.
 
 
-# ResearchAgent — UnstoppableAudit
+## Daily Version-Branch Research Stage (Android)
 
-> Project tech rules in `AGENTS.md` (auto-loaded). Universal layer + capability profile composed by builder. Below: role-craft only.
+For `mode=daily_research`, set `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py`; read `$RUN/run-context.json`, validated prior sidecars/markers and only references needed for open library, protocol, or platform questions. Do not redo prior audits.
 
-## Role
+Write cited human context to `$RUN/research-context.md`. Atomically publish `$RUN/research-context.findings.json` as the strict v1 envelope with exact copied `run_binding`, `stage="research_context"`, `source_agent="UWAResearchAgent"`, `audit_status=complete|partial|blocked`, structured findings, typed `{text,material}` limitations, and status-valid `block_reason`. Every finding has exactly `severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification`; location is either relative file+positive line+null area or null file/line+nonempty area. Finding prose, limitation text and non-null blocked reason are Russian; complete/partial use null block reason. Do not count/deduplicate or add fields.
 
-You research external libraries, MCP specs, domain (codex side).
-
-## Area of responsibility
-
-- Library API verification
-- Decision documents
-- Competitive analysis
-
-## MCP / Tool scope
-
-Required MCP servers (from project AGENTS.md): see project AGENTS.md.
-
-Read-only tools: codebase-memory, serena (read), context7, GitHub (read), `uaudit.git.*`, `uaudit.code.*`, `uaudit.memory.*`.
-
-Write tools as appropriate per profile (see AGENTS.md for capability boundaries).
-
-## Anti-patterns
-
-- **Citing training-data without grepping installed**
-- **Research without actionable recommendation**
-- **Skipping context7 for library docs**
+Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/research-context.findings.json"`; only it creates digest-bound `status/research_context.done.json`. Validation failure or `blocked` PATCHes issue blocked and stops without completion. Otherwise comment ready, PATCH `8089992b-8a51-4386-b180-9368b67bbc51` with `mode=daily_qa_verify`, and stop. Never send Telegram or update state/cursors.
 
 
 
@@ -329,13 +309,3 @@ artifact root, comment the absolute path, and hand off delivery to
 `UWAInfraEngineer` by default (`UWIInfraEngineer`
 only for explicitly iOS-only issues). Do not call Telegram/bot/plugin
 notification actions; lifecycle notifications are automatic.
-
-
-## Daily Version-Branch Research Stage (Android)
-
-For `mode=daily_research`, set `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py`; read `$RUN/run-context.json`, validated prior sidecars/markers and only references needed for open library, protocol, or platform questions. Do not redo prior audits.
-
-Write cited human context to `$RUN/research-context.md`. Atomically publish `$RUN/research-context.findings.json` as the strict v1 envelope with exact copied `run_binding`, `stage="research_context"`, `source_agent="UWAResearchAgent"`, `audit_status=complete|partial|blocked`, structured findings, typed `{text,material}` limitations, and status-valid `block_reason`. Every finding has exactly `severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification`; location is either relative file+positive line+null area or null file/line+nonempty area. Finding prose, limitation text and non-null blocked reason are Russian; complete/partial use null block reason. Do not count/deduplicate or add fields.
-
-Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/research-context.findings.json"`; only it creates digest-bound `status/research_context.done.json`. Validation failure or `blocked` PATCHes issue blocked and stops without completion. Otherwise comment ready, PATCH `8089992b-8a51-4386-b180-9368b67bbc51` with `mode=daily_qa_verify`, and stop. Never send Telegram or update state/cursors.
-

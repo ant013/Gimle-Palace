@@ -750,7 +750,7 @@ def _canonicalize(
     definitions: Sequence[tuple[str, str, str]],
 ) -> tuple[dict[str, Any], str]:
     stage_rank = {definition[0]: index for index, definition in enumerate(definitions)}
-    finding_groups: dict[tuple[str, str], list[tuple[Mapping[str, Any], Mapping[str, Any]]]] = {}
+    finding_groups: dict[str, list[tuple[Mapping[str, Any], Mapping[str, Any]]]] = {}
     limitation_groups: dict[tuple[str, bool], list[tuple[Mapping[str, Any], Mapping[str, Any]]]] = {}
     for sidecar in sidecars:
         for finding in sidecar["findings"]:
@@ -772,6 +772,7 @@ def _canonicalize(
             )
         )
         representative = candidates[0][1]
+        normalized_title = _normalize_key(representative["title"])
         canonical_findings.append(
             {
                 "dedup_key": {"location": location_key, "title": normalized_title},

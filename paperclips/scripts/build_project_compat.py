@@ -557,6 +557,7 @@ def _collect_overlay_blocks(
     target: str,
     role_name: str,
     agent_name: str,
+    role_file: Path | None = None,
 ) -> list[str]:
     """Return overlay file contents per spec §6.7 (Phase B compose path).
 
@@ -570,8 +571,12 @@ def _collect_overlay_blocks(
     overlay_names = ["_common.md", role_name]
     if agent_name:
         overlay_names.append(f"{agent_name}.md")
+    source_path = role_file.resolve() if role_file is not None else None
     for overlay_name in overlay_names:
         overlay_path = repo_root / overlay_root / target / overlay_name
+        resolved_path = overlay_path.resolve()
+        if resolved_path == source_path:
+            continue
         if overlay_path.is_file():
             blocks.append(overlay_path.read_text())
     return blocks
@@ -633,7 +638,7 @@ def render_role(
         # rev4 fix B-2: same key-naming fix — flat 'agent_name', not 'agent.agent_name'.
         agent_name = (agent_values or {}).get("agent_name", "")
         overlay_blocks = _collect_overlay_blocks(
-            repo_root, values, target, role_file.name, agent_name,
+            repo_root, values, target, role_file.name, agent_name, role_file,
         )
         text = _compose_agent_prompt(
             profile_name=profile_name,
@@ -692,6 +697,11 @@ def render_role(
             f"unresolved variable in {role_file.relative_to(repo_root)}: "
             f"{unresolved.group(0)}",
         )
+    overlay_root = manifest_values.get("paths.overlay_root")
+    if overlay_root:
+        source_overlay_root = (repo_root / overlay_root / target).resolve()
+        if role_file.resolve().is_relative_to(source_overlay_root):
+            text = text.rstrip("\n") + "\n"
     return text
 
 

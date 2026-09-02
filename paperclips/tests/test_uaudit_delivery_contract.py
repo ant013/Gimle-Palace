@@ -191,6 +191,7 @@ def prepare_run(
     lock_routine_id: str | None = None,
     statuses: dict[str, str] | None = None,
     findings: dict[str, list[dict]] | None = None,
+    limitations: dict[str, list[dict]] | None = None,
     diff_patch: bytes | None = None,
     validate: bool = True,
 ) -> dict:
@@ -254,12 +255,13 @@ def prepare_run(
     binding = read_json(run / "run-context.json")
     statuses = statuses or {}
     findings = findings or {}
+    limitations = limitations or {}
     for stage, agent, filename in PAIRS[(kind, platform)]:
         status = statuses.get(stage, "complete")
-        limitations = []
+        stage_limitations = limitations.get(stage, [])
         block_reason = None
-        if status == "partial":
-            limitations = [{"text": "Runtime-сценарий не запускался полностью.", "material": True}]
+        if status == "partial" and not stage_limitations:
+            stage_limitations = [{"text": "Runtime-сценарий не запускался полностью.", "material": True}]
         elif status == "blocked":
             block_reason = "Не удалось получить обязательный вход проверки."
         sidecar = {
@@ -269,7 +271,7 @@ def prepare_run(
             "source_agent": agent,
             "audit_status": status,
             "findings": findings.get(stage, []),
-            "limitations": limitations,
+            "limitations": stage_limitations,
             "block_reason": block_reason,
         }
         path = run / filename
@@ -480,6 +482,60 @@ def test_complete_zero_removes_stale_reports_and_uses_message_receipt(tmp_path: 
     assert stored["route_source"] == "file_route"
 
 
+def test_ios_non_material_runtime_limitation_delivers_and_advances_cursor(tmp_path: Path):
+    fixture = prepare_run(
+        tmp_path,
+        kind="daily_delta",
+        findings={"qa_verify": [finding(runtime=True)]},
+        limitations={
+            "qa_verify": [
+                {
+                    "text": "На старом iMac недоступны полный Xcode и проверка на устройстве.",
+                    "material": False,
+                }
+            ]
+        },
+    )
+
+    result = aggregate(fixture)
+    assert result["audit_status"] == "complete"
+    assert result["finding_count"] == 1
+    assert result["mode"] == "document"
+    record(fixture, "document")
+
+    cursor = tmp_path / "state" / "ios-version-audit.json"
+    write_json(cursor, {"last_successfully_audited_sha": BASE_SHA})
+    applied = call(
+        fixture["helper"],
+        "reconcile-daily",
+        "--run-dir",
+        fixture["run"],
+        "--cursor",
+        cursor,
+        "--lock-dir",
+        fixture["lock"],
+        "--reconciled-at",
+        RECONCILED_AT,
+    )
+    assert applied["status"] == "applied"
+    assert read_json(cursor)["last_successfully_audited_sha"] == HEAD_SHA
+    assert (fixture["run"] / "status/cursor.done").is_file()
+
+    resumed = call(
+        fixture["helper"],
+        "reconcile-daily",
+        "--run-dir",
+        fixture["run"],
+        "--cursor",
+        cursor,
+        "--lock-dir",
+        fixture["lock"],
+        "--reconciled-at",
+        RECONCILED_AT,
+    )
+    assert resumed["status"] == "already_applied"
+
+
 def test_daily_aggregate_streams_diff_larger_than_generic_file_limit(tmp_path: Path):
     diff = b"diff --git a/A b/A\n--- a/A\n+++ b/A\n" + (b"+new\n" * (17 * 1024 * 1024 // 5))
     fixture = prepare_run(
@@ -615,7 +671,7 @@ def test_forced_full_uses_russian_v1_delivery_without_daily_cursor(tmp_path: Pat
     assert "requires a daily summary" in failure["error"]
 
 
-def test_partial_zero_requires_document_and_allowlisted_human_approval(tmp_path: Path):
+def test_partial_zero_delivers_and_advances_cursor_without_human_approval(tmp_path: Path):
     fixture = prepare_run(tmp_path, kind="daily_delta", statuses={"qa_verify": "partial"})
     result = aggregate(fixture)
     assert result["audit_status"] == "partial"
@@ -632,67 +688,7 @@ def test_partial_zero_requires_document_and_allowlisted_human_approval(tmp_path:
 
     cursor = tmp_path / "state" / "ios-version-audit.json"
     write_json(cursor, {"last_successfully_audited_sha": BASE_SHA})
-    approvers = tmp_path / "state" / "partial-approvers.json"
-    write_json(approvers, {"schema_version": 1, "approver_actor_ids": ["human-7"]})
-    comments = fixture["run"] / "approval-comments.json"
     summary_sha = hashlib.sha256((fixture["run"] / "delivery-summary.json").read_bytes()).hexdigest()
-    write_json(
-        comments,
-        {
-            "schema_version": 1,
-            "comments": [
-                {
-                    "id": "comment-1",
-                    "text": f"partial audit approved {summary_sha}",
-                    "actor": {"id": "human-7", "kind": "agent"},
-                }
-            ],
-        },
-    )
-    before = cursor.read_bytes()
-    failure = call(
-        fixture["helper"],
-        "reconcile-daily",
-        "--run-dir",
-        fixture["run"],
-        "--cursor",
-        cursor,
-        "--lock-dir",
-        fixture["lock"],
-        "--reconciled-at",
-        RECONCILED_AT,
-        "--approval-comments",
-        comments,
-        "--approvers",
-        approvers,
-        ok=False,
-    )
-    assert "allowlisted human" in failure["error"]
-    assert cursor.read_bytes() == before
-
-    approved = read_json(comments)
-    approved["comments"][0]["actor"]["kind"] = "human"
-    write_json(comments, approved)
-    fake_approvers = tmp_path / "copied-approvers.json"
-    shutil.copyfile(approvers, fake_approvers)
-    failure = call(
-        fixture["helper"],
-        "reconcile-daily",
-        "--run-dir",
-        fixture["run"],
-        "--cursor",
-        cursor,
-        "--lock-dir",
-        fixture["lock"],
-        "--reconciled-at",
-        RECONCILED_AT,
-        "--approval-comments",
-        comments,
-        "--approvers",
-        fake_approvers,
-        ok=False,
-    )
-    assert "state/partial-approvers.json" in failure["error"]
     applied = call(
         fixture["helper"],
         "reconcile-daily",
@@ -704,13 +700,8 @@ def test_partial_zero_requires_document_and_allowlisted_human_approval(tmp_path:
         fixture["lock"],
         "--reconciled-at",
         RECONCILED_AT,
-        "--approval-comments",
-        comments,
-        "--approvers",
-        approvers,
     )
     assert applied["status"] == "applied"
-    assert applied["approval_comment_id"] == "comment-1"
     updated = read_json(cursor)
     assert updated["last_successfully_audited_sha"] == HEAD_SHA
     assert updated["last_delivery_summary_sha256"] == summary_sha
@@ -725,10 +716,6 @@ def test_partial_zero_requires_document_and_allowlisted_human_approval(tmp_path:
         fixture["lock"],
         "--reconciled-at",
         RECONCILED_AT,
-        "--approval-comments",
-        comments,
-        "--approvers",
-        approvers,
     )
     assert resumed["status"] == "already_applied"
 

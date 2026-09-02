@@ -62,7 +62,7 @@
   "project": "glitcherry-android",
   "schemaVersion": 1,
   "sourceManifest": "paperclips/projects/glitcherry-android/paperclip-agent-assembly.yaml",
-  "sourceManifestSha256": "be6694d489bdafe68573a8c0ca616537f1186a5299bb636d398787004b79e330",
+  "sourceManifestSha256": "947e7edcd751aca65bcdb6ce308c57ba9fe67d6a5328c095026d9bf436bc8691",
   "targets": {
     "codex": {
       "adapterType": "codex_local",

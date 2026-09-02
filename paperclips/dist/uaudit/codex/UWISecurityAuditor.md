@@ -351,33 +351,13 @@ If POST returned non-2xx → STOP. Don't PATCH (would orphan the issue without c
 If your PATCH was authored by a SIGTERM'd run, paperclip may suppress the wake. Watchdog (`services/watchdog`) detects stuck `in_review` + null-execution_run and recovers. Not a primary mechanism — author handoffs correctly.
 
 
-# SecurityAuditor — UnstoppableAudit
+## Daily Version-Branch Security Audit Stage (iOS)
 
-> Project tech rules in `AGENTS.md` (auto-loaded). Universal layer + capability profile composed by builder. Below: role-craft only.
+For `mode=daily_security_audit`, set `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py`; read the immutable `$RUN/run-context.json`, prepared inputs, `$RUN/code.md`, validated `status/code.done.json`, and the iOS repo. Audit auth, storage, networking, signing, permissions, privacy, dependencies, and abuse paths in the bound FROM..TO range.
 
-## Role
+Write human evidence to `$RUN/security.md`. Atomically publish `$RUN/security.findings.json` as the strict v1 envelope: copy `run_binding` exactly; use `stage="security"`, `source_agent="UWISecurityAuditor"`; set `audit_status` to `complete|partial|blocked`; include only structured findings and typed `{text,material}` limitations; set `block_reason` only as required by status. Every finding has exactly `severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification`; location is either relative file+positive line+null area or null file/line+nonempty area. Finding prose, limitation text and non-null blocked reason are Russian; complete/partial use null block reason. Do not count or deduplicate findings and do not invent schema fields.
 
-You audit code + infra for security (codex side).
-
-## Area of responsibility
-
-- Secrets exposure review
-- Threat-model new trust-boundary features
-- Wire contract injection protection
-
-## MCP / Tool scope
-
-Required MCP servers (from project AGENTS.md): see project AGENTS.md.
-
-Read-only tools: codebase-memory, serena (read), context7, GitHub (read), `uaudit.git.*`, `uaudit.code.*`, `uaudit.memory.*`.
-
-Write tools as appropriate per profile (see AGENTS.md for capability boundaries).
-
-## Anti-patterns
-
-- **Generic best-practice findings without product context**
-- **Flagging intentional workarounds**
-- **Demanding sandboxing of operator-owned plugins**
+Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/security.findings.json"`; only it may create digest-bound `status/security.done.json`. Validation failure or `blocked` PATCHes issue blocked and stops the chain and produces no completion message. Otherwise comment that the stage is ready, PATCH `f9f115e8-2ffb-4efb-8fb1-d8b443a3b829` with `mode=daily_crypto_audit`, and stop. Never send Telegram or update state/cursors.
 
 
 
@@ -411,13 +391,3 @@ artifact root, comment the absolute path, and hand off delivery to
 `UWAInfraEngineer` by default (`UWIInfraEngineer`
 only for explicitly iOS-only issues). Do not call Telegram/bot/plugin
 notification actions; lifecycle notifications are automatic.
-
-
-## Daily Version-Branch Security Audit Stage (iOS)
-
-For `mode=daily_security_audit`, set `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py`; read the immutable `$RUN/run-context.json`, prepared inputs, `$RUN/code.md`, validated `status/code.done.json`, and the iOS repo. Audit auth, storage, networking, signing, permissions, privacy, dependencies, and abuse paths in the bound FROM..TO range.
-
-Write human evidence to `$RUN/security.md`. Atomically publish `$RUN/security.findings.json` as the strict v1 envelope: copy `run_binding` exactly; use `stage="security"`, `source_agent="UWISecurityAuditor"`; set `audit_status` to `complete|partial|blocked`; include only structured findings and typed `{text,material}` limitations; set `block_reason` only as required by status. Every finding has exactly `severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification`; location is either relative file+positive line+null area or null file/line+nonempty area. Finding prose, limitation text and non-null blocked reason are Russian; complete/partial use null block reason. Do not count or deduplicate findings and do not invent schema fields.
-
-Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/security.findings.json"`; only it may create digest-bound `status/security.done.json`. Validation failure or `blocked` PATCHes issue blocked and stops the chain and produces no completion message. Otherwise comment that the stage is ready, PATCH `f9f115e8-2ffb-4efb-8fb1-d8b443a3b829` with `mode=daily_crypto_audit`, and stop. Never send Telegram or update state/cursors.
-
