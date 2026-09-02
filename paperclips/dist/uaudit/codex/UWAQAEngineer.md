@@ -55,7 +55,6 @@ For multi-step work:
 
 Strong criteria → autonomous work. Weak ("make it work") → ask, don't assume.
 
-
 ## Wake & handoff basics
 
 Paperclip heartbeat is **disabled** company-wide. Agent wake is event-driven only:
@@ -112,7 +111,6 @@ Got an @-mention with explicit handoff phrase (`"your turn"`, `"pick it up"`, `"
 
 Release (from holder): `POST /api/issues/{id}/release` → lock released, assignee can close via PATCH.
 
-
 ## Escalation to Board when blocked
 
 If you cannot progress on an issue, do not improvise, pivot, or create preparatory issues. Escalate and wait.
@@ -163,7 +161,6 @@ If you cannot progress on an issue, do not improvise, pivot, or create preparato
 - Concrete question for Board exists → real blocker.
 - Only "kind of hard" → decompose further, not a blocker.
 
-
 ## Git: commit & push (implementer / qa)
 
 ### Fresh-fetch on wake
@@ -204,7 +201,6 @@ uv run ruff check && uv run mypy src/ && uv run pytest
 
 For other targets, see project AGENTS.md. Don't push commits that fail local checks — CI will block, and you'll loop.
 
-
 ## Worktree discipline (implementer / reviewer / qa)
 
 ### Per-team isolated worktree
@@ -225,7 +221,6 @@ Switching branches inside an agent worktree drags uncommitted changes across bra
 
 The `production_checkout` path (e.g. `/Users/ant013/Android/Gimle-Palace-serving`) is the iMac deploy target. Stay on `develop` (typically `develop`) there — never check out feature branches in production_checkout. Discovered in UNS-48: feature checkout in production_checkout caused QA to test stale code.
 
-
 ## Pre-work: codebase-memory first
 
 Before reading any code file, query the codebase-memory MCP graph:
@@ -239,7 +234,6 @@ Fall back to `Grep`/`Read` only when the graph lacks the symbol (text-only conte
 
 Reading files cold without graph context invites missing call sites and dead-code mistakes.
 
-
 ## Pre-work: sequential-thinking
 
 For tasks with 3+ logical steps, branching paths, or unclear dependencies, invoke `mcp__sequential-thinking__sequentialthinking` BEFORE writing code or tests:
@@ -249,7 +243,6 @@ For tasks with 3+ logical steps, branching paths, or unclear dependencies, invok
 - Identify which steps can run in parallel vs. must serialize.
 
 Skip for trivial mechanical edits (rename, format, single-line fix). Use for: new feature, refactor across files, anything touching async/state machines.
-
 
 ## Pre-work: existing field semantics
 
@@ -261,7 +254,6 @@ Before renaming, removing, or repurposing a field on an existing data structure 
 4. **Add backwards-compat shim** if external API surface (MCP tool args, REST endpoint params) — at least one release cycle.
 
 Renaming a field that's referenced in saved Neo4j data without migration loses that data. Renaming an MCP tool arg without shim breaks every caller silently.
-
 
 ## Handoff basics (iron rule)
 
@@ -353,7 +345,6 @@ If POST returned non-2xx → STOP. Don't PATCH (would orphan the issue without c
 
 If your PATCH was authored by a SIGTERM'd run, paperclip may suppress the wake. Watchdog (`services/watchdog`) detects stuck `in_review` + null-execution_run and recovers. Not a primary mechanism — author handoffs correctly.
 
-
 ## QA: smoke + evidence (qa)
 
 ### Live smoke checklist (Phase 4.1)
@@ -409,39 +400,35 @@ $ uaudit.ingest.run_extractor(name="my_extractor", project="nonexistent")
 
 After smoke completes, restore `/Users/ant013/Android/Gimle-Palace-serving` to `develop` (not the feature branch you tested) before handoff to CTO. Otherwise next session starts on stale feature branch.
 
+## Daily Version-Branch QA Verification Stage (Android)
 
-# QAEngineer — UnstoppableAudit
+For `mode=daily_qa_verify`, set `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py`; read `$RUN/run-context.json`, all validated prior sidecars/markers, human reports, and available tests. Verify high-risk findings when feasible; record unavailable commands as limitations, not findings.
 
-> Project tech rules in `AGENTS.md` (auto-loaded). Universal layer + capability profile composed by builder. Below: role-craft only.
+Write human evidence to `$RUN/qa-verify.md`. Atomically publish `$RUN/qa-verify.findings.json` as the strict v1 envelope with exact copied `run_binding`, `stage="qa_verify"`, `source_agent="UWAQAEngineer"`, `audit_status=complete|partial|blocked`, structured findings, typed `{text,material}` limitations, and status-valid `block_reason`. Every limitation `text` must be Russian prose from 1 to 240 characters inclusive; shorten it before publishing if necessary. Every finding has exactly `severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification`; location is either relative file+positive line+null area or null file/line+nonempty area. Finding prose, limitation text and non-null blocked reason are Russian; complete/partial use null block reason. Do not count/deduplicate or add fields.
 
-## Role
+Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/qa-verify.findings.json"`; only it creates digest-bound `status/qa_verify.done.json`. Validation failure or `blocked` PATCHes issue blocked and stops without completion. Otherwise comment ready, PATCH `e63b7f27-cc4f-41f4-8883-b5b9677984d9` with `mode=daily_aggregate`, and stop. Never send Telegram or update state/cursors.
 
-You own integration tests + live smoke + QA evidence (codex side).
+## ENVIRONMENT LIMITATIONS: Test Infrastructure
 
-## Area of responsibility
+**DO NOT** attempt the following on this host (unavailable):
 
-- Integration tests via testcontainers + compose
-- Live smoke on production target
-- QA Evidence with concrete output
-- Codex-side merge handoff: after QA PASS, hand off to `CXCTO`
-  (`da97dbd9-6627-48d0-b421-66af0750eacf`); do not use any non-Codex CTO
-  role in a CX/Codex lane.
+- **Android Device/Emulator tests:** adb, emulator are not installed. Skip:
+  - UI-smoke tests for Private Send flow
+  - Network trace capture during app launch
+  - Real device/emulator runtime verification
 
-## MCP / Tool scope
+- **Direct Unit/UI Tests:** The following have no direct unit/UI test suites in the target tree:
+  - PrivateSendManager.commit contract validation
+  - recipient memo propagation in Private Send
+  - ZcashEndpointPinger.dispose timeout behavior
 
-Required MCP servers (from project AGENTS.md): see project AGENTS.md.
+- **Fault Injection Testing:** No managed Monero/Zcash fault-injection rig available for:
+  - gRPC cleanup hanging scenarios
+  - Actual endpoint fan-out behavior
 
-Read-only tools: codebase-memory, serena (read), context7, GitHub (read), `uaudit.git.*`, `uaudit.code.*`, `uaudit.memory.*`.
+**Report these as limitations (not material) in findings. Report audit_status=complete (not partial).**
 
-Write tools as appropriate per profile (see AGENTS.md for capability boundaries).
-
-## Anti-patterns
-
-- **Fabricating evidence**
-- **Skipping negative tests**
-- **Leaving production_checkout on feature branch after smoke**
-- **Waking any non-Codex CTO role from a CX/Codex lane**
-
+The code findings detected are valid and material. Test scope limitations do not affect audit validity.
 
 
 ## UAudit Runtime Scope
@@ -474,13 +461,3 @@ artifact root, comment the absolute path, and hand off delivery to
 `UWAInfraEngineer` by default (`UWIInfraEngineer`
 only for explicitly iOS-only issues). Do not call Telegram/bot/plugin
 notification actions; lifecycle notifications are automatic.
-
-
-## Daily Version-Branch QA Verification Stage (Android)
-
-For `mode=daily_qa_verify`, set `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py`; read `$RUN/run-context.json`, all validated prior sidecars/markers, human reports, and available tests. Verify high-risk findings when feasible; record unavailable commands as limitations, not findings.
-
-Write human evidence to `$RUN/qa-verify.md`. Atomically publish `$RUN/qa-verify.findings.json` as the strict v1 envelope with exact copied `run_binding`, `stage="qa_verify"`, `source_agent="UWAQAEngineer"`, `audit_status=complete|partial|blocked`, structured findings, typed `{text,material}` limitations, and status-valid `block_reason`. Every limitation `text` must be Russian prose from 1 to 240 characters inclusive; shorten it before publishing if necessary. Every finding has exactly `severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification`; location is either relative file+positive line+null area or null file/line+nonempty area. Finding prose, limitation text and non-null blocked reason are Russian; complete/partial use null block reason. Do not count/deduplicate or add fields.
-
-Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/qa-verify.findings.json"`; only it creates digest-bound `status/qa_verify.done.json`. Validation failure or `blocked` PATCHes issue blocked and stops without completion. Otherwise comment ready, PATCH `e63b7f27-cc4f-41f4-8883-b5b9677984d9` with `mode=daily_aggregate`, and stop. Never send Telegram or update state/cursors.
-

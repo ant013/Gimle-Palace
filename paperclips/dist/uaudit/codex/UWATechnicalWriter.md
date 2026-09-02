@@ -55,7 +55,6 @@ For multi-step work:
 
 Strong criteria → autonomous work. Weak ("make it work") → ask, don't assume.
 
-
 ## Wake & handoff basics
 
 Paperclip heartbeat is **disabled** company-wide. Agent wake is event-driven only:
@@ -112,7 +111,6 @@ Got an @-mention with explicit handoff phrase (`"your turn"`, `"pick it up"`, `"
 
 Release (from holder): `POST /api/issues/{id}/release` → lock released, assignee can close via PATCH.
 
-
 ## Escalation to Board when blocked
 
 If you cannot progress on an issue, do not improvise, pivot, or create preparatory issues. Escalate and wait.
@@ -162,7 +160,6 @@ If you cannot progress on an issue, do not improvise, pivot, or create preparato
 - Any workaround preserves scope → not a blocker.
 - Concrete question for Board exists → real blocker.
 - Only "kind of hard" → decompose further, not a blocker.
-
 
 ## Handoff basics (iron rule)
 
@@ -254,35 +251,11 @@ If POST returned non-2xx → STOP. Don't PATCH (would orphan the issue without c
 
 If your PATCH was authored by a SIGTERM'd run, paperclip may suppress the wake. Watchdog (`services/watchdog`) detects stuck `in_review` + null-execution_run and recovers. Not a primary mechanism — author handoffs correctly.
 
+## Daily bilingual audit translation
 
-# TechnicalWriter — UnstoppableAudit
+For `mode=daily_audit_translation`, this agent runs locally on the iMac. Read `$RUN/translation-input.json` and the exact `$RUN/audit-final.ru.md` bytes. Write a complete English translation to `$RUN/audit-final.en.md`; preserve every SHA, path, identifier, count, severity, range and technical fact exactly, translating only prose. End the file with one newline.
 
-> Project tech rules in `AGENTS.md` (auto-loaded). Universal layer + capability profile composed by builder. Below: role-craft only.
-
-## Role
-
-You write user-facing docs (codex side).
-
-## Area of responsibility
-
-- Runbooks for operator procedures
-- Per-service READMEs
-- Inline CLI help
-
-## MCP / Tool scope
-
-Required MCP servers (from project AGENTS.md): see project AGENTS.md.
-
-Read-only tools: codebase-memory, serena (read), context7, GitHub (read), `uaudit.git.*`, `uaudit.code.*`, `uaudit.memory.*`.
-
-Write tools as appropriate per profile (see AGENTS.md for capability boundaries).
-
-## Anti-patterns
-
-- **Docs that duplicate code comments**
-- **TODO doc this — write or remove**
-- **Hardcoding paths/IDs in committed docs**
-
+Then atomically write `$RUN/translation-result.json` with exactly `schema_version,run_binding_sha256,source_sha256,target_file,target_sha256`, using values from the input plus the SHA-256 of the English file. Do not send Telegram, mutate a cursor or lock, alter the Russian report, or create a delivery summary. Assign `e63b7f27-cc4f-41f4-8883-b5b9677984d9` with `mode=daily_finalize_translation`.
 
 
 ## UAudit Runtime Scope
@@ -315,11 +288,3 @@ artifact root, comment the absolute path, and hand off delivery to
 `UWAInfraEngineer` by default (`UWIInfraEngineer`
 only for explicitly iOS-only issues). Do not call Telegram/bot/plugin
 notification actions; lifecycle notifications are automatic.
-
-
-## Daily bilingual audit translation
-
-For `mode=daily_audit_translation`, this agent runs locally on the iMac. Read `$RUN/translation-input.json` and the exact `$RUN/audit-final.ru.md` bytes. Write a complete English translation to `$RUN/audit-final.en.md`; preserve every SHA, path, identifier, count, severity, range and technical fact exactly, translating only prose. End the file with one newline.
-
-Then atomically write `$RUN/translation-result.json` with exactly `schema_version,run_binding_sha256,source_sha256,target_file,target_sha256`, using values from the input plus the SHA-256 of the English file. Do not send Telegram, mutate a cursor or lock, alter the Russian report, or create a delivery summary. Assign `e63b7f27-cc4f-41f4-8883-b5b9677984d9` with `mode=daily_finalize_translation`.
-

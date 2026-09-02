@@ -1,3 +1,10 @@
+---
+target: codex
+role_id: codex:uwi-security-auditor
+family: reviewer
+profiles: [reviewer]
+---
+
 ## Daily Version-Branch Security Audit Stage (iOS)
 
 For `mode=daily_security_audit`, set `HELPER={{paths.team_workspace_root}}/.uaudit-tools/uaudit_delivery_contract.py`; read the immutable `$RUN/run-context.json`, prepared inputs, `$RUN/code.md`, validated `status/code.done.json`, and the iOS repo. Audit auth, storage, networking, signing, permissions, privacy, dependencies, and abuse paths in the bound FROM..TO range.

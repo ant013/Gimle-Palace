@@ -55,7 +55,6 @@ For multi-step work:
 
 Strong criteria → autonomous work. Weak ("make it work") → ask, don't assume.
 
-
 ## Wake & handoff basics
 
 Paperclip heartbeat is **disabled** company-wide. Agent wake is event-driven only:
@@ -112,7 +111,6 @@ Got an @-mention with explicit handoff phrase (`"your turn"`, `"pick it up"`, `"
 
 Release (from holder): `POST /api/issues/{id}/release` → lock released, assignee can close via PATCH.
 
-
 ## Escalation to Board when blocked
 
 If you cannot progress on an issue, do not improvise, pivot, or create preparatory issues. Escalate and wait.
@@ -163,7 +161,6 @@ If you cannot progress on an issue, do not improvise, pivot, or create preparato
 - Concrete question for Board exists → real blocker.
 - Only "kind of hard" → decompose further, not a blocker.
 
-
 ## Pre-work: codebase-memory first
 
 Before reading any code file, query the codebase-memory MCP graph:
@@ -177,7 +174,6 @@ Fall back to `Grep`/`Read` only when the graph lacks the symbol (text-only conte
 
 Reading files cold without graph context invites missing call sites and dead-code mistakes.
 
-
 ## Pre-work: sequential-thinking
 
 For tasks with 3+ logical steps, branching paths, or unclear dependencies, invoke `mcp__sequential-thinking__sequentialthinking` BEFORE writing code or tests:
@@ -188,7 +184,6 @@ For tasks with 3+ logical steps, branching paths, or unclear dependencies, invok
 
 Skip for trivial mechanical edits (rename, format, single-line fix). Use for: new feature, refactor across files, anything touching async/state machines.
 
-
 ## Git: merge-readiness check (cto / reviewer)
 
 Before approving or merging a PR, verify:
@@ -197,7 +192,6 @@ Before approving or merging a PR, verify:
 2. **CR APPROVE on Paperclip.**
 3. **No conflict markers in diff:** `gh pr diff <PR> | grep -E '^(<<<<<<<|=======|>>>>>>>)'` → empty.
 4. **Spec/plan references valid:** if PR references `docs/superpowers/plans/...`, that file exists on the branch.
-
 
 ## Git: mergeStateStatus decoder (cto / reviewer)
 
@@ -214,7 +208,6 @@ Before approving or merging a PR, verify:
 | `BEHIND` + `BLOCKED` simultaneously | Multi-cause | Address whichever is fixable; recheck |
 
 Never merge while `DIRTY` or `BEHIND`. `UNSTABLE` is judgment call — document the override in PR comment.
-
 
 ## Code review: APPROVE format (reviewer)
 
@@ -252,13 +245,11 @@ APPROVED. Reassigning to <next agent>.
 - Approving own PR (self-approval blocked at branch protection level too).
 - Approving without `git diff --stat` against plan file count (silent scope reduction risk — codified after UNS-114).
 
-
 ### Plan-first discipline
 - [ ] Multi-agent tasks (3+ subtasks): plan file exists at `docs/superpowers/plans/YYYY-MM-DD-UNS-NN-*.md`
 - [ ] PR description references the plan file (link), doesn't duplicate scope from issue body
 - [ ] Plan steps marked done as progress is made (checkbox in plan file matches reality)
 - [ ] If the plan changed mid-flight — diff the plan file in the PR (no silent scope creep)
-
 
 ## Handoff basics (iron rule)
 
@@ -350,35 +341,13 @@ If POST returned non-2xx → STOP. Don't PATCH (would orphan the issue without c
 
 If your PATCH was authored by a SIGTERM'd run, paperclip may suppress the wake. Watchdog (`services/watchdog`) detects stuck `in_review` + null-execution_run and recovers. Not a primary mechanism — author handoffs correctly.
 
+## Daily Version-Branch Security Audit Stage (Android)
 
-# SecurityAuditor — UnstoppableAudit
+For `mode=daily_security_audit`, set `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py`; read the immutable `$RUN/run-context.json`, prepared inputs, `$RUN/code.md`, validated `status/code.done.json`, and the Android repo. Audit auth, storage, networking, signing, permissions, privacy, dependencies, and abuse paths in the bound FROM..TO range.
 
-> Project tech rules in `AGENTS.md` (auto-loaded). Universal layer + capability profile composed by builder. Below: role-craft only.
+Write human evidence to `$RUN/security.md`. Atomically publish `$RUN/security.findings.json` as the strict v1 envelope: copy `run_binding` exactly; use `stage="security"`, `source_agent="UWASecurityAuditor"`; set `audit_status` to `complete|partial|blocked`; include only structured findings and typed `{text,material}` limitations; set `block_reason` only as required by status. Every finding has exactly `severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification`; location is either relative file+positive line+null area or null file/line+nonempty area. Finding prose, limitation text and non-null blocked reason are Russian; complete/partial use null block reason. Do not count or deduplicate findings and do not invent schema fields.
 
-## Role
-
-You audit code + infra for security (codex side).
-
-## Area of responsibility
-
-- Secrets exposure review
-- Threat-model new trust-boundary features
-- Wire contract injection protection
-
-## MCP / Tool scope
-
-Required MCP servers (from project AGENTS.md): see project AGENTS.md.
-
-Read-only tools: codebase-memory, serena (read), context7, GitHub (read), `uaudit.git.*`, `uaudit.code.*`, `uaudit.memory.*`.
-
-Write tools as appropriate per profile (see AGENTS.md for capability boundaries).
-
-## Anti-patterns
-
-- **Generic best-practice findings without product context**
-- **Flagging intentional workarounds**
-- **Demanding sandboxing of operator-owned plugins**
-
+Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/security.findings.json"`; only it may create digest-bound `status/security.done.json`. Validation failure or `blocked` PATCHes issue blocked and stops the chain and produces no completion message. Otherwise comment that the stage is ready, PATCH `83e44735-7f4f-4673-b5a7-c3667747d21b` with `mode=daily_crypto_audit`, and stop. Never send Telegram or update state/cursors.
 
 
 ## UAudit Runtime Scope
@@ -411,13 +380,3 @@ artifact root, comment the absolute path, and hand off delivery to
 `UWAInfraEngineer` by default (`UWIInfraEngineer`
 only for explicitly iOS-only issues). Do not call Telegram/bot/plugin
 notification actions; lifecycle notifications are automatic.
-
-
-## Daily Version-Branch Security Audit Stage (Android)
-
-For `mode=daily_security_audit`, set `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py`; read the immutable `$RUN/run-context.json`, prepared inputs, `$RUN/code.md`, validated `status/code.done.json`, and the Android repo. Audit auth, storage, networking, signing, permissions, privacy, dependencies, and abuse paths in the bound FROM..TO range.
-
-Write human evidence to `$RUN/security.md`. Atomically publish `$RUN/security.findings.json` as the strict v1 envelope: copy `run_binding` exactly; use `stage="security"`, `source_agent="UWASecurityAuditor"`; set `audit_status` to `complete|partial|blocked`; include only structured findings and typed `{text,material}` limitations; set `block_reason` only as required by status. Every finding has exactly `severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification`; location is either relative file+positive line+null area or null file/line+nonempty area. Finding prose, limitation text and non-null blocked reason are Russian; complete/partial use null block reason. Do not count or deduplicate findings and do not invent schema fields.
-
-Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/security.findings.json"`; only it may create digest-bound `status/security.done.json`. Validation failure or `blocked` PATCHes issue blocked and stops the chain and produces no completion message. Otherwise comment that the stage is ready, PATCH `83e44735-7f4f-4673-b5a7-c3667747d21b` with `mode=daily_crypto_audit`, and stop. Never send Telegram or update state/cursors.
-

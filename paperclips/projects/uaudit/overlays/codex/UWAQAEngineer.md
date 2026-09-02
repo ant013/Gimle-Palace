@@ -1,6 +1,8 @@
 ---
-role: UWAQAEngineer
-kind: agent
+target: codex
+role_id: codex:uwa-qa-engineer
+family: qa
+profiles: [qa]
 ---
 
 ## Daily Version-Branch QA Verification Stage (Android)
@@ -19,12 +21,12 @@ Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/qa-verify
   - UI-smoke tests for Private Send flow
   - Network trace capture during app launch
   - Real device/emulator runtime verification
-  
+
 - **Direct Unit/UI Tests:** The following have no direct unit/UI test suites in the target tree:
   - PrivateSendManager.commit contract validation
   - recipient memo propagation in Private Send
   - ZcashEndpointPinger.dispose timeout behavior
-  
+
 - **Fault Injection Testing:** No managed Monero/Zcash fault-injection rig available for:
   - gRPC cleanup hanging scenarios
   - Actual endpoint fan-out behavior

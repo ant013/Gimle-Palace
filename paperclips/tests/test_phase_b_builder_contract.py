@@ -1,9 +1,34 @@
 """Phase B contract: builder derives output_path when manifest agent omits it."""
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
+
+
+def test_overlay_collection_skips_role_source_and_duplicate_agent_name(tmp_path: Path):
+    sys.path.insert(0, str(REPO / "paperclips/scripts"))
+    from build_project_compat import _collect_overlay_blocks
+
+    overlay_dir = tmp_path / "paperclips/projects/example/overlays/codex"
+    overlay_dir.mkdir(parents=True)
+    common = overlay_dir / "_common.md"
+    role = overlay_dir / "Agent.md"
+    common.write_text("common\n")
+    role.write_text("role\n")
+    manifest_values = {"paths.overlay_root": "paperclips/projects/example/overlays"}
+
+    blocks = _collect_overlay_blocks(
+        tmp_path,
+        manifest_values,
+        "codex",
+        role.name,
+        "Agent",
+        role,
+    )
+
+    assert blocks == ["common\n"]
 
 
 def test_agent_without_output_path_produces_default_path():

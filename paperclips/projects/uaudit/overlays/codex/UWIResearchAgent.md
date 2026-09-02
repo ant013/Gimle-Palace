@@ -1,3 +1,10 @@
+---
+target: codex
+role_id: codex:uwi-research-agent
+family: research
+profiles: [research]
+---
+
 ## Daily Version-Branch Research Stage (iOS)
 
 For `mode=daily_research`, set `HELPER={{paths.team_workspace_root}}/.uaudit-tools/uaudit_delivery_contract.py`; read `$RUN/run-context.json`, validated prior sidecars/markers and only references needed for open library, protocol, or platform questions. Do not redo prior audits.

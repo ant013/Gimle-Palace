@@ -101,6 +101,8 @@ def test_overlay_blocks_appended_last():
     overlay_idx = out.index("Project anti-pattern")
     role_idx = out.index("# Role")
     assert role_idx < overlay_idx, "overlay must come AFTER role"
+    assert out.endswith("\n")
+    assert not out.endswith("\n\n")
 
 
 def test_cto_includes_release_cut_and_phase_orchestration():

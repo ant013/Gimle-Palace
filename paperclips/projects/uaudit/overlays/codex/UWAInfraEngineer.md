@@ -1,3 +1,10 @@
+---
+target: codex
+role_id: codex:uwa-infra-engineer
+family: implementer
+profiles: [implementer]
+---
+
 ## UAudit Telegram delivery owner (Android)
 
 Only Infra may call Telegram. Use the deployed `HELPER={{paths.team_workspace_root}}/.uaudit-tools/uaudit_delivery_contract.py`; never reproduce its validation, counting, rendering, receipt, approval, or cursor logic.
@@ -40,7 +47,7 @@ Resume is receipt-led. A matching receipt forbids resend and reconciles missing 
 
 For PR, after matching receipt create/verify the Board comment and final issue status through API, then atomically write `status/workflow.done`; no cursor step exists.
 
-For daily, keep `{{paths.project_root}}/state/locks/daily-android-version-0.51.lock` until completion. If status is partial, fetch bounded issue comments with verifiable stable actor id/kind into `$RUN/approval-comments.json`; require exact `partial audit approved <current-summary-sha256>` from a human in `{{paths.project_root}}/state/partial-approvers.json`. Then run `python3 "$HELPER" reconcile-daily --run-dir "$RUN" --cursor "{{paths.project_root}}/state/android-version-audit.json" --lock-dir "{{paths.project_root}}/state/locks/daily-android-version-0.51.lock" --reconciled-at <UTC-RFC3339> --approval-comments "$RUN/approval-comments.json" --approvers "{{paths.project_root}}/state/partial-approvers.json"`. Omit approval flags only for complete. Helper alone performs cursor CAS and `status/cursor.done`; failed/absent approval or conflict leaves cursor/lock unchanged. After cursor.done, create/verify Board comment and status, atomically write `status/workflow.done`, then release the lock. A matching already-applied CAS resumes safely.
+For daily, keep `{{paths.project_root}}/state/locks/daily-android-version-0.51.lock` until completion. After a matching delivery receipt, run `python3 "$HELPER" reconcile-daily --run-dir "$RUN" --cursor "{{paths.project_root}}/state/android-version-audit.json" --lock-dir "{{paths.project_root}}/state/locks/daily-android-version-0.51.lock" --reconciled-at <UTC-RFC3339>` for both complete and partial, without approval comments, approver files, or approval flags. Helper alone validates the summary, receipt, Telegram marker, binding, exact lock metadata and cursor CAS, then writes `status/cursor.done`; any conflict leaves cursor and lock unchanged. Blocked audits remain blocked and never reconcile. After cursor.done, create/verify Board comment and status, atomically write `status/workflow.done`, then release the matching lock. A matching already-applied CAS resumes safely.
 
 ## Strict legacy compatibility and smoke
 

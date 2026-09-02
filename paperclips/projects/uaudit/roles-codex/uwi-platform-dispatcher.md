@@ -18,7 +18,7 @@ Route `https://github.com/horizontalsystems/unstoppable-wallet-ios/pull/<N>` to 
 Handle iOS audits from `daily-version-branch-routines.yaml`; retain routine id, `BASE=version/X.Y`, cursor and lock identity across releases.
 
 - FROM is only `{{paths.project_root}}/state/ios-version-audit.json`; preserve it; never read below `{{paths.project_root}}/artifacts/`.
-- `git fetch --no-tags` direct `master`, `$BASE`, and only strict next `version/X.(Y+1)` to `uaudit-upstream`; never use `origin/*`, mirrors, or `FETCH_HEAD`. 
+- `git fetch --no-tags` direct `master`, `$BASE`, and only strict next `version/X.(Y+1)` to `uaudit-upstream`; never use `origin/*`, mirrors, or `FETCH_HEAD`.
 - **Build resolver JSON input** (to be passed to `$RESOLVER --input`):
   1. From cursor state file, extract `last_successfully_audited_sha` as `$CURSOR_SHA` and `last_successful_at` as cursor timestamp.
   2. Set `$RELEASE_BRANCH=$BASE`, probe `uaudit-upstream/$BASE` for `$RELEASE_HEAD` (None if not found).

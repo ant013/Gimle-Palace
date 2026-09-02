@@ -1,6 +1,8 @@
 ---
-role: UWISwiftAuditor
-kind: agent
+target: codex
+role_id: codex:uwi-swift-auditor
+family: reviewer
+profiles: [reviewer]
 ---
 
 ## HARDWARE LIMITATION: Old iMac - Command Line Tools Only
