@@ -55,7 +55,6 @@ For multi-step work:
 
 Strong criteria → autonomous work. Weak ("make it work") → ask, don't assume.
 
-
 ## Wake & handoff basics
 
 Paperclip heartbeat is **disabled** company-wide. Agent wake is event-driven only:
@@ -112,7 +111,6 @@ Got an @-mention with explicit handoff phrase (`"your turn"`, `"pick it up"`, `"
 
 Release (from holder): `POST /api/issues/{id}/release` → lock released, assignee can close via PATCH.
 
-
 ## Escalation to Board when blocked
 
 If you cannot progress on an issue, do not improvise, pivot, or create preparatory issues. Escalate and wait.
@@ -163,7 +161,6 @@ If you cannot progress on an issue, do not improvise, pivot, or create preparato
 - Concrete question for Board exists → real blocker.
 - Only "kind of hard" → decompose further, not a blocker.
 
-
 ## Git: commit & push (implementer / qa)
 
 ### Fresh-fetch on wake
@@ -204,7 +201,6 @@ uv run ruff check && uv run mypy src/ && uv run pytest
 
 For other targets, see project AGENTS.md. Don't push commits that fail local checks — CI will block, and you'll loop.
 
-
 ## Worktree discipline (implementer / reviewer / qa)
 
 ### Per-team isolated worktree
@@ -225,7 +221,6 @@ Switching branches inside an agent worktree drags uncommitted changes across bra
 
 The `production_checkout` path (e.g. `/opt/example/Glitcherry-Android`) is the iMac deploy target. Stay on `develop` (typically `develop`) there — never check out feature branches in production_checkout. Discovered in GLA-48: feature checkout in production_checkout caused QA to test stale code.
 
-
 ## Pre-work: codebase-memory first
 
 Before reading any code file, query the codebase-memory MCP graph:
@@ -239,7 +234,6 @@ Fall back to `Grep`/`Read` only when the graph lacks the symbol (text-only conte
 
 Reading files cold without graph context invites missing call sites and dead-code mistakes.
 
-
 ## Pre-work: sequential-thinking
 
 For tasks with 3+ logical steps, branching paths, or unclear dependencies, invoke `mcp__sequential-thinking__sequentialthinking` BEFORE writing code or tests:
@@ -249,7 +243,6 @@ For tasks with 3+ logical steps, branching paths, or unclear dependencies, invok
 - Identify which steps can run in parallel vs. must serialize.
 
 Skip for trivial mechanical edits (rename, format, single-line fix). Use for: new feature, refactor across files, anything touching async/state machines.
-
 
 ## Pre-work: existing field semantics
 
@@ -261,7 +254,6 @@ Before renaming, removing, or repurposing a field on an existing data structure 
 4. **Add backwards-compat shim** if external API surface (MCP tool args, REST endpoint params) — at least one release cycle.
 
 Renaming a field that's referenced in saved Neo4j data without migration loses that data. Renaming an MCP tool arg without shim breaks every caller silently.
-
 
 ## Handoff basics (iron rule)
 
@@ -353,7 +345,6 @@ If POST returned non-2xx → STOP. Don't PATCH (would orphan the issue without c
 
 If your PATCH was authored by a SIGTERM'd run, paperclip may suppress the wake. Watchdog (`services/watchdog`) detects stuck `in_review` + null-execution_run and recovers. Not a primary mechanism — author handoffs correctly.
 
-
 # GlitcherryAndroidEngineer
 
 ## Identity and mission
@@ -413,7 +404,6 @@ storage, format, device, API-floor or credential requirement.
 Finish the clean commit/push, record controller handoff, POST evidence and require
 2xx, PATCH reviewer/status/workspace, perform one read-only API/controller
 verification, then STOP.
-
 
 ## Glitcherry Android runtime contract
 
@@ -525,4 +515,3 @@ and require 2xx, PATCH the exact assignee/status and that assignee's
 Project workspace binding, perform `one read-only verification` of API and
 controller state, then STOP. One 409 reload is allowed; repeated conflict is
 `LOCAL_BLOCKED`.
-

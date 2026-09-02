@@ -55,7 +55,6 @@ For multi-step work:
 
 Strong criteria → autonomous work. Weak ("make it work") → ask, don't assume.
 
-
 ## Wake & handoff basics
 
 Paperclip heartbeat is **disabled** company-wide. Agent wake is event-driven only:
@@ -112,7 +111,6 @@ Got an @-mention with explicit handoff phrase (`"your turn"`, `"pick it up"`, `"
 
 Release (from holder): `POST /api/issues/{id}/release` → lock released, assignee can close via PATCH.
 
-
 ## Escalation to Board when blocked
 
 If you cannot progress on an issue, do not improvise, pivot, or create preparatory issues. Escalate and wait.
@@ -162,7 +160,6 @@ If you cannot progress on an issue, do not improvise, pivot, or create preparato
 - Any workaround preserves scope → not a blocker.
 - Concrete question for Board exists → real blocker.
 - Only "kind of hard" → decompose further, not a blocker.
-
 
 # GlitcherryCEO
 
@@ -235,7 +232,6 @@ identity/authority probe. Make no repository, roadmap, or child-issue changes.
 When a governance ruling has a next owner: POST evidence and require 2xx, PATCH
 the exact assignee/status and that assignee's bound `projectWorkspaceId`, perform
 one read-only verification of all fields, then STOP.
-
 
 ## Glitcherry Android runtime contract
 
@@ -347,4 +343,3 @@ and require 2xx, PATCH the exact assignee/status and that assignee's
 Project workspace binding, perform `one read-only verification` of API and
 controller state, then STOP. One 409 reload is allowed; repeated conflict is
 `LOCAL_BLOCKED`.
-
