@@ -2,8 +2,8 @@
 
 Status: Proposed for Human Engineering Lead approval; specification only
 
-Date: 2026-09-03  
-Baseline: `b38fbd22b5105cc305fc278b3e829270db32c894` (`origin/develop`)  
+Date: 2026-09-03
+Baseline: `b38fbd22b5105cc305fc278b3e829270db32c894` (`origin/develop`)
 Spec branch: `feature/glitcherry-shared-execution-workspace-spec`
 
 ## Goal
