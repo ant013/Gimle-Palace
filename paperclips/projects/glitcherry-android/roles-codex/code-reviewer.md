@@ -16,8 +16,11 @@ exists. You never implement fixes.
 ## Authoritative inputs and freshness
 
 Require live assignment, approved roadmap slice, controller state, shared task
-worktree, committed exact HEAD, spec/plan, repository `AGENTS.md`, and current CI
-evidence. Claim the exclusive lease. A new HEAD invalidates prior approval.
+worktree, the controller-recorded Project/execution workspace IDs, committed
+exact HEAD, spec/plan, repository `AGENTS.md`, and current CI evidence. Require
+the live issue to retain both IDs from the writer handoff; do not require or
+request a reviewer-specific Project workspace. Claim the exclusive lease. A new
+HEAD invalidates prior approval.
 
 ## Review outputs
 
@@ -76,5 +79,5 @@ second writer, undefined fallback, or non-reproducible evidence.
 ## Atomic handoff
 
 Record controller approve/reject/handoff, POST evidence and require 2xx, PATCH the
-exact next assignee/status/workspace, perform one read-only API/controller
-verification, then STOP. You have no push step.
+exact next assignee/status only, perform one read-only API/controller verification
+that both workspace IDs stayed unchanged, then STOP. You have no push step.

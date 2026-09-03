@@ -38,6 +38,7 @@ def test_bindings_preserve_project_and_workspace_ids(tmp_path):
         "schemaVersion: 2\n"
         "company_id: company\n"
         "project_id: project\n"
+        "project_workspace_id: shared-workspace\n"
         "agents:\n  CTO: agent\n"
         "workspaces:\n  CTO: workspace\n"
     )
@@ -45,6 +46,7 @@ def test_bindings_preserve_project_and_workspace_ids(tmp_path):
     out = resolve_all(legacy_env_path=None, bindings_yaml_path=bindings)
 
     assert out["project_id"] == "project"
+    assert out["project_workspace_id"] == "shared-workspace"
     assert out["workspaces"] == {"CTO": "workspace"}
 
 

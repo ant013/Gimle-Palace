@@ -28,9 +28,10 @@ Options:
   -h, --help                       Show this help.
 
 The production path accepts only the exact ant013 Glitcherry HTTPS origins. It
-validates one canonical clean Android clone, one canonical clean control clone,
-the task roots, and the generated role workspaces. It never creates a
-per-agent repository clone and never modifies repository content.
+validates one canonical clean Android clone used as the Project workspace
+anchor, one canonical clean control clone, the task roots, and each generated
+role instruction directory. It never creates a per-agent repository clone or a
+slice worktree and never modifies repository content.
 USAGE
 }
 
@@ -268,5 +269,5 @@ git -C "$ANDROID_ROOT" ls-files --error-unmatch -- AGENTS.md >/dev/null 2>&1 || 
   die "Android repository has no regular tracked AGENTS.md"
 validate_repo "$CONTROL_ROOT" "$CONTROL_REMOTE" "control"
 
-printf 'Validated one canonical Android clone, one control clone, and %s role workspaces.\n' \
+printf 'Validated one Android Project anchor, one control clone, and %s role instruction directories.\n' \
   "${#AGENT_NAMES[@]}"

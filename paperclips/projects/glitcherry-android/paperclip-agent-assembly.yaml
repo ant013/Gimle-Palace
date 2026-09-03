@@ -92,6 +92,7 @@ targets:
     adapter_type: codex_local
     deploy_mode: api
     instructions_bundle_mode: managed
+    require_instructions_file: true
 
 compatibility:
   legacy_output_paths: false

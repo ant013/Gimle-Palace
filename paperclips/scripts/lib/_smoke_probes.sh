@@ -214,10 +214,12 @@ probe_agent_for_profile() {
 
 # probe_e2e_handoff <company> <cto_uuid> <cto_name> <next_uuid> <next_name>
 #   [project_uuid] [cto_workspace_uuid] [next_workspace_uuid] [timeout_seconds]
+#   [stable_execution_workspace]
 probe_e2e_handoff() {
   local company="$1"; local cto_uuid="$2"; local cto_name="$3"; local next_uuid="$4"; local next_name="$5"
   local project_uuid="${6:-}"; local cto_workspace_uuid="${7:-}"; local next_workspace_uuid="${8:-}"
   local timeout="${9:-180}"
+  local stable_execution_workspace="${10:-0}"
   [[ "$timeout" =~ ^[0-9]+$ ]] && [ "$timeout" -ge 30 ] && [ "$timeout" -le 900 ] || {
     log err "invalid e2e timeout"; return 1;
   }
@@ -226,7 +228,11 @@ probe_e2e_handoff() {
     [ -n "$cto_workspace_uuid" ] && [ -n "$next_workspace_uuid" ] || {
       log err "project-aware e2e probe requires both workspace bindings"; return 1;
     }
-    question="${question} In the same PATCH keep projectId ${project_uuid} and set projectWorkspaceId ${next_workspace_uuid}."
+    if [ "$stable_execution_workspace" -eq 1 ]; then
+      question="${question} In the same PATCH keep projectId ${project_uuid}, projectWorkspaceId ${next_workspace_uuid}, and the existing executionWorkspaceId unchanged."
+    else
+      question="${question} In the same PATCH keep projectId ${project_uuid} and set projectWorkspaceId ${next_workspace_uuid}."
+    fi
   fi
   question="${question} Perform exactly one read-only verification of assignee/status/project/workspace, ask them to reply exactly 'cross-target ack', then STOP."
 
@@ -236,21 +242,43 @@ probe_e2e_handoff() {
   body=$(jq -n \
     --arg c "$company" --arg a "$cto_uuid" --arg t "$title" --arg q "$question" \
     --arg p "$project_uuid" --arg w "$cto_workspace_uuid" \
+    --argjson stable "$stable_execution_workspace" \
     '{companyId: $c, title: $t, description: $q, status: "todo", assigneeAgentId: $a}
-     + (if $p == "" then {} else {projectId: $p, projectWorkspaceId: $w} end)')
+     + (if $p == "" then {} else {projectId: $p, projectWorkspaceId: $w} end)
+     + (if $stable == 1 then {executionWorkspaceSettings:{mode:"isolated_workspace"}} else {} end)')
   local issue_id
   issue_id=$(paperclip_post "/api/companies/${company}/issues" "$body" | jq -r .id)
   [ -n "$issue_id" ] && [ "$issue_id" != "null" ] || { log err "e2e issue create failed"; return 1; }
   _record_smoke_issue "$issue_id" || return 1
 
   local elapsed=0
+  local expected_execution_workspace_uuid=""
+  local current_execution_workspace_uuid=""
+  local current_project_workspace_uuid=""
   while [ "$elapsed" -lt "$timeout" ]; do
     sleep 10; elapsed=$((elapsed + 10))
     local issue
     issue=$(paperclip_get "/api/issues/${issue_id}" 2>/dev/null || echo "{}")
+    if [ "$stable_execution_workspace" -eq 1 ]; then
+      current_execution_workspace_uuid=$(echo "$issue" | jq -r '.executionWorkspaceId // ""')
+      if [ -n "$current_execution_workspace_uuid" ] && [ -z "$expected_execution_workspace_uuid" ]; then
+        expected_execution_workspace_uuid="$current_execution_workspace_uuid"
+      fi
+    fi
     local current_assignee
     current_assignee=$(echo "$issue" | jq -r '.assigneeAgentId // ""')
     if [ "$current_assignee" = "$next_uuid" ]; then
+      if [ "$stable_execution_workspace" -eq 1 ]; then
+        current_project_workspace_uuid=$(echo "$issue" | jq -r '.projectWorkspaceId // ""')
+        current_execution_workspace_uuid=$(echo "$issue" | jq -r '.executionWorkspaceId // ""')
+        if [ "$current_project_workspace_uuid" != "$next_workspace_uuid" ] || \
+           [ -z "$expected_execution_workspace_uuid" ] || \
+           [ "$current_execution_workspace_uuid" != "$expected_execution_workspace_uuid" ]; then
+          log err "  shared Project/Execution workspace identity changed during handoff"
+          paperclip_patch "/api/issues/${issue_id}" '{"status": "done"}' >/dev/null 2>&1 || true
+          return 1
+        fi
+      fi
       local handoff_comments handoff_comment
       handoff_comments=$(paperclip_get "/api/issues/${issue_id}/comments" 2>/dev/null || echo "[]")
       handoff_comment=$(echo "$handoff_comments" | jq -r --arg a "$cto_uuid" --arg n "$next_name" \

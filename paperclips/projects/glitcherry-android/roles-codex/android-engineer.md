@@ -16,9 +16,11 @@ persistence, app state, Compose shell, MediaStore/share, and build/tool wiring.
 ## Authoritative inputs and freshness
 
 Require the approved slice, independently approved spec/plan, live assignment,
-controller-recorded branch/head/worktree, repository `AGENTS.md`, and current CTO
-routing. Claim the exclusive lease before repository access and verify no other
-writer/run owns it.
+controller-recorded Project workspace ID, execution workspace ID, branch, HEAD,
+cwd, repository `AGENTS.md`, and current CTO routing. Require all workspace
+values to match the live issue; a role reassignment never changes them. Claim
+the exclusive lease before repository access and verify no other writer/run
+owns it.
 
 ## Outputs and completion evidence
 
@@ -62,5 +64,5 @@ storage, format, device, API-floor or credential requirement.
 ## Atomic handoff
 
 Finish the clean commit/push, record controller handoff, POST evidence and require
-2xx, PATCH reviewer/status/workspace, perform one read-only API/controller
-verification, then STOP.
+2xx, PATCH only reviewer/status, perform one read-only API/controller verification
+that both workspace IDs stayed unchanged, then STOP.

@@ -158,9 +158,13 @@ def _read_bindings_yaml(path: Path) -> dict[str, Any]:
     project_id = raw.get("project_id")
     if project_id is not None and not isinstance(project_id, str):
         raise ValueError(f"{path}: project_id must be string or null")
+    project_workspace_id = raw.get("project_workspace_id")
+    if project_workspace_id is not None and not isinstance(project_workspace_id, str):
+        raise ValueError(f"{path}: project_workspace_id must be string or null")
     return {
         "company_id": raw.get("company_id"),
         "project_id": project_id,
+        "project_workspace_id": project_workspace_id,
         "agents": agents,
         "workspaces": workspaces,
     }
@@ -186,6 +190,7 @@ def resolve_all(
     bindings: dict[str, Any] = {
         "company_id": None,
         "project_id": None,
+        "project_workspace_id": None,
         "agents": {},
         "workspaces": {},
     }
@@ -241,6 +246,7 @@ def resolve_all(
     return {
         "company_id": bindings.get("company_id"),
         "project_id": bindings.get("project_id"),
+        "project_workspace_id": bindings.get("project_workspace_id"),
         "agents": merged,
         "workspaces": bindings.get("workspaces", {}),
         "sources_used": sources_used,

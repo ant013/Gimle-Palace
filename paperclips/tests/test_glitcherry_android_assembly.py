@@ -50,6 +50,7 @@ def test_glitcherry_manifest_is_clean_valid_and_workspace_rooted():
         "preserve_primary_reasoning_effort": True,
     }
     assert data["smoke"] == {"e2e_timeout_seconds": 360}
+    assert data["targets"]["codex"]["require_instructions_file"] is True
     required_directories = set(data["host_paths"]["required_existing"])
     assert "slice_controller_path" not in required_directories
     assert {
@@ -134,14 +135,7 @@ def test_glitcherry_project_files_and_portable_local_examples_exist():
     assert paths["paperclip_runtime_api_url"].startswith("http://127.0.0.1:")
 
     bindings = yaml.safe_load((PROJECT / "bindings.local-example.yaml").read_text())
-    assert set(bindings["workspaces"]) == {
-        "GlitcherryCEO",
-        "GlitcherryCTO",
-        "GlitcherryAndroidEngineer",
-        "GlitcherryMediaPipelineEngineer",
-        "GlitcherryCodeReviewer",
-        "GlitcherryQAEngineer",
-    }
+    assert bindings["project_workspace_id"] == "00000000-0000-0000-0000-000000000420"
 
 
 def test_workflow_is_the_single_worktree_parent_child_contract():
@@ -154,7 +148,7 @@ def test_workflow_is_the_single_worktree_parent_child_contract():
         "blockedByIssueIds",
         "issue_blockers_resolved",
         "issue_children_completed",
-        "Phase 1 — Create worktree and materialize spec",
+        "Phase 1 — Adopt Paperclip worktree and materialize spec",
         "Phase 2 — Independent spec review",
         "Phase 3 — Plan and independent plan review",
         "Phase 4 — Implementation by exactly one engineer",
@@ -169,7 +163,7 @@ def test_workflow_is_the_single_worktree_parent_child_contract():
         "SPRINT_SMOKE_REQUIRED",
         "GLA-N + Android merge SHA",
         "POST evidence",
-        "PATCH assignee/status/projectWorkspaceId",
+        "PATCH assignee/status",
         "one read-only verification",
         "STOP",
         "LOCAL_BLOCKED",
@@ -242,8 +236,8 @@ def test_common_overlay_enforces_authority_repositories_and_one_writer():
         "task_state_root",
         "exclusive lease",
         "workspace/control",
-        "workspace/AGENTS.md",
-        "Project workspace binding",
+        "required `instructionsFilePath`",
+        "Project workspace",
         "exactly one primary implementer",
         "integration branch is `develop`",
         "never release, sign, tag, or publish",

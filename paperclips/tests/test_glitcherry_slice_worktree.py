@@ -104,9 +104,21 @@ def _run(
 
 
 def _create(fixture: dict[str, Path]) -> dict:
+    worktree = fixture["worktrees"] / "feature" / "GLA-123-single-worktree"
+    worktree.parent.mkdir(exist_ok=True)
+    base_sha = _git("rev-parse", "origin/develop", cwd=fixture["primary"]).stdout.strip()
+    _git(
+        "worktree",
+        "add",
+        "-b",
+        "feature/GLA-123-single-worktree",
+        str(worktree),
+        base_sha,
+        cwd=fixture["primary"],
+    )
     result = _run(
         fixture,
-        "create",
+        "adopt",
         "--issue-id",
         "00000000-0000-4000-8000-000000000123",
         "--issue-key",
@@ -117,6 +129,16 @@ def _create(fixture: dict[str, Path]) -> dict:
         "GlitcherryCTO",
         "--run-id",
         "run-cto-0",
+        "--project-workspace-id",
+        "00000000-0000-4000-8000-000000000124",
+        "--execution-workspace-id",
+        "00000000-0000-4000-8000-000000000125",
+        "--worktree-path",
+        str(worktree),
+        "--branch",
+        "feature/GLA-123-single-worktree",
+        "--base-sha",
+        base_sha,
     )
     assert result.returncode == 0, result.stderr
     return json.loads(result.stdout)
@@ -331,13 +353,15 @@ def _route_to_code_review(fixture: dict[str, Path]) -> tuple[Path, str]:
     return worktree, reviewer_run
 
 
-def test_create_handoff_and_claim_enforce_single_owner(tmp_path: Path) -> None:
+def test_adopt_handoff_and_claim_enforce_single_owner(tmp_path: Path) -> None:
     fixture = _fixture(tmp_path)
     created = _create(fixture)
 
     worktree = Path(created["worktree_path"])
     state_path = fixture["states"] / "GLA-123.json"
     assert worktree.is_dir()
+    assert created["project_workspace_id"] == "00000000-0000-4000-8000-000000000124"
+    assert created["execution_workspace_id"] == "00000000-0000-4000-8000-000000000125"
     assert state_path.stat().st_mode & 0o777 == 0o600
     assert _git("branch", "--show-current", cwd=worktree).stdout.strip() == (
         "feature/GLA-123-single-worktree"
@@ -360,6 +384,26 @@ def test_create_handoff_and_claim_enforce_single_owner(tmp_path: Path) -> None:
     state = _state(fixture)
     assert state["lease"]["owner"] == "GlitcherryCodeReviewer"
     assert state["phase"] == "spec_review"
+
+
+def test_adopt_tolerates_terminal_v1_history(tmp_path: Path) -> None:
+    fixture = _fixture(tmp_path)
+    legacy = fixture["states"] / "GLA-122.json"
+    legacy.write_text(
+        json.dumps(
+            {
+                "schema_version": "glitcherry-slice-worktree/v1",
+                "issue_key": "GLA-122",
+                "phase": "cleaned",
+            }
+        )
+        + "\n"
+    )
+    legacy.chmod(0o600)
+
+    adopted = _create(fixture)
+
+    assert adopted["schema_version"] == "glitcherry-slice-worktree/v2"
 
 
 def test_handoff_refuses_dirty_tree_and_preserves_changes(tmp_path: Path) -> None:
@@ -912,7 +956,7 @@ def _merge_control_status(
     return reviewed_head, merge_sha
 
 
-def test_cleanup_requires_both_merge_records_and_removes_exact_refs(
+def test_cleanup_normalizes_for_paperclip_then_removes_exact_refs(
     tmp_path: Path,
 ) -> None:
     fixture = _fixture(tmp_path)
@@ -962,6 +1006,42 @@ def test_cleanup_requires_both_merge_records_and_removes_exact_refs(
         control_merge,
     )
     assert control.returncode == 0, control.stderr
+
+    approved_head = _state(fixture)["reviewed_head"]
+    prepared = _run(
+        fixture,
+        "prepare-cleanup",
+        "--issue-key",
+        "GLA-123",
+        "--owner",
+        "GlitcherryCTO",
+        "--run-id",
+        "run-cto-merge",
+    )
+    assert prepared.returncode == 0, prepared.stderr
+    state = _state(fixture)
+    assert state["phase"] == "workspace_cleanup"
+    assert state["approved_head_sha"] == approved_head
+    assert _git("rev-parse", "HEAD", cwd=worktree).stdout.strip() == android_merge
+
+    premature = _run(
+        fixture,
+        "cleanup",
+        "--issue-key",
+        "GLA-123",
+        "--owner",
+        "GlitcherryCTO",
+        "--run-id",
+        "run-parent-cleanup",
+    )
+    assert premature.returncode != 0
+    assert "has not been archived" in premature.stderr
+
+    # Simulate Paperclip's supported execution-workspace archive. The normal
+    # non-force branch deletion now succeeds because prepare-cleanup moved the
+    # runtime-created branch to the verified merge commit.
+    _git("worktree", "remove", str(worktree), cwd=fixture["primary"])
+    _git("branch", "-d", branch, cwd=fixture["primary"])
 
     cleaned = _run(
         fixture,

@@ -504,6 +504,7 @@ def _load_host_local_sources(project_key: str, repo_root: Path | None = None) ->
         sources["bindings"] = {
             "company_id": merged.get("company_id"),
             "project_id": merged.get("project_id"),
+            "project_workspace_id": merged.get("project_workspace_id"),
             "agents": merged.get("agents", {}),
             "workspaces": merged.get("workspaces", {}),
         }

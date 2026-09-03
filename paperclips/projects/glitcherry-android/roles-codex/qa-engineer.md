@@ -51,5 +51,5 @@ that cannot be observed.
 
 ## Atomic handoff
 
-POST evidence and require 2xx, PATCH the exact next assignee/status/workspace,
+POST evidence and require 2xx, PATCH only the exact next assignee/status,
 perform one read-only verification, then STOP. You have no push step.
