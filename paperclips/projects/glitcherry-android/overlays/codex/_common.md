@@ -8,33 +8,38 @@ operations.
 ### Same-company bindings
 
 Paperclip Project: `{{bindings.project_id}}`.
+Project workspace: `{{bindings.project_workspace_id}}`.
 
-| Agent | Agent binding | Project workspace binding |
-| --- | --- | --- |
-| `GlitcherryCEO` | `{{bindings.agents.GlitcherryCEO}}` | `{{bindings.workspaces.GlitcherryCEO}}` |
-| `GlitcherryCTO` | `{{bindings.agents.GlitcherryCTO}}` | `{{bindings.workspaces.GlitcherryCTO}}` |
-| `GlitcherryAndroidEngineer` | `{{bindings.agents.GlitcherryAndroidEngineer}}` | `{{bindings.workspaces.GlitcherryAndroidEngineer}}` |
-| `GlitcherryMediaPipelineEngineer` | `{{bindings.agents.GlitcherryMediaPipelineEngineer}}` | `{{bindings.workspaces.GlitcherryMediaPipelineEngineer}}` |
-| `GlitcherryCodeReviewer` | `{{bindings.agents.GlitcherryCodeReviewer}}` | `{{bindings.workspaces.GlitcherryCodeReviewer}}` |
-| `GlitcherryQAEngineer` | `{{bindings.agents.GlitcherryQAEngineer}}` | `{{bindings.workspaces.GlitcherryQAEngineer}}` |
+| Agent | Agent binding |
+| --- | --- |
+| `GlitcherryCEO` | `{{bindings.agents.GlitcherryCEO}}` |
+| `GlitcherryCTO` | `{{bindings.agents.GlitcherryCTO}}` |
+| `GlitcherryAndroidEngineer` | `{{bindings.agents.GlitcherryAndroidEngineer}}` |
+| `GlitcherryMediaPipelineEngineer` | `{{bindings.agents.GlitcherryMediaPipelineEngineer}}` |
+| `GlitcherryCodeReviewer` | `{{bindings.agents.GlitcherryCodeReviewer}}` |
+| `GlitcherryQAEngineer` | `{{bindings.agents.GlitcherryQAEngineer}}` |
 
-A current Project workspace binding is mandatory for every assignee. Never copy
-IDs across companies and never accept an agent-home fallback.
+Every role uses that same Project workspace. The slice issue carries one
+Paperclip-created isolated `executionWorkspaceId`, and that ID, cwd, branch, and
+HEAD stay unchanged across all role handoffs. Never copy IDs across companies
+and never accept an agent-home fallback.
 
 ### Runtime repositories and lease
 
-- Your persistent runtime cwd exists to load `workspace/AGENTS.md`; it is not a
-  private product checkout.
+- Your role-specific `AGENTS.md` is supplied independently by the adapter through
+  an absolute required `instructionsFilePath`. A missing or unreadable required
+  instruction file is a hard pre-spawn error.
 - The canonical Android clone is `{{paths.primary_repo_root}}`; the canonical
   control clone is `{{paths.control_repo_root}}`. The historical
   `workspace/control` layout is not used for normal product work.
 - One active slice has exactly one worktree below the configured
   `task_worktree_root` (`{{paths.task_worktree_root}}`), one mode-600 record below
   `{{paths.task_state_root}}`, one task branch, one PR, and one exclusive lease.
-- Resolve its path/branch/HEAD only through the controller at
-  `{{paths.slice_controller_path}}`; never derive or create an alternative
-  checkout. Verify live assignee and workspace, then claim the lease before
-  repository access.
+- Paperclip creates the isolated worktree once. CTO adopts its exact
+  `executionWorkspaceId`, path, branch, and HEAD into the controller at
+  `{{paths.slice_controller_path}}`; no agent or controller creates an
+  alternative checkout. Verify the live assignee and unchanged workspace IDs,
+  then claim the lease before repository access.
 - All roles use that same committed HEAD sequentially. A dirty tree, mismatched
   branch/HEAD, another owner/run, expired lease, or second state is a stop.
 - Both repositories' integration branch is `develop`. Origins are exactly
@@ -52,7 +57,7 @@ reserved for confirmed Unstoppable iOS projects.
 
 ### Normal lifecycle
 
-The six phases are: create worktree/materialize spec; independent spec review;
+The six phases are: adopt Paperclip worktree/materialize spec; independent spec review;
 plan plus independent plan review; implementation by exactly one engineer;
 exact-head code and architecture review; CTO integrate/synchronize/clean. QA is
 not a slice phase.
@@ -61,8 +66,9 @@ One implementation PR survives every correction. There is a maximum three full
 Code Review rejection cycles. After correction three the reviewer must approve
 or block; a fourth autonomous loop is forbidden. For squash merge, CTO records the
 merged PR and merge SHA; the controller requires that SHA on `origin/develop` but
-does not add tree-equality or feature-head-ancestry gates. Only then may CTO delete
-the exact clean worktree and exact local/remote refs.
+does not add tree-equality or feature-head-ancestry gates. Only then may CTO
+normalize the exact clean branch, let Paperclip archive its own worktree, and
+remove remaining exact refs.
 
 QA runs one sprint smoke only after every slice is merged/cleaned, the Walker is
 stopped at `SPRINT_SMOKE_REQUIRED`, and one candidate SHA is fixed. A smoke
@@ -104,7 +110,7 @@ same issue.
 ### Atomic handoff
 
 Finish the clean commit/allowed push, record the controller handoff, `POST evidence`
-and require 2xx, PATCH the exact assignee/status and that assignee's
-Project workspace binding, perform `one read-only verification` of API and
-controller state, then STOP. One 409 reload is allowed; repeated conflict is
+and require 2xx, PATCH only the exact assignee/status, perform one read-only verification
+that both workspace IDs plus controller state are unchanged, then
+STOP. One 409 reload is allowed; repeated conflict is
 `LOCAL_BLOCKED`.

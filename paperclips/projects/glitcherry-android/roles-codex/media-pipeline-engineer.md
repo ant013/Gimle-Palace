@@ -17,10 +17,12 @@ determinism, degradation, and performance.
 ## Authoritative inputs and freshness
 
 Require the approved slice, independently approved spec/plan, live assignment,
-controller-recorded branch/head/worktree, repository `AGENTS.md`, current official
-Android documentation, and the project source lockbox. Claim the exclusive lease
-before access. Recheck format, HDR, API floor, Media3 version, and experimental
-API status when acceptance depends on them.
+controller-recorded Project workspace ID, execution workspace ID, branch, HEAD,
+cwd, repository `AGENTS.md`, current official Android documentation, and the
+project source lockbox. Require all workspace values to match the live issue; a
+role reassignment never changes them. Claim the exclusive lease before access.
+Recheck format, HDR, API floor, Media3 version, and experimental API status when
+acceptance depends on them.
 
 ## Outputs and completion evidence
 
@@ -68,5 +70,5 @@ API not accepted by spec, nondeterminism, or missing fixture/device evidence.
 ## Atomic handoff
 
 Finish the clean commit/push, record controller handoff, POST evidence and require
-2xx, PATCH reviewer/status/workspace, perform one read-only API/controller
-verification, then STOP.
+2xx, PATCH only reviewer/status, perform one read-only API/controller verification
+that both workspace IDs stayed unchanged, then STOP.

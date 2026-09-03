@@ -195,8 +195,16 @@ stage_7_e2e_handoff() {
   [ -n "$next_uuid" ] && [ "$next_uuid" != "null" ] || die "no implementer/reviewer/qa agent in $project_key"
 
   project_uuid=$(yq -r '.project_id // ""' "$bindings")
-  cto_workspace_uuid=$(yq -r ".workspaces[\"${cto_name}\"] // \"\"" "$bindings")
-  next_workspace_uuid=$(yq -r ".workspaces[\"${next_name}\"] // \"\"" "$bindings")
+  shared_workspace_uuid=$(yq -r '.project_workspace_id // ""' "$bindings")
+  if [ -n "$shared_workspace_uuid" ] && [ "$shared_workspace_uuid" != "null" ]; then
+    cto_workspace_uuid="$shared_workspace_uuid"
+    next_workspace_uuid="$shared_workspace_uuid"
+    stable_execution_workspace=1
+  else
+    cto_workspace_uuid=$(yq -r ".workspaces[\"${cto_name}\"] // \"\"" "$bindings")
+    next_workspace_uuid=$(yq -r ".workspaces[\"${next_name}\"] // \"\"" "$bindings")
+    stable_execution_workspace=0
+  fi
   if [ -n "$project_uuid" ] || [ -n "$cto_workspace_uuid" ] || [ -n "$next_workspace_uuid" ]; then
     [ -n "$project_uuid" ] && [ -n "$cto_workspace_uuid" ] && [ -n "$next_workspace_uuid" ] || \
       die "project-aware smoke requires complete project/workspace bindings"
@@ -211,7 +219,8 @@ stage_7_e2e_handoff() {
 
   probe_e2e_handoff \
     "$company_id" "$cto_uuid" "$cto_name" "$next_uuid" "$next_name" \
-    "$project_uuid" "$cto_workspace_uuid" "$next_workspace_uuid" "$e2e_timeout" || \
+    "$project_uuid" "$cto_workspace_uuid" "$next_workspace_uuid" "$e2e_timeout" \
+    "$stable_execution_workspace" || \
     die "stage 7: e2e handoff probe failed"
 
   log ok "[7/7] e2e handoff green"

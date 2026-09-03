@@ -145,6 +145,18 @@ def test_optional_recovery_model_profile_preserves_reasoning_and_runtime_config(
     assert "runtimeConfig" not in text[managed_start:managed_end]
 
 
+def test_manifest_can_require_codex_instruction_file_without_changing_legacy_default():
+    text = SCRIPT.read_text()
+
+    assert ".targets.${target}.require_instructions_file // false" in text
+    assert "targets.${target}.require_instructions_file must be true or false" in text
+    assert '--argjson requireInstructionsFile "$require_instructions_file"' in text
+    assert "requireInstructionsFile: $requireInstructionsFile" in text
+    managed_start = text.index("managed_config_filter='")
+    managed_end = text.index("current_managed=", managed_start)
+    assert "requireInstructionsFile" in text[managed_start:managed_end]
+
+
 def test_canary_cto_uses_workflow_role():
     text = SCRIPT.read_text()
     assert 'workflow_role == "inner_orchestrator"' in text

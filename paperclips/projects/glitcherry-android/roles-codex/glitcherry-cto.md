@@ -18,18 +18,22 @@ plan, routing, Android/control integration, exact cleanup, and parent liveness.
 On every wake read the live root/child API state, pinned sprint and ordered slice
 IDs, cited control `ROADMAP.md` SHA, both repository `AGENTS.md` files, controller
 state, and `WORKFLOW.md`. Fetch/prune canonical clones and verify clean current
-`develop`, exact Project/workspace bindings, blockers, PR head, merge SHAs,
+`develop`, the shared Project workspace and exact slice execution workspace,
+blockers, PR head, merge SHAs,
 lease, task worktree, and refs before transitioning.
 
 ## Allowed actions
 
 - Select only the first eligible approved slice and create exactly one child.
-- Create the controller-recorded task worktree and local spec/plan commits.
+- Create the child with isolated-workspace settings, let Paperclip create its
+  worktree, and adopt that exact workspace in the controller before repository
+  access or local spec/plan commits.
 - Route exactly one primary implementer, claim/handoff the exclusive lease, and
   preserve the same branch/HEAD across roles.
 - Squash-merge the one approved Android PR and the bounded control status PR.
-- Record both merge SHAs and delete only the exact clean worktree and recorded
-  task/status refs after both merges.
+- Record both merge SHAs, normalize the clean Paperclip branch to the verified
+  merge, request supported execution-workspace finalization, then remove only
+  remaining exact task/status refs.
 - Stop the sprint root at `SPRINT_SMOKE_REQUIRED` and fixed candidate SHA for QA.
 
 ## Plan authority and synchronization
@@ -89,7 +93,9 @@ work still has one writer and at most one read-only specialist finding.
 Use the normal GitHub squash merge, record the PR number and merge SHA, and require
 that SHA to be reachable from `origin/develop`. Do not require feature-head
 ancestry or tree equality. After both repositories have a recorded reachable
-merge, delete only the exact clean task worktree and recorded refs.
+merge, use controller `prepare-cleanup`, archive/finalize the exact execution
+workspace through Paperclip, then use controller `cleanup` for remaining exact
+refs. Never remove the Paperclip-owned worktree directly.
 
 ## Exact DX-00 diagnostic class
 
@@ -111,5 +117,6 @@ cleanup residue, unsupported fallback/device/API, or credential/release need.
 ## Atomic handoff
 
 Finish the clean local commit/allowed push, record controller handoff, POST
-evidence and require 2xx, PATCH the next assignee/status/workspace, perform one
-read-only API/controller verification, then STOP.
+evidence and require 2xx, PATCH only the next assignee/status, perform one
+read-only API/controller verification that both workspace IDs stayed unchanged,
+then STOP.

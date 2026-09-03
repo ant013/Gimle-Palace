@@ -605,6 +605,11 @@ for agent_name in $hire_order; do
   agent_meta=$(yq -o=json ".agents[] | select(.agent_name == \"${agent_name}\")" "$manifest")
   role=$(echo "$agent_meta" | jq -r '.role_source')
   target=$(echo "$agent_meta" | jq -r '.target')
+  require_instructions_file=$(yq -r ".targets.${target}.require_instructions_file // false" "$manifest")
+  case "$require_instructions_file" in
+    true|false) ;;
+    *) die "targets.${target}.require_instructions_file must be true or false" ;;
+  esac
   reports_to_name=$(echo "$agent_meta" | jq -r '.reportsTo // ""')
   reports_to_uuid=""
   if [ -n "$reports_to_name" ] && [ "$reports_to_name" != "null" ]; then
@@ -768,6 +773,7 @@ for agent_name in $hire_order; do
     --argjson readonly "$read_only_roots" \
     --argjson env "$adapter_env" \
     --argjson recoveryProfile "$recovery_profile" \
+    --argjson requireInstructionsFile "$require_instructions_file" \
     '{
       name: $name, role: $role, title: $title, icon: $icon,
       capabilities: "default",
@@ -776,6 +782,7 @@ for agent_name in $hire_order; do
         cwd: $cwd, model: $model, modelReasoningEffort: $effort,
         instructionsFilePath: "AGENTS.md", instructionsEntryFile: "AGENTS.md",
         instructionsBundleMode: "managed",
+        requireInstructionsFile: $requireInstructionsFile,
         maxTurnsPerRun: 200, timeoutSec: 0, graceSec: 15,
         dangerouslyBypassApprovalsAndSandbox: $bypass,
         writableRoots: $writable, sourceRootsReadOnly: $readonly, env: $env
@@ -798,6 +805,7 @@ for agent_name in $hire_order; do
       adapterType,
       adapterConfig: (.adapterConfig | {
         cwd, model, modelReasoningEffort,
+        requireInstructionsFile,
         maxTurnsPerRun, timeoutSec, graceSec,
         dangerouslyBypassApprovalsAndSandbox,
         writableRoots, sourceRootsReadOnly, env

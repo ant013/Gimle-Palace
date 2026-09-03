@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Reconcile the Glitcherry Paperclip Project and one local workspace per agent.
+# Reconcile the Glitcherry Paperclip Project and its single repository anchor.
 
 set -euo pipefail
 umask 077
@@ -14,6 +14,7 @@ source "${REPO_ROOT}/paperclips/scripts/lib/_paperclip_api.sh"
 
 PROJECT_KEY="glitcherry-android"
 PROJECT_NAME="Glitcherry Android Development"
+PROJECT_WORKSPACE_NAME="Glitcherry Android"
 MANIFEST="${REPO_ROOT}/paperclips/projects/${PROJECT_KEY}/paperclip-agent-assembly.yaml"
 PATHS_FILE="${HOME}/.paperclip/projects/${PROJECT_KEY}/paths.yaml"
 BINDINGS_FILE="${HOME}/.paperclip/projects/${PROJECT_KEY}/bindings.yaml"
@@ -28,7 +29,9 @@ Options:
   --bindings FILE   Host-local bindings.yaml (mode 600).
   -h, --help        Show this help.
 
-Creates or reuses one exact Paperclip Project and six local Project workspaces.
+Creates or reuses one exact Paperclip Project and one primary Project workspace.
+Existing legacy role workspaces are retained as historical records but are no
+longer selected or mutated.
 It never creates issues, wakes agents, deletes resources, or stores credentials.
 USAGE
 }
@@ -82,7 +85,7 @@ raise SystemExit(0 if valid else 1)
 PY
 }
 
-validate_workspace_directory() {
+validate_directory() {
   local directory_path="$1"
   local label="$2"
   python3 - "$directory_path" <<'PY' >/dev/null 2>&1 || die "$label must be an existing absolute non-symlink directory"
@@ -100,6 +103,12 @@ except OSError:
     raise SystemExit(1)
 raise SystemExit(0 if stat.S_ISDIR(value.st_mode) else 1)
 PY
+}
+
+validate_workspace_directory() {
+  local directory_path="$1"
+  local label="$2"
+  validate_directory "$directory_path" "$label"
   [ -f "${directory_path}/AGENTS.md" ] && [ ! -L "${directory_path}/AGENTS.md" ] || \
     die "$label has no generated AGENTS.md"
 }
@@ -117,6 +126,14 @@ COMPANY_ID="$(yq -r '.company_id // ""' "$BINDINGS_FILE")"
 is_uuid "$COMPANY_ID" || die "bindings file has an invalid company identifier"
 TEAM_ROOT="$(yq -r '.team_workspace_root // ""' "$PATHS_FILE")"
 [ -n "$TEAM_ROOT" ] || die "team_workspace_root is missing"
+PRIMARY_REPO_ROOT="$(yq -r '.primary_repo_root // ""' "$PATHS_FILE")"
+[ -n "$PRIMARY_REPO_ROOT" ] || die "primary_repo_root is missing"
+TASK_WORKTREE_ROOT="$(yq -r '.task_worktree_root // ""' "$PATHS_FILE")"
+[ -n "$TASK_WORKTREE_ROOT" ] || die "task_worktree_root is missing"
+validate_workspace_directory "$PRIMARY_REPO_ROOT" "primary Android repository"
+git -C "$PRIMARY_REPO_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1 || \
+  die "primary Android repository is not a Git worktree"
+validate_directory "$TASK_WORKTREE_ROOT" "task worktree root"
 
 AGENT_NAMES=()
 while IFS= read -r agent_name; do
@@ -159,7 +176,7 @@ else
     project_payload="$(jq -n \
       --arg name "$PROJECT_NAME" \
       --arg lead "$CTO_ID" \
-      '{name:$name,description:"Role instruction workspaces for Glitcherry Android.",status:"in_progress",leadAgentId:$lead}')"
+      '{name:$name,description:"One repository anchor with one isolated execution workspace per Glitcherry slice.",status:"in_progress",leadAgentId:$lead}')"
     PROJECT_ID="$(paperclip_post "/api/companies/${COMPANY_ID}/projects" "$project_payload" | jq -r '.id // ""')"
   fi
   is_uuid "$PROJECT_ID" || die "project reconciliation returned an invalid identifier"
@@ -169,79 +186,55 @@ fi
 
 workspaces_response="$(paperclip_get "/api/projects/${PROJECT_ID}/workspaces")"
 workspaces="$(printf '%s' "$workspaces_response" | jq -c 'if type == "array" then . else (.workspaces // .items // []) end')"
+PROJECT_WORKSPACE_ID="$(yq -r '.project_workspace_id // ""' "$BINDINGS_FILE")"
+workspace_json=""
 
-is_expected_agent_name() {
-  local candidate="$1"
-  local expected
-  for expected in "${AGENT_NAMES[@]}"; do
-    [ "$candidate" = "$expected" ] && return 0
-  done
-  return 1
-}
-
-while IFS= read -r live_name; do
-  [ -z "$live_name" ] && continue
-  is_expected_agent_name "$live_name" || die "Paperclip project contains an unexpected workspace"
-  live_count="$(printf '%s' "$workspaces" | jq --arg name "$live_name" '[.[] | select(.name == $name)] | length')"
-  [ "$live_count" -eq 1 ] || die "Paperclip project contains duplicate named workspaces"
-  live_workspace="$(printf '%s' "$workspaces" | jq -c --arg name "$live_name" '.[] | select(.name == $name)')"
-  [ "$(printf '%s' "$live_workspace" | jq -r '.cwd // ""')" = "${TEAM_ROOT}/${live_name}/workspace" ] || \
-    die "Paperclip project contains a workspace with the wrong path"
-  [ "$(printf '%s' "$live_workspace" | jq -r '.sourceType // ""')" = "local_path" ] || \
-    die "Paperclip project contains a non-local workspace"
-done < <(printf '%s' "$workspaces" | jq -r '.[].name // ""')
-
-for agent_name in "${AGENT_NAMES[@]}"; do
-  desired_cwd="${TEAM_ROOT}/${agent_name}/workspace"
-  bound_workspace_id="$(yq -r ".workspaces[\"${agent_name}\"] // \"\"" "$BINDINGS_FILE")"
-  workspace_json=""
-
-  if [ -n "$bound_workspace_id" ] && [ "$bound_workspace_id" != "null" ]; then
-    is_uuid "$bound_workspace_id" || die "bindings file has an invalid workspace identifier"
-    workspace_json="$(printf '%s' "$workspaces" | jq -c --arg id "$bound_workspace_id" '[.[] | select(.id == $id)] | if length == 1 then .[0] else empty end')"
-    [ -n "$workspace_json" ] || die "bound workspace is absent from the bound project"
+if [ -n "$PROJECT_WORKSPACE_ID" ] && [ "$PROJECT_WORKSPACE_ID" != "null" ]; then
+  is_uuid "$PROJECT_WORKSPACE_ID" || die "bindings file has an invalid project workspace identifier"
+  workspace_json="$(printf '%s' "$workspaces" | jq -c --arg id "$PROJECT_WORKSPACE_ID" '[.[] | select(.id == $id)] | if length == 1 then .[0] else empty end')"
+  [ -n "$workspace_json" ] || die "bound project workspace is absent from the bound project"
+else
+  matching_count="$(printf '%s' "$workspaces" | jq \
+    --arg name "$PROJECT_WORKSPACE_NAME" --arg cwd "$PRIMARY_REPO_ROOT" \
+    '[.[] | select(.name == $name or .cwd == $cwd)] | length')"
+  [ "$matching_count" -le 1 ] || die "multiple workspaces match the Glitcherry repository anchor"
+  if [ "$matching_count" -eq 1 ]; then
+    workspace_json="$(printf '%s' "$workspaces" | jq -c \
+      --arg name "$PROJECT_WORKSPACE_NAME" --arg cwd "$PRIMARY_REPO_ROOT" \
+      '.[] | select(.name == $name or .cwd == $cwd)')"
   else
-    workspace_matches="$(printf '%s' "$workspaces" | jq --arg name "$agent_name" '[.[] | select(.name == $name)] | length')"
-    [ "$workspace_matches" -le 1 ] || die "Paperclip project contains duplicate named workspaces"
-    if [ "$workspace_matches" -eq 1 ]; then
-      workspace_json="$(printf '%s' "$workspaces" | jq -c --arg name "$agent_name" '.[] | select(.name == $name)')"
-    else
-      is_primary=false
-      [ "$agent_name" = "$CTO_NAME" ] && is_primary=true
-      workspace_payload="$(jq -n \
-        --arg name "$agent_name" \
-        --arg cwd "$desired_cwd" \
-        --argjson primary "$is_primary" \
-        '{name:$name,sourceType:"local_path",cwd:$cwd,isPrimary:$primary,visibility:"advanced"}')"
-      workspace_json="$(paperclip_post "/api/projects/${PROJECT_ID}/workspaces" "$workspace_payload")"
-      workspaces="$(printf '%s' "$workspaces" | jq -c --argjson workspace "$workspace_json" '. + [$workspace]')"
-    fi
-    bound_workspace_id="$(printf '%s' "$workspace_json" | jq -r '.id // ""')"
-    is_uuid "$bound_workspace_id" || die "workspace reconciliation returned an invalid identifier"
-    YQ_AGENT_NAME="$agent_name" YQ_WORKSPACE_ID="$bound_workspace_id" \
-      yq -i '.workspaces[strenv(YQ_AGENT_NAME)] = strenv(YQ_WORKSPACE_ID)' "$BINDINGS_FILE"
-    chmod 600 "$BINDINGS_FILE"
+    workspace_payload="$(jq -n \
+      --arg name "$PROJECT_WORKSPACE_NAME" \
+      --arg cwd "$PRIMARY_REPO_ROOT" \
+      '{name:$name,sourceType:"local_path",cwd:$cwd,isPrimary:true,visibility:"advanced",defaultRef:"develop"}')"
+    workspace_json="$(paperclip_post "/api/projects/${PROJECT_ID}/workspaces" "$workspace_payload")"
   fi
+  PROJECT_WORKSPACE_ID="$(printf '%s' "$workspace_json" | jq -r '.id // ""')"
+  is_uuid "$PROJECT_WORKSPACE_ID" || die "project workspace reconciliation returned an invalid identifier"
+  YQ_WORKSPACE_ID="$PROJECT_WORKSPACE_ID" \
+    yq -i '.project_workspace_id = strenv(YQ_WORKSPACE_ID)' "$BINDINGS_FILE"
+  chmod 600 "$BINDINGS_FILE"
+fi
 
-  [ "$(printf '%s' "$workspace_json" | jq -r '.name // ""')" = "$agent_name" ] || \
-    die "bound workspace name does not match its agent"
-  [ "$(printf '%s' "$workspace_json" | jq -r '.cwd // ""')" = "$desired_cwd" ] || \
-    die "bound workspace path does not match its agent"
-  [ "$(printf '%s' "$workspace_json" | jq -r '.sourceType // ""')" = "local_path" ] || \
-    die "bound workspace is not a local path"
-done
+[ "$(printf '%s' "$workspace_json" | jq -r '.cwd // ""')" = "$PRIMARY_REPO_ROOT" ] || \
+  die "bound project workspace has the wrong path"
+[ "$(printf '%s' "$workspace_json" | jq -r '.sourceType // ""')" = "local_path" ] || \
+  die "bound project workspace is not a local path"
+if [ "$(printf '%s' "$workspace_json" | jq -r '.isPrimary // false')" != "true" ]; then
+  paperclip_patch "/api/projects/${PROJECT_ID}/workspaces/${PROJECT_WORKSPACE_ID}" \
+    '{"isPrimary":true}' >/dev/null
+fi
 
-CTO_WORKSPACE_ID="$(yq -r ".workspaces[\"${CTO_NAME}\"] // \"\"" "$BINDINGS_FILE")"
-is_uuid "$CTO_WORKSPACE_ID" || die "CTO workspace binding is invalid"
 project_patch="$(jq -n \
   --arg lead "$CTO_ID" \
-  --arg workspace "$CTO_WORKSPACE_ID" \
-  '{status:"in_progress",leadAgentId:$lead,executionWorkspacePolicy:{enabled:true,defaultMode:"shared_workspace",allowIssueOverride:true,defaultProjectWorkspaceId:$workspace}}')"
+  --arg workspace "$PROJECT_WORKSPACE_ID" \
+  --arg worktreeRoot "$TASK_WORKTREE_ROOT" \
+  '{status:"in_progress",leadAgentId:$lead,executionWorkspacePolicy:{enabled:true,defaultMode:"shared_workspace",allowIssueOverride:true,defaultProjectWorkspaceId:$workspace,workspaceStrategy:{type:"git_worktree",baseRef:"origin/develop",branchTemplate:"feature/{{issue.identifier}}-{{slug}}",worktreeParentDir:$worktreeRoot}}}')"
 paperclip_patch "/api/projects/${PROJECT_ID}" "$project_patch" >/dev/null
 
 final_workspaces="$(paperclip_get "/api/projects/${PROJECT_ID}/workspaces")"
 final_workspaces="$(printf '%s' "$final_workspaces" | jq -c 'if type == "array" then . else (.workspaces // .items // []) end')"
-[ "$(printf '%s' "$final_workspaces" | jq 'length')" -eq "${#AGENT_NAMES[@]}" ] || \
-  die "Paperclip project does not contain exactly six workspaces"
+[ "$(printf '%s' "$final_workspaces" | jq --arg id "$PROJECT_WORKSPACE_ID" '[.[] | select(.id == $id and .isPrimary == true)] | length')" -eq 1 ] || \
+  die "Paperclip project does not expose the shared workspace as primary"
 
-printf 'Reconciled one Glitcherry Paperclip Project with %s bound workspaces.\n' "${#AGENT_NAMES[@]}"
+printf 'Reconciled one Glitcherry Paperclip Project with one shared repository anchor.\n'

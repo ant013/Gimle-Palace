@@ -36,6 +36,7 @@ class _PaperclipState:
         self.project_posts = 0
         self.workspace_posts = 0
         self.project_patches: list[dict] = []
+        self.workspace_patches: list[dict] = []
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -79,6 +80,9 @@ class _Handler(BaseHTTPRequestHandler):
             return
         if self.path == f"/api/projects/{PROJECT_ID}/workspaces":
             state.workspace_posts += 1
+            if body.get("isPrimary") is True:
+                for item in state.workspaces:
+                    item["isPrimary"] = False
             workspace = {
                 "id": str(uuid.UUID(int=0x200 + state.workspace_posts)),
                 "projectId": PROJECT_ID,
@@ -92,13 +96,31 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_PATCH(self) -> None:  # noqa: N802
         state = self.server.state
-        if self.path != f"/api/projects/{PROJECT_ID}":
-            self._json(404, {"error": "not found"})
+        if self.path == f"/api/projects/{PROJECT_ID}":
+            body = self._body()
+            state.project_patches.append(body)
+            state.projects[0].update(body)
+            self._json(200, state.projects[0])
             return
-        body = self._body()
-        state.project_patches.append(body)
-        state.projects[0].update(body)
-        self._json(200, state.projects[0])
+        prefix = f"/api/projects/{PROJECT_ID}/workspaces/"
+        if self.path.startswith(prefix):
+            workspace_id = self.path.removeprefix(prefix)
+            workspace = next(
+                (item for item in state.workspaces if item["id"] == workspace_id),
+                None,
+            )
+            if workspace is None:
+                self._json(404, {"error": "not found"})
+                return
+            body = self._body()
+            if body.get("isPrimary") is True:
+                for item in state.workspaces:
+                    item["isPrimary"] = False
+            workspace.update(body)
+            state.workspace_patches.append({"id": workspace_id, **body})
+            self._json(200, workspace)
+            return
+        self._json(404, {"error": "not found"})
 
 
 class _Server(ThreadingHTTPServer):
@@ -119,10 +141,25 @@ def _fixture(tmp_path: Path) -> dict[str, object]:
         workspace.mkdir(parents=True)
         (workspace / "AGENTS.md").write_text(f"# {name}\n")
 
+    primary = tmp_path / "Glitcherry-Android"
+    primary.mkdir()
+    (primary / "AGENTS.md").write_text("# Android rules\n")
+    subprocess.run(
+        ["git", "init", "--initial-branch=develop"],
+        cwd=primary,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    task_worktrees = tmp_path / "slice-worktrees"
+    task_worktrees.mkdir()
+
     paths = tmp_path / "paths.yaml"
     _write_private(
         paths,
-        f"schemaVersion: 2\nteam_workspace_root: {team_root}\n",
+        f"schemaVersion: 2\nteam_workspace_root: {team_root}\n"
+        f"primary_repo_root: {primary}\n"
+        f"task_worktree_root: {task_worktrees}\n",
     )
     bindings = tmp_path / "bindings.yaml"
     agent_lines = "\n".join(
@@ -133,7 +170,13 @@ def _fixture(tmp_path: Path) -> dict[str, object]:
         bindings,
         f"schemaVersion: 2\ncompany_id: {COMPANY_ID}\nagents:\n{agent_lines}\n",
     )
-    return {"team_root": team_root, "paths": paths, "bindings": bindings}
+    return {
+        "team_root": team_root,
+        "primary": primary,
+        "task_worktrees": task_worktrees,
+        "paths": paths,
+        "bindings": bindings,
+    }
 
 
 def _run(
@@ -170,7 +213,7 @@ def _run(
         thread.join()
 
 
-def test_reconciler_creates_exact_project_and_six_workspaces_idempotently(
+def test_reconciler_creates_one_shared_project_workspace_idempotently(
     tmp_path: Path,
 ) -> None:
     fixture = _fixture(tmp_path)
@@ -179,34 +222,48 @@ def test_reconciler_creates_exact_project_and_six_workspaces_idempotently(
     first = _run(fixture, state)
     assert first.returncode == 0, first.stderr
     assert state.project_posts == 1
-    assert state.workspace_posts == 6
+    assert state.workspace_posts == 1
     assert len(state.projects) == 1
-    assert [workspace["name"] for workspace in state.workspaces] == AGENT_NAMES
+    assert [workspace["name"] for workspace in state.workspaces] == ["Glitcherry Android"]
+    assert state.workspaces[0]["cwd"] == str(fixture["primary"])
+    assert state.workspaces[0]["isPrimary"] is True
     assert state.project_patches[-1]["executionWorkspacePolicy"] == {
         "enabled": True,
         "defaultMode": "shared_workspace",
         "allowIssueOverride": True,
-        "defaultProjectWorkspaceId": state.workspaces[1]["id"],
+        "defaultProjectWorkspaceId": state.workspaces[0]["id"],
+        "workspaceStrategy": {
+            "type": "git_worktree",
+            "baseRef": "origin/develop",
+            "branchTemplate": "feature/{{issue.identifier}}-{{slug}}",
+            "worktreeParentDir": str(fixture["task_worktrees"]),
+        },
     }
 
     bindings = yaml.safe_load(Path(fixture["bindings"]).read_text())
     assert bindings["project_id"] == PROJECT_ID
-    assert set(bindings["workspaces"]) == set(AGENT_NAMES)
+    assert bindings["project_workspace_id"] == state.workspaces[0]["id"]
     assert Path(fixture["bindings"]).stat().st_mode & 0o777 == 0o600
 
     second = _run(fixture, state)
     assert second.returncode == 0, second.stderr
     assert state.project_posts == 1
-    assert state.workspace_posts == 6
+    assert state.workspace_posts == 1
     assert len(state.projects) == 1
-    assert len(state.workspaces) == 6
+    assert len(state.workspaces) == 1
     assert "test-only-secret" not in first.stdout + first.stderr + second.stdout + second.stderr
 
 
-def test_reconciler_rejects_wrong_existing_workspace_before_creating_more(
+def test_reconciler_retains_legacy_role_workspaces_and_promotes_shared_anchor(
     tmp_path: Path,
 ) -> None:
     fixture = _fixture(tmp_path)
+    bindings_path = Path(fixture["bindings"])
+    bindings = yaml.safe_load(bindings_path.read_text())
+    bindings["workspaces"] = {
+        "GlitcherryCTO": "00000000-0000-4000-8000-000000000201"
+    }
+    _write_private(bindings_path, yaml.safe_dump(bindings, sort_keys=False))
     state = _PaperclipState()
     state.projects.append(
         {
@@ -229,10 +286,15 @@ def test_reconciler_rejects_wrong_existing_workspace_before_creating_more(
     )
 
     result = _run(fixture, state)
-    assert result.returncode != 0
-    assert "wrong path" in result.stderr.lower()
+    assert result.returncode == 0, result.stderr
     assert state.project_posts == 0
-    assert state.workspace_posts == 0
+    assert state.workspace_posts == 1
+    assert len(state.workspaces) == 2
+    assert state.workspaces[0]["isPrimary"] is False
+    assert state.workspaces[1]["isPrimary"] is True
+    migrated_bindings = yaml.safe_load(bindings_path.read_text())
+    assert migrated_bindings["workspaces"] == bindings["workspaces"]
+    assert migrated_bindings["project_workspace_id"] == state.workspaces[1]["id"]
 
 
 def test_reconciler_requires_private_host_files(tmp_path: Path) -> None:

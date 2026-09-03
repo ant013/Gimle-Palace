@@ -39,8 +39,11 @@ On every parent wake, the CTO fetches both canonical repositories and proves:
 
 The CTO selects only the first pinned `READY` slice whose dependencies are
 `DONE`. It creates exactly one child with `parentId=<root-id>`, the Glitcherry
-Project ID, and the CTO Project workspace ID; reads it back; then PATCHes the
-parent to API status `blocked` with `blockedByIssueIds=[<child-id>]`.
+Project ID, the shared Project workspace ID, and explicit
+`executionWorkspaceSettings.mode=isolated_workspace`; reads it back; then
+PATCHes the parent to API status `blocked` with
+`blockedByIssueIds=[<child-id>]`. The issue-level override prevents accidental
+inheritance of the root's execution workspace.
 
 After the child becomes `done`, Paperclip may wake the parent through
 `issue_blockers_resolved` and/or `issue_children_completed`. The CTO clears only
@@ -60,9 +63,10 @@ does not select another sprint until the sprint smoke gate below is resolved.
 - Product work for one active slice occurs only at its controller-recorded path
   beneath `task_worktree_root`; durable mode-600 state is beneath
   `task_state_root`.
-- All phase owners use the same exact task worktree, branch, and committed HEAD
-  sequentially. Agent `workspace/AGENTS.md` holds instructions only; there is no
-  per-agent `workspace/repo` checkout.
+- All phase owners use the same exact Paperclip `executionWorkspaceId`, task
+  worktree, branch, and committed HEAD sequentially. Each role's absolute
+  required `instructionsFilePath` supplies its own generated `AGENTS.md`; there
+  is no per-agent product checkout.
 - The task controller is `scripts/slice-worktree.py`. Every role verifies the
   live Paperclip assignee/workspace, then obtains the exclusive lease before
   repository access. A different owner/run, expired lease, dirty tree, wrong
@@ -137,16 +141,19 @@ recorded primary implementer may continue.
 
 ## Six child phases
 
-### Phase 1 — Create worktree and materialize spec
+### Phase 1 — Adopt Paperclip worktree and materialize spec
 
 Owner: `GlitcherryCTO`.
 
-From clean current canonical clones, create the controller state and exact
-`feature/GLA-N-<slug>` worktree from `origin/develop`. Materialize only the
-approved technical spec, cite the pinned roadmap slice, and commit locally. The
-spec may narrow execution detail but cannot expand product scope. Record the
-clean HEAD, hand the lease to `GlitcherryCodeReviewer` for `spec_review`, perform
-the atomic Paperclip handoff, and stop.
+Paperclip creates the exact `feature/GLA-N-<slug>` isolated worktree from the
+pinned `origin/develop` base before the adapter starts. Read the live child and
+execution workspace, then use controller `adopt` once with the exact shared
+Project workspace ID, execution workspace ID, cwd, branch, base SHA, issue, and
+run. Do not create a second worktree. Materialize only the approved technical
+spec, cite the pinned roadmap slice, and commit locally. The spec may narrow
+execution detail but cannot expand product scope. Record the clean HEAD, hand
+the lease to `GlitcherryCodeReviewer` for `spec_review`, perform the atomic
+Paperclip handoff, and stop.
 
 ### Phase 2 — Independent spec review
 
@@ -249,17 +256,23 @@ In the canonical control clone, search `origin/develop` for the unique marker
 slice status/evidence and required ADR index, push it, and squash-merge to control
 `develop`. If present, reuse the existing immutable control merge record.
 
-Only after both merge SHAs are recorded and reachable may cleanup remove the clean
-exact task worktree, force-delete only its recorded local squash-merged task ref,
-delete only its recorded remote task/status refs, and prune worktree metadata.
-Broad cleanup, unrecorded paths, dirty worktrees, and missing merges remain the
-only cleanup blockers.
+Only after both merge SHAs are recorded and reachable may controller
+`prepare-cleanup` retain the approved feature HEAD and move the clean local task
+branch to the verified Android merge SHA. CTO then closes the exact Paperclip
+execution workspace through its supported archive/finalize API; Paperclip owns
+worktree removal and normal local branch deletion. The parent may wake early but
+does cleanup only: after successful `workspace_finalize`, controller `cleanup`
+verifies the exact worktree is absent and removes only remaining recorded remote
+task/status refs.
 
-The CTO marks the child `done` only after the controller state is `cleaned`, both
-canonical clones are current clean `develop`, the exact refs are absent, and all
-evidence is retained. If Android merged but control or cleanup failed, resume
-from the recorded SHA; never reimplement or remerge Android. The next slice is
-forbidden until this phase is complete.
+The CTO marks the child `done` after `prepare-cleanup` and requests the supported
+workspace finalization: read `GET /api/execution-workspaces/{id}/close-readiness`,
+then `PATCH /api/execution-workspaces/{id}` with `{"status":"archived"}` only
+when readiness is not blocked, and verify the latest workspace operation is a
+successful `workspace_finalize`. The next slice is forbidden until controller state is
+`cleaned`, both canonical clones are current clean `develop`, the exact refs are
+absent, and all evidence is retained. If Android merged but control or cleanup
+failed, resume from the recorded SHA; never reimplement or remerge Android.
 
 ## Sprint smoke gate — QA only here
 
@@ -278,6 +291,11 @@ time. Post commands, result, artifacts, device/API identity, and candidate SHA.
 - A reproducible product defect blocks the root with the failing evidence and
   named owner; the Walker does not invent or start a corrective slice.
 - Infrastructure residue uses `LOCAL_BLOCKED` and one bounded exact-run recovery.
+- If an AVD/device check fails before APK installation or before its test body
+  starts, the attempt produced no application evidence and does not consume the
+  allowed test run. After bounded emulator/adb cleanup, retry it once
+  automatically. Repeated infrastructure failure or any started test failure
+  blocks; neither permits a fallback or relaxed acceptance.
 - Missing product/acceptance authority uses `ROADMAP_BLOCKED`.
 
 ## Diagnostic execution class — DX-00 only
@@ -315,10 +333,10 @@ Every transition uses this exact order:
 1. finish the required local commit and/or allowed push and verify a clean HEAD;
 2. record the controller handoff to the exact next owner/phase;
 3. `POST evidence` to `/api/issues/{id}/comments` and require 2xx;
-4. `PATCH assignee/status/projectWorkspaceId` to the exact next owner, API state,
-   and that owner's bound Project workspace;
-5. perform `one read-only verification` of assignee, status, Project ID,
-   workspace ID, controller owner/phase, and HEAD;
+4. `PATCH assignee/status` to the exact next owner and API state; do not change
+   `projectWorkspaceId` or `executionWorkspaceId`;
+5. perform `one read-only verification` of assignee, status, Project ID, the
+   unchanged Project/execution workspace IDs, controller owner/phase, and HEAD;
 6. `STOP` the current run.
 
 A mention is not a handoff. On HTTP 409, reload once and recover this same child.
@@ -330,8 +348,9 @@ Never write the Paperclip database directly.
   `blocked`. Neither permits the next child.
 - A stale head, active/expired conflicting lease, dirty task worktree, wrong
   branch, residual exact ref, partial merge, or incomplete cleanup stops work.
-- Missing Project/workspace binding or a workspace not bound to the current
-  assignee stops work; never accept an agent-home fallback.
+- Missing/mismatched Project or execution workspace identity stops work. A
+  role-specific workspace mismatch is not a condition because all roles share
+  one Project workspace.
 - Undefined product, media fallback, API-floor, format, device, credential, or
   release decision blocks rather than being guessed.
 - Agents never release, sign, tag, publish, merge to `main`, or use operator

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed single-slice Git worktree and lease controller for Glitcherry."""
+"""Lease controller for one Paperclip-owned Glitcherry execution workspace."""
 
 from __future__ import annotations
 
@@ -18,7 +18,8 @@ from pathlib import Path
 from typing import Any, Iterator
 
 
-SCHEMA_VERSION = "glitcherry-slice-worktree/v1"
+SCHEMA_VERSION = "glitcherry-slice-worktree/v2"
+LEGACY_SCHEMA_VERSION = "glitcherry-slice-worktree/v1"
 ANDROID_REMOTE = "https://github.com/ant013/Glitcherry-Android.git"
 CONTROL_REMOTE = "https://github.com/ant013/Glitcherry.git"
 ISSUE_KEY_RE = re.compile(r"^GLA-[1-9][0-9]*$")
@@ -27,6 +28,9 @@ OWNER_RE = re.compile(r"^Glitcherry[A-Za-z0-9]+$")
 RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 SHA_RE = re.compile(r"^[0-9a-fA-F]{7,64}$")
 FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+UUID_RE = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+)
 TERMINAL_PHASES = {"cleaned", "cancelled"}
 MAX_REJECTIONS = 3
 CTO = "GlitcherryCTO"
@@ -201,6 +205,12 @@ def _validate_run_id(value: str) -> str:
     return value
 
 
+def _validate_uuid(value: str, label: str) -> str:
+    if not UUID_RE.fullmatch(value):
+        raise ContractError(f"{label} must be a UUID")
+    return value
+
+
 def _state_path(state_root: Path, issue_key: str) -> Path:
     _validate_issue_key(issue_key)
     return state_root / f"{issue_key}.json"
@@ -231,7 +241,10 @@ def _read_state(path: Path) -> dict[str, Any]:
         state = json.loads(path.read_text())
     except (OSError, json.JSONDecodeError) as exc:
         raise ContractError("slice state is unreadable") from exc
-    if state.get("schema_version") != SCHEMA_VERSION:
+    schema_version = state.get("schema_version")
+    if schema_version == LEGACY_SCHEMA_VERSION and state.get("phase") in TERMINAL_PHASES:
+        return state
+    if schema_version != SCHEMA_VERSION:
         raise ContractError("slice state schema is unsupported")
     return state
 
@@ -326,42 +339,65 @@ def _context(args: argparse.Namespace) -> tuple[dict[str, Any], Path, Path, Path
     return values, primary, worktrees, states, android_remote, control_remote, _lease_seconds(values)
 
 
-def _create(args: argparse.Namespace) -> dict[str, Any]:
-    _, primary, worktree_root, state_root, _, _, lease_seconds = _context(args)
+def _adopt(args: argparse.Namespace) -> dict[str, Any]:
+    _, primary, worktree_root, state_root, android_remote, _, lease_seconds = _context(args)
     issue_key = _validate_issue_key(args.issue_key)
     slug = _validate_slug(args.slug)
     owner = _validate_owner(args.owner)
     run_id = _validate_run_id(args.run_id)
+    issue_id = _validate_uuid(args.issue_id, "issue id")
+    project_workspace_id = _validate_uuid(args.project_workspace_id, "project workspace id")
+    execution_workspace_id = _validate_uuid(args.execution_workspace_id, "execution workspace id")
     if owner != CTO:
-        raise ContractError("only GlitcherryCTO may create a slice worktree")
+        raise ContractError("only GlitcherryCTO may adopt a slice workspace")
     state_path = _state_path(state_root, issue_key)
     branch = f"feature/{issue_key}-{slug}"
-    worktree = worktree_root / f"{issue_key}-{slug}"
+    if args.branch != branch:
+        raise ContractError("Paperclip workspace branch does not match the approved slice")
+    base_sha = args.base_sha
+    if not FULL_SHA_RE.fullmatch(base_sha):
+        raise ContractError("workspace base requires a full lowercase commit SHA")
+    worktree = _validate_directory(Path(args.worktree_path), "Paperclip task worktree")
+    try:
+        worktree.relative_to(worktree_root)
+    except ValueError as exc:
+        raise ContractError("Paperclip task worktree escapes task_worktree_root") from exc
     with _state_lock(state_path):
         if state_path.exists():
             raise ContractError("slice state already exists")
         active = _active_states(state_root)
         if active:
             raise ContractError("another active slice state already exists")
-        if worktree.exists() or worktree.is_symlink():
-            raise ContractError("task worktree path already exists")
-        base_sha = _require_current_develop(primary, "canonical Android host clone")
-        if _git(primary, "show-ref", "--verify", f"refs/heads/{branch}", check=False).returncode == 0:
-            raise ContractError("local task branch already exists")
-        if _git(primary, "ls-remote", "--exit-code", "--heads", "origin", branch, check=False).returncode == 0:
-            raise ContractError("remote task branch already exists")
-        _git(primary, "worktree", "add", "-b", branch, str(worktree), "origin/develop")
+        _require_current_develop(primary, "canonical Android host clone")
+        if _git(worktree, "remote", "get-url", "origin").stdout.strip() != android_remote:
+            raise ContractError("Paperclip task worktree origin does not match Android")
+        if _git(worktree, "branch", "--show-current").stdout.strip() != branch:
+            raise ContractError("Paperclip task worktree is on the wrong branch")
+        _require_clean(worktree, "Paperclip task worktree")
         head = _git(worktree, "rev-parse", "HEAD").stdout.strip()
+        if head != base_sha:
+            raise ContractError("Paperclip task worktree HEAD differs from its recorded base")
+        primary_common = Path(_git(primary, "rev-parse", "--git-common-dir").stdout.strip())
+        if not primary_common.is_absolute():
+            primary_common = (primary / primary_common).resolve()
+        worktree_common = Path(_git(worktree, "rev-parse", "--git-common-dir").stdout.strip())
+        if not worktree_common.is_absolute():
+            worktree_common = (worktree / worktree_common).resolve()
+        if primary_common != worktree_common:
+            raise ContractError("Paperclip task worktree is not registered to the canonical Android clone")
         state = {
             "schema_version": SCHEMA_VERSION,
-            "issue_id": args.issue_id,
+            "issue_id": issue_id,
             "issue_key": issue_key,
             "slug": slug,
             "branch": branch,
             "worktree_path": str(worktree),
+            "project_workspace_id": project_workspace_id,
+            "execution_workspace_id": execution_workspace_id,
             "base_sha": base_sha,
             "head_sha": head,
             "reviewed_head": None,
+            "approved_head_sha": None,
             "phase": "spec",
             "expected_owner": owner,
             "lease": _new_lease(owner, run_id, lease_seconds),
@@ -376,7 +412,7 @@ def _create(args: argparse.Namespace) -> dict[str, Any]:
             "checkpoint_adoptions": [],
             "recovery_resume_owner": None,
             "recovery_resume_phase": None,
-            "created_at": _iso(_now()),
+            "adopted_at": _iso(_now()),
             "updated_at": _iso(_now()),
             "cleaned_at": None,
         }
@@ -853,7 +889,7 @@ def _record_merge(args: argparse.Namespace) -> dict[str, Any]:
         return state
 
 
-def _cleanup(args: argparse.Namespace) -> dict[str, Any]:
+def _prepare_cleanup(args: argparse.Namespace) -> dict[str, Any]:
     values, primary, worktree_root, state_root, _, control_remote, _ = _context(args)
     owner = _validate_owner(args.owner)
     run_id = _validate_run_id(args.run_id)
@@ -862,7 +898,7 @@ def _cleanup(args: argparse.Namespace) -> dict[str, Any]:
         state = _read_state(state_path)
         _require_lease(state, owner, run_id)
         if owner != CTO:
-            raise ContractError("only GlitcherryCTO may clean an integrated slice")
+            raise ContractError("only GlitcherryCTO may prepare an integrated slice for cleanup")
         if not state.get("android_merge_sha") or not state.get("control_merge_sha"):
             raise ContractError("both Android and control merge evidence are required")
         _commit_is_on_develop(primary, state["android_merge_sha"])
@@ -870,19 +906,60 @@ def _cleanup(args: argparse.Namespace) -> dict[str, Any]:
         _validate_repo(control, control_remote, "control")
         _commit_is_on_develop(control, state["control_merge_sha"])
         worktree = _worktree_path(state, worktree_root)
-        if _verify_worktree(state, worktree_root) != state["head_sha"]:
+        approved_head = _verify_worktree(state, worktree_root)
+        if approved_head != state["head_sha"] or approved_head != state.get("reviewed_head"):
             raise ContractError("task worktree HEAD changed after the recorded handoff")
+        # Paperclip owns worktree teardown. Point its runtime-created branch at
+        # the verified Android merge so Paperclip's normal `git branch -d`
+        # succeeds after it archives the execution workspace.
+        _git(worktree, "reset", "--hard", state["android_merge_sha"])
+        _git(worktree, "branch", "--set-upstream-to", "origin/develop", state["branch"])
+        cleanup_head = _verify_worktree(state, worktree_root)
+        if cleanup_head != state["android_merge_sha"]:
+            raise ContractError("task worktree did not normalize to the Android merge SHA")
+        state.update(
+            {
+                "approved_head_sha": approved_head,
+                "head_sha": cleanup_head,
+                "phase": "workspace_cleanup",
+                "expected_owner": None,
+                "lease": None,
+                "updated_at": _iso(_now()),
+            }
+        )
+        _write_state(state_path, state)
+        return state
+
+
+def _cleanup(args: argparse.Namespace) -> dict[str, Any]:
+    values, primary, worktree_root, state_root, _, control_remote, _ = _context(args)
+    owner = _validate_owner(args.owner)
+    _validate_run_id(args.run_id)
+    state_path = _state_path(state_root, args.issue_key)
+    with _state_lock(state_path):
+        state = _read_state(state_path)
+        if owner != CTO:
+            raise ContractError("only GlitcherryCTO may finish slice cleanup")
+        if state.get("phase") != "workspace_cleanup":
+            raise ContractError("cleanup requires Paperclip workspace cleanup phase")
+        if state.get("lease") is not None or state.get("expected_owner") is not None:
+            raise ContractError("workspace cleanup state must be unleased")
+        if not state.get("android_merge_sha") or not state.get("control_merge_sha"):
+            raise ContractError("both Android and control merge evidence are required")
+        _commit_is_on_develop(primary, state["android_merge_sha"])
+        control = _configured_path(values, "control_repo_root")
+        _validate_repo(control, control_remote, "control")
+        _commit_is_on_develop(control, state["control_merge_sha"])
+        worktree = _worktree_path(state, worktree_root)
+        if worktree.exists() or worktree.is_symlink():
+            raise ContractError("Paperclip execution workspace has not been archived")
+
         branch = state["branch"]
-        _git(primary, "worktree", "remove", str(worktree))
-        if worktree.exists():
-            raise ContractError("exact task worktree still exists after Git removal")
+        _git(primary, "worktree", "prune")
         if _git(primary, "show-ref", "--verify", f"refs/heads/{branch}", check=False).returncode == 0:
-            # Squash-merged feature refs require exact force deletion after both
-            # integration SHAs have been recorded on develop.
             _git(primary, "branch", "-D", branch)
         if _git(primary, "ls-remote", "--exit-code", "--heads", "origin", branch, check=False).returncode == 0:
             _git(primary, "push", "origin", "--delete", branch)
-        _git(primary, "worktree", "prune")
         _fetch(primary)
         control_branch = state["control_branch"]
         if _git(control, "show-ref", "--verify", f"refs/heads/{control_branch}", check=False).returncode == 0:
@@ -933,12 +1010,17 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--allow-local-test-remotes", action="store_true")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    create = sub.add_parser("create")
-    create.add_argument("--issue-id", required=True)
-    create.add_argument("--issue-key", required=True)
-    create.add_argument("--slug", required=True)
-    create.add_argument("--owner", required=True)
-    create.add_argument("--run-id", required=True)
+    adopt = sub.add_parser("adopt")
+    adopt.add_argument("--issue-id", required=True)
+    adopt.add_argument("--issue-key", required=True)
+    adopt.add_argument("--slug", required=True)
+    adopt.add_argument("--owner", required=True)
+    adopt.add_argument("--run-id", required=True)
+    adopt.add_argument("--project-workspace-id", required=True)
+    adopt.add_argument("--execution-workspace-id", required=True)
+    adopt.add_argument("--worktree-path", required=True)
+    adopt.add_argument("--branch", required=True)
+    adopt.add_argument("--base-sha", required=True)
 
     for name in ("claim", "renew"):
         command = sub.add_parser(name)
@@ -991,6 +1073,9 @@ def _parser() -> argparse.ArgumentParser:
     merge.add_argument("--sha", required=True)
     merge.add_argument("--pr-number")
 
+    prepare_cleanup = sub.add_parser("prepare-cleanup")
+    _add_identity(prepare_cleanup)
+
     cleanup = sub.add_parser("cleanup")
     _add_identity(cleanup)
 
@@ -1002,7 +1087,7 @@ def _parser() -> argparse.ArgumentParser:
 def main() -> int:
     args = _parser().parse_args()
     commands = {
-        "create": _create,
+        "adopt": _adopt,
         "claim": _claim,
         "renew": _renew,
         "handoff": _handoff,
@@ -1013,6 +1098,7 @@ def main() -> int:
         "recover": _recover,
         "adopt-recovery-checkpoint": _adopt_recovery_checkpoint,
         "record-merge": _record_merge,
+        "prepare-cleanup": _prepare_cleanup,
         "cleanup": _cleanup,
         "show": _show,
     }
