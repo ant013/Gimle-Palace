@@ -4,28 +4,23 @@
 - Paperclip company: UnstoppableAudit (`UNS`).
 - Runtime agent: `{{agent.agent_name}}`.
 - Platform scope: `{{agent.platform}}`.
-- Workspace cwd: `runs/{{agent.agent_name}}/workspace` (resolved at deploy time relative to operator's project root in host-local paths.yaml).
 - Primary codebase-memory project: `{{agent.primary_codebase_memory_project}}`.
-- iOS repo: `{{paths.primary_repo_root}}` (operator's host-local path; example `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios`).
+- iOS repo: `{{paths.primary_repo_root}}`.
 - Android repo: `{{paths.project_root}}/repos/android/unstoppable-wallet-android`.
 - Required base MCP: `codebase-memory`, `context7`, `serena`, `github`, `sequential-thinking`.
 - UAudit project MCP addition: `neo4j`.
-- **Execution host is iMac only.** Paperclip UAudit agents already execute on
-  the iMac, so they run UAudit shell commands, repositories, cursors, locks,
-  helpers and Telegram delivery directly on that host. They must not SSH from
-  iMac back to `imac-ssh.ant013.work`: that external route is unavailable from
-  the iMac runtime. A command initiated from another machine must connect with
+- **Execution host is iMac only.** Run repos, cursors, locks, helpers and delivery
+  locally; never SSH back to `imac-ssh.ant013.work`. External operators use
   `ssh -p 2222 "${IMAC_HOST:-imac-ssh.ant013.work}"`; port `22` is forbidden.
-  The caller's local filesystem is not a UAudit runtime.
 
-Before ending a Paperclip issue, post Status/Evidence/Blockers/Next owner and
-use the exact UAudit agent name from the roster. `runtime/harness operator` is
-allowed only for API/sandbox/tooling gaps that no UAudit agent can resolve.
+## Daily control-plane recovery
+
+For `mode=daily_*`, set `HELPER={{paths.team_workspace_root}}/.uaudit-tools/uaudit_delivery_contract.py`. Once its durable artifact is valid, retry a failed handoff comment once and run `python3 "$HELPER" record-operational-warning --run-dir "$RUN" --code paperclip-comment --text <Russian-warning>`. Then PATCH the exact next assignee anyway; a comment-only failure never blocks a daily audit, requests Board, or reruns a valid stage. Without a comment, the recipient derives the sole next mode from run markers. Retry a failed PATCH once; only failed ownership transfer may block.
+
+After a verified receipt and `cursor.done`, the same warning rule means a final comment failure cannot delay `workflow.done` or release of the matching lock. Post Status/Evidence/Blockers/Next owner when possible.
 
 ## Report Delivery
 
-Non-delivery roles: save final/user-requested Markdown reports in the writable
-artifact root, comment the absolute path, and hand off delivery to
-`{{report_delivery.default_owner}}` by default (`{{report_delivery.ios_owner}}`
-only for explicitly iOS-only issues). Do not call Telegram/bot/plugin
-notification actions; lifecycle notifications are automatic.
+Non-delivery roles save Markdown in the writable artifact root and hand off to
+`{{report_delivery.default_owner}}` (`{{report_delivery.ios_owner}}` for iOS-only
+issues). Do not call Telegram/bot/plugin notification actions.

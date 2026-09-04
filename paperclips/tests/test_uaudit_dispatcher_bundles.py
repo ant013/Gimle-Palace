@@ -135,6 +135,25 @@ def test_generated_dispatcher_bundles_start_staged_daily_chain():
         assert "Never block a proven range by size" in text
 
 
+def test_uaudit_bundles_override_comment_only_handoff_failures():
+    names = (
+        "UWICTO",
+        "UWISwiftAuditor",
+        "UWISecurityAuditor",
+        "UWICryptoAuditor",
+        "UWIInfraEngineer",
+        "UWIResearchAgent",
+        "UWIQAEngineer",
+        "UWITechnicalWriter",
+    )
+    for name in names:
+        text = (REPO / f"paperclips/dist/uaudit/codex/{name}.md").read_text()
+        assert "record-operational-warning" in text
+        assert "comment-only failure never blocks a daily audit" in text
+        assert "PATCH the exact next assignee anyway" in text
+        assert "cannot delay `workflow.done` or release of the matching lock" in text
+
+
 def test_forced_full_range_is_explicit_and_does_not_relax_daily_rules():
     for platform, dispatcher, infra in (
         ("android", "UWACTO", "UWAInfraEngineer"),

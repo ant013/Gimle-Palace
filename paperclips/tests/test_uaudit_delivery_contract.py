@@ -456,6 +456,108 @@ def test_validate_stage_rejects_severity_without_deterministic_mapping(tmp_path:
     assert not (fixture["run"] / "status/code.done.json").exists()
 
 
+def test_operational_warning_is_idempotent_and_delivered_without_partial_status(tmp_path: Path):
+    fixture = prepare_run(tmp_path, kind="daily_delta", platform="ios")
+    warning = "Paperclip временно не принял комментарий QA; передача продолжена по валидному маркеру."
+
+    first = call(
+        fixture["helper"],
+        "record-operational-warning",
+        "--run-dir",
+        fixture["run"],
+        "--code",
+        "paperclip-comment",
+        "--text",
+        warning,
+    )
+    second = call(
+        fixture["helper"],
+        "record-operational-warning",
+        "--run-dir",
+        fixture["run"],
+        "--code",
+        "paperclip-comment",
+        "--text",
+        warning,
+    )
+
+    assert first["status"] == "recorded"
+    assert second["status"] == "already_recorded"
+    journal = read_json(fixture["run"] / "operational-warnings.json")
+    assert journal["run_binding_sha256"] == sha256_path(fixture["run"] / "run-context.json")
+    assert journal["warnings"] == [{"code": "paperclip-comment", "text": warning}]
+
+    result = aggregate(fixture)
+
+    assert result["audit_status"] == "complete"
+    summary = read_json(fixture["run"] / "delivery-summary.json")
+    assert summary["warning_count"] == 1
+    canonical = read_json(fixture["run"] / "canonical-findings.json")
+    assert canonical["limitations"] == [
+        {
+            "material": False,
+            "source_agents": ["UAuditControlPlane"],
+            "stages": ["control_plane"],
+            "text": warning,
+        }
+    ]
+    assert warning in (fixture["run"] / "audit-final.ru.md").read_text()
+
+
+@pytest.mark.parametrize(
+    ("code", "text", "error"),
+    (
+        ("Paperclip comment", "Paperclip не принял комментарий.", "code"),
+        ("paperclip-comment", "Comment failed.", "Russian"),
+    ),
+)
+def test_operational_warning_rejects_invalid_input(
+    tmp_path: Path, code: str, text: str, error: str
+):
+    fixture = prepare_run(tmp_path, kind="daily_delta", platform="ios")
+    failure = call(
+        fixture["helper"],
+        "record-operational-warning",
+        "--run-dir",
+        fixture["run"],
+        "--code",
+        code,
+        "--text",
+        text,
+        ok=False,
+    )
+
+    assert error in failure["error"]
+    assert not (fixture["run"] / "operational-warnings.json").exists()
+
+
+def test_post_aggregation_warning_does_not_invalidate_translation_snapshot(tmp_path: Path):
+    fixture = prepare_run(
+        tmp_path,
+        kind="daily_delta",
+        platform="ios",
+        findings={"security": [finding("Important")]},
+    )
+    pending = call(fixture["helper"], "aggregate", "--run-dir", fixture["run"])
+    assert pending["status"] == "translation_required"
+
+    call(
+        fixture["helper"],
+        "record-operational-warning",
+        "--run-dir",
+        fixture["run"],
+        "--code",
+        "paperclip-comment",
+        "--text",
+        "Paperclip не принял комментарий после агрегации; payload оставлен неизменным.",
+    )
+    ready = finalize_translation(fixture)
+
+    assert ready["status"] == "ready"
+    assert read_json(fixture["run"] / "delivery-summary.json")["warning_count"] == 0
+    assert read_json(fixture["run"] / "operational-warnings.json")["warnings"]
+
+
 def test_pr_dedup_chooses_highest_severity_and_is_byte_deterministic(tmp_path: Path):
     findings = {
         "code": [finding("Important", title="Повторная   авторизация не проверяется")],
