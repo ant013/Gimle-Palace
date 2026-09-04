@@ -26,6 +26,7 @@ SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 ISSUE_RE = re.compile(r"^[A-Z][A-Z0-9]{0,15}-[1-9][0-9]*$")
 ROUTINE_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
+WARNING_CODE_RE = re.compile(r"^[a-z][a-z0-9._-]{0,63}$")
 CONTROL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 CYRILLIC_RE = re.compile(r"[\u0400-\u04ff]")
 SEVERITIES = ("Critical", "Block", "Important", "Observation")
@@ -130,6 +131,9 @@ INSTALL_SCHEMA = "uaudit-helper-install/v1"
 INSTALL_MANIFEST = "uaudit_delivery_contract.manifest.json"
 STATUS_SCHEMA = "uaudit-daily-slot-status/v1"
 STATUS_OUTCOMES = ("no_change", "blocked", "deferred")
+OPERATIONAL_WARNING_SCHEMA = "uaudit-operational-warnings/v1"
+OPERATIONAL_WARNING_FILE = "operational-warnings.json"
+OPERATIONAL_WARNING_SNAPSHOT = "status/operational-warnings.aggregate.json"
 
 
 class ContractError(RuntimeError):
@@ -758,6 +762,85 @@ def validate_stage(args: argparse.Namespace) -> dict[str, Any]:
     return {"status": "validated", "stage": sidecar["stage"], "sidecar_sha256": marker["sidecar_sha256"]}
 
 
+def _validate_operational_warnings(value: Any, binding_sha: str) -> list[dict[str, str]]:
+    journal = _expect_object(value, OPERATIONAL_WARNING_FILE)
+    _exact_keys(
+        journal,
+        ("schema_version", "run_binding_sha256", "warnings"),
+        where=OPERATIONAL_WARNING_FILE,
+    )
+    if journal["schema_version"] != OPERATIONAL_WARNING_SCHEMA:
+        _fail("operational warning journal has unsupported schema_version")
+    if _sha(journal["run_binding_sha256"], "operational warning run binding") != binding_sha:
+        _fail("operational warning run binding mismatch")
+    if not isinstance(journal["warnings"], list) or len(journal["warnings"]) > 100:
+        _fail("operational warnings must be an array with at most 100 entries")
+    warnings: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for index, value in enumerate(journal["warnings"]):
+        where = f"operational warnings[{index}]"
+        warning = _expect_object(value, where)
+        _exact_keys(warning, ("code", "text"), where=where)
+        code = _bounded_string(warning["code"], f"{where}.code", maximum=64)
+        if not WARNING_CODE_RE.fullmatch(code):
+            _fail(f"{where}.code is invalid")
+        text = _russian_prose(warning["text"], f"{where}.text", 240)
+        key = (code, _normalize_key(text))
+        if key in seen:
+            _fail("operational warning journal contains a duplicate")
+        seen.add(key)
+        warnings.append({"code": code, "text": text})
+    warnings.sort(key=lambda item: (item["code"], _normalize_key(item["text"])))
+    return warnings
+
+
+def _load_operational_warning_path(path: Path, binding_sha: str) -> list[dict[str, str]]:
+    if not path.exists():
+        return []
+    warnings = _validate_operational_warnings(_load_json(path), binding_sha)
+    expected = {
+        "schema_version": OPERATIONAL_WARNING_SCHEMA,
+        "run_binding_sha256": binding_sha,
+        "warnings": warnings,
+    }
+    if _read_bytes(path) != _canonical_bytes(expected):
+        _fail("operational warning journal is not canonical")
+    return warnings
+
+
+def _load_operational_warnings(run_dir: Path, binding_sha: str) -> list[dict[str, str]]:
+    return _load_operational_warning_path(run_dir / OPERATIONAL_WARNING_FILE, binding_sha)
+
+
+def _operational_warning_journal(
+    binding_sha: str, warnings: Sequence[Mapping[str, str]]
+) -> dict[str, Any]:
+    return {
+        "schema_version": OPERATIONAL_WARNING_SCHEMA,
+        "run_binding_sha256": binding_sha,
+        "warnings": [dict(item) for item in warnings],
+    }
+
+
+def record_operational_warning(args: argparse.Namespace) -> dict[str, Any]:
+    run_dir = args.run_dir.resolve()
+    _, _, binding_sha = _load_context(run_dir)
+    code = _bounded_string(args.code, "operational warning code", maximum=64)
+    if not WARNING_CODE_RE.fullmatch(code):
+        _fail("operational warning code is invalid")
+    warning_text = _russian_prose(args.text, "operational warning text", 240)
+    warnings = _load_operational_warnings(run_dir, binding_sha)
+    key = (code, _normalize_key(warning_text))
+    if any((item["code"], _normalize_key(item["text"])) == key for item in warnings):
+        return {"status": "already_recorded", "warning_count": len(warnings)}
+    if len(warnings) >= 100:
+        _fail("operational warning journal is full")
+    warnings.append({"code": code, "text": warning_text})
+    warnings.sort(key=lambda item: (item["code"], _normalize_key(item["text"])))
+    _atomic_json(run_dir / OPERATIONAL_WARNING_FILE, _operational_warning_journal(binding_sha, warnings))
+    return {"status": "recorded", "warning_count": len(warnings)}
+
+
 def _load_validated_stage(
     run_dir: Path,
     binding: Mapping[str, Any],
@@ -866,6 +949,33 @@ def _canonicalize(
         "findings": canonical_findings,
         "limitations": canonical_limitations,
     }, status
+
+
+def _merge_operational_warnings(
+    canonical: dict[str, Any], warnings: Sequence[Mapping[str, str]]
+) -> None:
+    by_text = {
+        _normalize_key(item["text"]): item for item in canonical["limitations"]
+        if not item["material"]
+    }
+    for warning in warnings:
+        key = _normalize_key(warning["text"])
+        existing = by_text.get(key)
+        if existing is None:
+            existing = {
+                "text": warning["text"],
+                "material": False,
+                "source_agents": ["UAuditControlPlane"],
+                "stages": ["control_plane"],
+            }
+            canonical["limitations"].append(existing)
+            by_text[key] = existing
+        else:
+            existing["source_agents"] = sorted(set(existing["source_agents"]) | {"UAuditControlPlane"})
+            existing["stages"] = sorted(set(existing["stages"]) | {"control_plane"})
+    canonical["limitations"].sort(
+        key=lambda item: (_normalize_key(item["text"]), item["material"])
+    )
 
 
 def _counts(findings: Sequence[Mapping[str, Any]]) -> dict[str, int]:
@@ -1195,6 +1305,12 @@ def _validate_summary(run_dir: Path) -> tuple[dict[str, Any], dict[str, Any], st
     if any(sidecar["audit_status"] == "blocked" for sidecar in sidecars):
         _fail("delivered generation contains a blocked required stage")
     expected_canonical, expected_status = _canonicalize(binding, sidecars, definitions)
+    snapshot_path = run_dir / OPERATIONAL_WARNING_SNAPSHOT
+    if snapshot_path.exists():
+        _merge_operational_warnings(
+            expected_canonical,
+            _load_operational_warning_path(snapshot_path, binding_sha),
+        )
     if canonical != expected_canonical:
         _fail("canonical findings do not reproduce from validated stage inputs")
     if canonical["audit_status"] != summary["audit_status"]:
@@ -1424,6 +1540,7 @@ def aggregate(args: argparse.Namespace) -> dict[str, Any]:
     ):
         _fail("research artifacts exist but --research-required was not declared")
     _safe_unlink(run_dir / "status" / "aggregate.done")
+    _safe_unlink(run_dir / OPERATIONAL_WARNING_SNAPSHOT)
     for name in PAYLOAD_ARTIFACTS:
         _safe_unlink(run_dir / name)
     sidecars = [_load_validated_stage(run_dir, binding, binding_sha, definition) for definition in definitions]
@@ -1431,6 +1548,12 @@ def aggregate(args: argparse.Namespace) -> dict[str, Any]:
     if blocked:
         _fail(f"blocked required stages: {', '.join(blocked)}")
     canonical, status = _canonicalize(binding, sidecars, definitions)
+    operational_warnings = _load_operational_warnings(run_dir, binding_sha)
+    _atomic_json(
+        run_dir / OPERATIONAL_WARNING_SNAPSHOT,
+        _operational_warning_journal(binding_sha, operational_warnings),
+    )
+    _merge_operational_warnings(canonical, operational_warnings)
     canonical_raw = _canonical_bytes(canonical)
     _atomic_write(run_dir / "canonical-findings.json", canonical_raw)
     counts = _counts(canonical["findings"])
@@ -1522,6 +1645,12 @@ def finalize_translation(args: argparse.Namespace) -> dict[str, Any]:
     definitions = list(_stage_definitions(binding, research_required))
     sidecars = [_load_validated_stage(run_dir, binding, binding_sha, definition) for definition in definitions]
     expected_canonical, expected_status = _canonicalize(binding, sidecars, definitions)
+    snapshot_path = run_dir / OPERATIONAL_WARNING_SNAPSHOT
+    if snapshot_path.exists():
+        _merge_operational_warnings(
+            expected_canonical,
+            _load_operational_warning_path(snapshot_path, binding_sha),
+        )
     if canonical != expected_canonical or status != expected_status:
         _fail("translation finalization canonical mismatch")
     verdict = _verdict(status, counts)
@@ -2081,6 +2210,15 @@ def build_parser() -> argparse.ArgumentParser:
     stage.add_argument("--run-dir", type=_path, required=True)
     stage.add_argument("--sidecar", type=_path, required=True)
     stage.set_defaults(func=validate_stage)
+
+    warning = subparsers.add_parser(
+        "record-operational-warning",
+        help="record a run-bound non-material operational warning",
+    )
+    warning.add_argument("--run-dir", type=_path, required=True)
+    warning.add_argument("--code", required=True)
+    warning.add_argument("--text", required=True)
+    warning.set_defaults(func=record_operational_warning)
 
     aggregate_parser = subparsers.add_parser("aggregate", help="publish deterministic delivery artifacts")
     aggregate_parser.add_argument("--run-dir", type=_path, required=True)
