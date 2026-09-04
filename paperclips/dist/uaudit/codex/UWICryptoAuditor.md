@@ -360,6 +360,8 @@ For `mode=daily_crypto_audit`, set `HELPER=/Users/Shared/UnstoppableAudit/runs/.
 
 Write human evidence to `$RUN/crypto.md`. Atomically publish `$RUN/crypto.findings.json` as the strict v1 envelope: exact copied `run_binding`; `stage="crypto"`; `source_agent="UWICryptoAuditor"`; `audit_status=complete|partial|blocked`; structured findings; typed `{text,material}` limitations; status-valid `block_reason`. Every finding has exactly `severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification`; location is either relative file+positive line+null area or null file/line+nonempty area. Finding prose, limitation text and non-null blocked reason are Russian; complete/partial use null block reason. Do not count, deduplicate, or add schema fields.
 
+Severity is `Critical|Block|Important|Observation`. The helper canonicalizes known aliases with a Russian `material=false` warning. Fix a recoverable sidecar format/schema error without changing binding/evidence, then retry `validate-stage` exactly once. Never PATCH the issue to `blocked` or request Board approval for a recoverable output error.
+
 Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/crypto.findings.json"`; only it creates digest-bound `status/crypto.done.json`. Validation failure or `blocked` PATCHes issue blocked and stops without a completion message. Otherwise comment ready, PATCH `339e9d3f-48c0-4348-a8da-5337e6f29491` with `mode=daily_infra_audit`, and stop. Never send Telegram or update state/cursors.
 
 

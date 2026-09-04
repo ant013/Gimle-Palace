@@ -29,6 +29,22 @@ ROUTINE_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
 CONTROL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 CYRILLIC_RE = re.compile(r"[\u0400-\u04ff]")
 SEVERITIES = ("Critical", "Block", "Important", "Observation")
+SEVERITY_ALIASES = {
+    "critical": "Critical",
+    "block": "Block",
+    "blocker": "Block",
+    "important": "Important",
+    "high": "Important",
+    "major": "Important",
+    "medium": "Important",
+    "observation": "Observation",
+    "suggestion": "Observation",
+    "warning": "Observation",
+    "low": "Observation",
+    "minor": "Observation",
+    "info": "Observation",
+    "informational": "Observation",
+}
 SEVERITY_KEYS = {
     "Critical": "critical",
     "Block": "block",
@@ -542,7 +558,11 @@ def _russian_prose(value: Any, where: str, maximum: int) -> str:
     return text
 
 
-def _validate_finding(value: Any, where: str) -> dict[str, Any]:
+def _validate_finding(
+    value: Any,
+    where: str,
+    severity_repairs: list[tuple[str, str]] | None = None,
+) -> dict[str, Any]:
     finding = _expect_object(value, where)
     _exact_keys(
         finding,
@@ -559,9 +579,12 @@ def _validate_finding(value: Any, where: str) -> dict[str, Any]:
         ),
         where=where,
     )
-    severity = finding["severity"]
-    if severity not in SEVERITIES:
+    raw_severity = _bounded_string(finding["severity"], f"{where}.severity", maximum=64)
+    severity = SEVERITY_ALIASES.get(_normalize_key(raw_severity))
+    if severity is None:
         _fail(f"{where}.severity is unsupported")
+    if raw_severity != severity and severity_repairs is not None:
+        severity_repairs.append((raw_severity, severity))
     file_value = finding["file"]
     line_value = finding["line"]
     area_value = finding["area"]
@@ -651,13 +674,30 @@ def _validate_sidecar(value: Any, binding: Mapping[str, Any], where: str) -> dic
         _fail(f"{where}.audit_status is unsupported")
     if not isinstance(sidecar["findings"], list):
         _fail(f"{where}.findings must be an array")
-    findings = [_validate_finding(item, f"{where}.findings[{index}]") for index, item in enumerate(sidecar["findings"])]
+    severity_repairs: list[tuple[str, str]] = []
+    findings = [
+        _validate_finding(
+            item,
+            f"{where}.findings[{index}]",
+            severity_repairs,
+        )
+        for index, item in enumerate(sidecar["findings"])
+    ]
     if not isinstance(sidecar["limitations"], list):
         _fail(f"{where}.limitations must be an array")
     limitations = [
         _validate_limitation(item, f"{where}.limitations[{index}]")
         for index, item in enumerate(sidecar["limitations"])
     ]
+    existing_limitation_keys = {_normalize_key(item["text"]) for item in limitations}
+    for raw_severity, canonical_severity in severity_repairs:
+        text = (
+            f"Неканоническая severity «{raw_severity}» автоматически нормализована "
+            f"до «{canonical_severity}»; содержание находки не изменено."
+        )
+        if _normalize_key(text) not in existing_limitation_keys:
+            limitations.append({"text": text, "material": False})
+            existing_limitation_keys.add(_normalize_key(text))
     material = any(item["material"] for item in limitations)
     block_reason = sidecar["block_reason"]
     if status == "complete":

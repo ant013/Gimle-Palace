@@ -409,6 +409,53 @@ def test_validate_stage_canonicalizes_valid_pretty_json_before_marking_done(tmp_
     assert (fixture["run"] / "status/code.done.json").is_file()
 
 
+def test_validate_stage_repairs_known_severity_aliases_as_non_material_warnings(tmp_path: Path):
+    fixture = prepare_run(tmp_path, kind="daily_delta", platform="ios", validate=False)
+    path = fixture["run"] / "security.findings.json"
+    value = read_json(path)
+    aliases = (
+        ("Suggestion", "Observation"),
+        ("HIGH", "Important"),
+        ("blocker", "Block"),
+        ("informational", "Observation"),
+        ("important", "Important"),
+    )
+    value["findings"] = [
+        finding(alias, line=42 + index, title=f"Неканоническая важность {index}")
+        for index, (alias, _) in enumerate(aliases)
+    ]
+    value["findings"].append(finding("Critical", line=100, title="Каноническая важность"))
+    write_json(path, value)
+
+    result = call(fixture["helper"], "validate-stage", "--run-dir", fixture["run"], "--sidecar", path)
+
+    assert result["status"] == "validated"
+    repaired = read_json(path)
+    assert [item["severity"] for item in repaired["findings"]] == [
+        *(canonical for _, canonical in aliases),
+        "Critical",
+    ]
+    assert len(repaired["limitations"]) == len(aliases)
+    assert all(item["material"] is False for item in repaired["limitations"])
+    for alias, canonical in aliases:
+        assert any(alias in item["text"] and canonical in item["text"] for item in repaired["limitations"])
+    assert not any("Critical" in item["text"] for item in repaired["limitations"])
+    assert (fixture["run"] / "status/security.done.json").is_file()
+
+
+def test_validate_stage_rejects_severity_without_deterministic_mapping(tmp_path: Path):
+    fixture = prepare_run(tmp_path, validate=False)
+    path = fixture["run"] / "code.findings.json"
+    value = read_json(path)
+    value["findings"] = [finding("Possibly serious")]
+    write_json(path, value)
+
+    failure = call(fixture["helper"], "validate-stage", "--run-dir", fixture["run"], "--sidecar", path, ok=False)
+
+    assert "severity is unsupported" in failure["error"]
+    assert not (fixture["run"] / "status/code.done.json").exists()
+
+
 def test_pr_dedup_chooses_highest_severity_and_is_byte_deterministic(tmp_path: Path):
     findings = {
         "code": [finding("Important", title="Повторная   авторизация не проверяется")],

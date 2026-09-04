@@ -363,7 +363,9 @@ For `mode=daily_code_audit`, set `HELPER=/Users/Shared/UnstoppableAudit/runs/.ua
 
 Review both the final bound `FROM..TO` diff and every commit listed in `commits.tsv`; overlapping or reverting commits do not remove the need for per-commit semantic tracing. Trace every new or remapped error through downstream user-visible formatting and localization, including which asset or token the resulting message names. Trace every new parameter or filter to its in-tree callers and report intended behavior that no caller can reach. Missing focused regression tests for changed financial, signing, persistence, or query behavior is a finding classified by risk, not a host limitation.
 
-Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/code.findings.json"`; only it creates digest-bound `status/code.done.json`. Validation failure or `blocked` PATCHes issue blocked and stops without completion. Otherwise assign `5dd3e733-82c7-472c-8474-8605b916ead2` with `mode=daily_security_audit`. Never send Telegram or update state/cursors.
+Severity is `Critical|Block|Important|Observation`. The helper canonicalizes known aliases with a Russian `material=false` warning. Fix a recoverable sidecar format/schema error without changing binding/evidence, then retry `validate-stage` exactly once. Never PATCH the issue to `blocked` or request Board approval for a recoverable output error.
+
+Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/code.findings.json"`; only it creates digest-bound `status/code.done.json`. An actual blocked result or validation failure after the bounded retry PATCHes the issue blocked and stops without completion. Otherwise assign `5dd3e733-82c7-472c-8474-8605b916ead2` with `mode=daily_security_audit`. Never send Telegram or update state/cursors.
 
 ## UAudit Incremental PR Audit Coordinator (iOS)
 
