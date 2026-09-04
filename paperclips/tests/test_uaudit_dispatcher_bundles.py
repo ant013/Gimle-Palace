@@ -355,6 +355,9 @@ def test_audit_stage_bundles_use_bound_structured_v1_sidecars():
             "severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification"
             in text
         )
+        assert "Severity is `Critical|Block|Important|Observation`" in text
+        assert "retry `validate-stage` exactly once" in text
+        assert "Never PATCH the issue to `blocked` or request Board approval for a recoverable output error" in text
         assert "limitation text" in text or "limitation `text`" in text
         if "QAEngineer" in name:
             assert "1 to 240 characters inclusive" in text
@@ -473,6 +476,7 @@ def test_pr_subagents_emit_only_the_strict_v1_envelope():
             "severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification"
             in instructions
         )
+        assert "Severity is `Critical|Block|Important|Observation`" in instructions
         assert "limitation text" in instructions and "in Russian" in instructions
         assert "do not add" in instructions.lower()
         assert "raw diff content" in instructions or "raw-diff" in instructions

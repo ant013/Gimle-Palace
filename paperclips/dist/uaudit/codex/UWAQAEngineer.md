@@ -416,7 +416,9 @@ For `mode=daily_qa_verify`, set `HELPER=/Users/Shared/UnstoppableAudit/runs/.uau
 
 Write human evidence to `$RUN/qa-verify.md`. Atomically publish `$RUN/qa-verify.findings.json` as the strict v1 envelope with exact copied `run_binding`, `stage="qa_verify"`, `source_agent="UWAQAEngineer"`, `audit_status=complete|partial|blocked`, structured findings, typed `{text,material}` limitations, and status-valid `block_reason`. Every limitation `text` must be Russian prose from 1 to 240 characters inclusive; shorten it before publishing if necessary. Every finding has exactly `severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification`; location is either relative file+positive line+null area or null file/line+nonempty area. Finding prose, limitation text and non-null blocked reason are Russian; complete/partial use null block reason. Do not count/deduplicate or add fields.
 
-Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/qa-verify.findings.json"`; only it creates digest-bound `status/qa_verify.done.json`. Validation failure or `blocked` PATCHes issue blocked and stops without completion. Otherwise comment ready, PATCH `e63b7f27-cc4f-41f4-8883-b5b9677984d9` with `mode=daily_aggregate`, and stop. Never send Telegram or update state/cursors.
+Severity is `Critical|Block|Important|Observation`. The helper canonicalizes known aliases with a Russian `material=false` warning. Fix a recoverable sidecar format/schema error without changing binding/evidence, then retry `validate-stage` exactly once. Never PATCH the issue to `blocked` or request Board approval for a recoverable output error.
+
+Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/qa-verify.findings.json"`; only it creates digest-bound `status/qa_verify.done.json`. An actual blocked result or validation failure after the bounded retry PATCHes the issue blocked and stops without completion. Otherwise comment ready, PATCH `e63b7f27-cc4f-41f4-8883-b5b9677984d9` with `mode=daily_aggregate`, and stop. Never send Telegram or update state/cursors.
 
 ## ENVIRONMENT LIMITATIONS: Test Infrastructure
 

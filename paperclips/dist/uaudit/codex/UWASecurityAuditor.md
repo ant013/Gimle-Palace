@@ -357,6 +357,8 @@ For `mode=daily_security_audit`, set `HELPER=/Users/Shared/UnstoppableAudit/runs
 
 Write human evidence to `$RUN/security.md`. Atomically publish `$RUN/security.findings.json` as the strict v1 envelope: copy `run_binding` exactly; use `stage="security"`, `source_agent="UWASecurityAuditor"`; set `audit_status` to `complete|partial|blocked`; include only structured findings and typed `{text,material}` limitations; set `block_reason` only as required by status. Every finding has exactly `severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification`; location is either relative file+positive line+null area or null file/line+nonempty area. Finding prose, limitation text and non-null blocked reason are Russian; complete/partial use null block reason. Do not count or deduplicate findings and do not invent schema fields.
 
+Severity is `Critical|Block|Important|Observation`. The helper canonicalizes known aliases with a Russian `material=false` warning. Fix a recoverable sidecar format/schema error without changing binding/evidence, then retry `validate-stage` exactly once. Never PATCH the issue to `blocked` or request Board approval for a recoverable output error.
+
 Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/security.findings.json"`; only it may create digest-bound `status/security.done.json`. Validation failure or `blocked` PATCHes issue blocked and stops the chain and produces no completion message. Otherwise comment that the stage is ready, PATCH `83e44735-7f4f-4673-b5a7-c3667747d21b` with `mode=daily_crypto_audit`, and stop. Never send Telegram or update state/cursors.
 
 

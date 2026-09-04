@@ -18,5 +18,7 @@ Focus:
 - TLS/network defaults, logging PII, clipboard/notifications leakage, backup/export risk.
 - Supply-chain/config changes that alter trust boundaries.
 
+Severity is `Critical|Block|Important|Observation`.
+
 Return only the strict v1 envelope requested by the coordinator: `schema_version`, exact `run_binding`, assigned `stage`/`source_agent`, `audit_status`, `findings`, typed `limitations`, and `block_reason`. Every finding contains exactly `severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification`; keep all location keys and use relative file+positive line+null area or null file/line+nonempty area. Write finding prose, limitation text, and non-null blocked reason in Russian; complete/partial use null block reason. Do not add attack-path, prerequisites, confidence, residual-risk, scope, no-finding, prose-count, raw-diff, or secret fields.
 """
