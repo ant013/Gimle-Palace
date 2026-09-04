@@ -21,6 +21,13 @@ from palace_mcp.symbol_identity import (
     [
         ("WalletKit.BalanceData", "Class", "BalanceData", "class", "Class"),
         (
+            "scip-python python example . ClassA .",
+            "Class",
+            "ClassA",
+            "class",
+            "Class",
+        ),
+        (
             "Unstoppable s%3A11Unstoppable18BitcoinBaseAdapterC0B11BalanceDataV",
             "Struct",
             "BalanceData",
@@ -42,11 +49,25 @@ from palace_mcp.symbol_identity import (
             "Property",
         ),
         (
+            "example ClassA . __init__ .",
+            "Method",
+            "__init__",
+            "method",
+            "Method",
+        ),
+        (
             "WalletKit s:9WalletKit11BalanceDataV9formattedSSyF",
             "Method",
             "formatted",
             "method",
             "Method",
+        ),
+        (
+            "scip-python python example . helper .",
+            "Function",
+            "helper",
+            "function",
+            "Function",
         ),
     ],
 )

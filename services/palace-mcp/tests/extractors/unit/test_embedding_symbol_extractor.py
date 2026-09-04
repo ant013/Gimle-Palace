@@ -79,6 +79,10 @@ def _make_graphiti(
 
 def test_load_symbol_rows_filters_out_deprecated_symbols() -> None:
     assert "NOT s:Deprecated" in _LOAD_SYMBOL_ROWS
+    assert "s.embedding IS NOT NULL AS has_embedding" in _LOAD_SYMBOL_ROWS
+    assert (
+        "s.name_embedding IS NOT NULL AS has_legacy_name_embedding" in _LOAD_SYMBOL_ROWS
+    )
 
 
 @pytest.mark.asyncio
@@ -121,6 +125,7 @@ async def test_run_skips_symbols_with_matching_hash() -> None:
         "source_scope": "project",
         "embedding_input_hash": None,
         "has_embedding": True,
+        "has_legacy_name_embedding": True,
     }
     unchanged_row["embedding_input_hash"] = _embedding_text_hash(
         _embedding_text(unchanged_row)
@@ -133,6 +138,7 @@ async def test_run_skips_symbols_with_matching_hash() -> None:
         "source_scope": "project",
         "embedding_input_hash": "stale-hash",
         "has_embedding": True,
+        "has_legacy_name_embedding": True,
     }
     graphiti, _, writes = _make_graphiti([unchanged_row, stale_row])
     backend = _FakeBackend()
@@ -159,6 +165,7 @@ async def test_run_with_all_unchanged_symbols_skips_backend_resolution() -> None
         "source_scope": "project",
         "embedding_input_hash": None,
         "has_embedding": True,
+        "has_legacy_name_embedding": True,
     }
     unchanged_row["embedding_input_hash"] = _embedding_text_hash(
         _embedding_text(unchanged_row)
@@ -187,6 +194,41 @@ async def test_run_with_all_unchanged_symbols_skips_backend_resolution() -> None
     assert stats.edges_written == 0
     assert writes == []
     assert run_mock.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_run_backfills_embedding_for_legacy_only_row_with_matching_hash() -> None:
+    legacy_row = {
+        "qualified_name": "demo.symbol.legacy",
+        "kind": "property",
+        "file_path": "src/legacy.py",
+        "module_name": "demo",
+        "source_scope": "project",
+        "embedding_input_hash": None,
+        "has_embedding": False,
+        "has_legacy_name_embedding": True,
+    }
+    legacy_row["embedding_input_hash"] = _embedding_text_hash(
+        _embedding_text(legacy_row)
+    )
+    graphiti, _, writes = _make_graphiti([legacy_row])
+    backend = _FakeBackend()
+
+    stats = await EmbeddingSymbolExtractor(backend=backend).run(
+        graphiti=graphiti,
+        ctx=_make_ctx(),
+    )
+
+    assert backend.calls == [[_embedding_text(legacy_row)]]
+    assert len(writes) == 1
+    assert writes[0]["rows"] == [
+        {
+            "qualified_name": "demo.symbol.legacy",
+            "embedding": [1.0],
+            "embedding_input_hash": legacy_row["embedding_input_hash"],
+        }
+    ]
+    assert stats.nodes_written == 1
 
 
 # ---------------------------------------------------------------------------
