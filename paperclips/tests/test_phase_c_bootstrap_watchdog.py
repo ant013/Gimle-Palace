@@ -58,3 +58,11 @@ def test_idempotent_company_block_check():
     """Script must check if company already in config before appending."""
     text = SCRIPT.read_text()
     assert "already in config" in text or "existing=" in text
+
+
+def test_glitcherry_bootstrap_persists_fast_handoff_repair():
+    text = SCRIPT.read_text()
+    assert 'project_key" = "glitcherry-android"' in text
+    assert 'handoff["handoff_alert_enabled"] = True' in text
+    assert 'handoff["handoff_auto_repair_enabled"] = True' in text
+    assert 'handoff["handoff_comment_lookback_min"] = 1' in text

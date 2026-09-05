@@ -115,6 +115,26 @@ with open(config_path, "w") as f:
 PY
 log ok "appended (or already present)"
 
+# Glitcherry handoffs are explicit sequential transfers between agents on the
+# same issue/worktree. Keep the fast interrupt repair enabled on every
+# bootstrap, including hosts whose watchdog config predates this capability.
+if [ "$project_key" = "glitcherry-android" ]; then
+  log info "enabling immediate Glitcherry handoff repair"
+  python3 - "$config" <<'PY'
+import sys, yaml
+config_path = sys.argv[1]
+with open(config_path) as f:
+    cfg = yaml.safe_load(f) or {}
+handoff = cfg.setdefault("handoff", {})
+handoff["handoff_alert_enabled"] = True
+handoff["handoff_auto_repair_enabled"] = True
+handoff["handoff_comment_lookback_min"] = 1
+with open(config_path, "w") as f:
+    yaml.safe_dump(cfg, f, sort_keys=False)
+PY
+  log ok "Glitcherry handoff repair enabled"
+fi
+
 # Install or kickstart launchd service
 if [ "$SKIP_LAUNCHD" -eq 1 ]; then
   log info "--skip-launchd specified; not touching launchd"
