@@ -92,6 +92,7 @@ official documentation.
 
 ## Atomic handoff
 
-Finish the clean commit/push, record controller handoff, POST evidence and require
-2xx, then PATCH reviewer/status with `interrupt: true` as your final action and
-STOP immediately. Do not poll or release an execution lock after handoff.
+Finish the clean commit/push and record controller handoff. POST evidence naming
+the exact reviewer agent ID and require 2xx, then PATCH reviewer/status without
+`interrupt` as your final action and STOP immediately. Do not poll or release an
+execution lock after handoff.

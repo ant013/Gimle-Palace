@@ -300,6 +300,11 @@ async def repair_comment_only_handoff(
         await client.patch_issue(
             finding.issue_id,
             {
+                "comment": (
+                    "Watchdog completed the deterministic handoff recorded in "
+                    f"comment {finding.mention_comment_id} to "
+                    f"@{finding.mentioned_agent_id}."
+                ),
                 "assigneeAgentId": finding.mentioned_agent_id,
                 "status": finding.issue_status,
                 "interrupt": True,

@@ -232,9 +232,9 @@ identity/authority probe. Make no repository, roadmap, or child-issue changes.
 
 ## Atomic handoff
 
-When a governance ruling has a next owner: POST evidence and require 2xx, then
-PATCH the exact assignee/status with `interrupt: true` while preserving both
-workspace IDs as the final action and STOP immediately.
+When a governance ruling has a next owner: POST evidence naming the exact next
+agent ID and require 2xx, then PATCH the exact assignee/status without `interrupt`
+while preserving both workspace IDs as the final action and STOP immediately.
 
 
 ## Glitcherry Android runtime contract
@@ -265,7 +265,7 @@ and never accept an agent-home fallback.
 
 ### Runtime repositories and sequential ownership
 
-<!-- GLITCHERRY_INTERRUPT_HANDOFF_V1 -->
+<!-- GLITCHERRY_INTERRUPT_HANDOFF_V2 -->
 
 - Your role-specific `AGENTS.md` is supplied independently by the adapter through
   an absolute required `instructionsFilePath`. A missing or unreadable required
@@ -397,10 +397,12 @@ same issue.
 
 ### Atomic handoff
 
-Finish the clean commit/allowed push, record the controller handoff, `POST evidence`
-and require 2xx, then PATCH the exact assignee/status with `interrupt: true` as
-the old run's final action and STOP immediately. Do not poll `executionRunId`,
-release/reassign, or perform a post-PATCH read from the process being
-interrupted. A failed PATCH may be repeated once with the same target; after
-that the watchdog completes the deterministic handoff without Board action.
+Finish the clean commit/allowed push and record the controller handoff. `POST evidence`
+that explicitly names the exact next agent ID and require 2xx, then PATCH
+the exact assignee/status without `interrupt` as the old run's final action and
+STOP immediately. Agent credentials cannot use the Board-only interrupt. Do not
+poll `executionRunId`, release/reassign, or perform a post-PATCH read. A failed
+PATCH may be repeated once with the same target; after that the Board-authenticated
+watchdog sends one update containing a recovery `comment`, exact assignment, and
+`interrupt: true` without a human Board decision.
 

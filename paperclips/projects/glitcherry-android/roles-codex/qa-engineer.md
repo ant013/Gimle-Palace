@@ -52,6 +52,6 @@ that cannot be observed.
 
 ## Atomic handoff
 
-POST evidence and require 2xx, then PATCH the exact next assignee/status with
-`interrupt: true` as your final action and STOP immediately. You have no push
-step.
+POST evidence naming the exact next agent ID and require 2xx, then PATCH the exact
+next assignee/status without `interrupt` as your final action and STOP immediately.
+You have no push step.

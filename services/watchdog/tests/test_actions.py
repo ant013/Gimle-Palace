@@ -416,6 +416,10 @@ async def test_repair_comment_only_handoff_interrupts_current_run():
     client.patch_issue.assert_awaited_once_with(
         "issue-42",
         {
+            "comment": (
+                "Watchdog completed the deterministic handoff recorded in "
+                f"comment cmt-001 to @{_CR_ID}."
+            ),
             "assigneeAgentId": _CR_ID,
             "status": "in_progress",
             "interrupt": True,
