@@ -36,17 +36,19 @@ and never accept an agent-home fallback.
   `workspace/control` layout is not used for normal product work.
 - One active slice has exactly one worktree below the configured
   `task_worktree_root` (`{{paths.task_worktree_root}}`), one mode-600 record below
-  `{{paths.task_state_root}}`, one task branch, one PR, and one sequential phase
-  owner.
+  `{{paths.task_state_root}}`, one task branch, and one PR. Paperclip's live
+  assignee supplies sequential role routing.
 - Paperclip creates the isolated worktree once. CTO adopts its exact
   `executionWorkspaceId`, path, branch, and HEAD into the controller at
   `{{paths.slice_controller_path}}`; no agent or controller creates an
-  alternative checkout. Verify the live assignee, controller expected owner,
-  exact HEAD, and unchanged workspace IDs before repository access. Controller
-  `claim` is an optional compatibility validation command; it creates no lease.
-- All roles use that same committed HEAD sequentially. A dirty tree, mismatched
-  branch/HEAD, unexpected controller owner, or second state is a stop. A stale
-  Paperclip execution run is automatically interrupted during handoff and is
+  alternative checkout. Verify the live assignee, exact worktree/branch, and
+  unchanged workspace IDs before repository access. Controller `claim` is an
+  optional reconciliation command: it creates no lease and adopts stale routing
+  owner/clean HEAD metadata with an audit record.
+- All roles use that same committed branch sequentially. A wrong worktree or
+  branch, dirty review boundary, or second active state is a stop. A stale
+  controller owner or clean committed HEAD is repaired automatically. A stale
+  Paperclip execution run is interrupted by the watchdog during handoff and is
   never a Board gate.
 - Both repositories' integration branch is `develop`. Origins are exactly
   `{{paths.android_repository_url}}` and `{{paths.control_repository_url}}`.
@@ -126,8 +128,8 @@ slice correction.
 
 ### Recovery and safety
 
-Normal cross-role transfer uses Paperclip's supported interrupting assignment;
-no lease recovery or execution-lock polling exists in this workflow. If a stale
+Normal cross-role transfer uses a final plain Paperclip reassignment; no lease
+recovery or execution-lock polling exists in this workflow. If a stale
 run survives, the watchdog may finish only the controller-recorded handoff after
 matching company, issue, run, next owner, and both workspace IDs. Never use broad
 `pkill`, delete an unrecorded path, or start a second child.

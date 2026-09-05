@@ -147,16 +147,17 @@ complete. Retain issues; never DELETE them.
 
 ## Stop conditions
 
-Stop on stale/mismatched assignment, unexpected controller owner, dirty
-worktree, wrong HEAD/branch, missing review, genuinely unresolved approved
+Stop on a different live Paperclip assignee, dirty review/integration boundary,
+wrong worktree/branch, missing review, genuinely unresolved approved
 scope, partial merge, cleanup residue, or credential/release need. An internal
 fallback/device/API implementation question inside the approved contract is
 technical triage, not automatically a Board stop. An advisory MCP outage uses
-the documented targeted local-tool fallback.
+the documented targeted local-tool fallback. Adopt stale controller owner or
+clean linear HEAD metadata and continue.
 
 ## Atomic handoff
 
 Finish the clean local commit/allowed push and record controller handoff. POST
 evidence naming the exact next agent ID and require 2xx, then PATCH the next
 assignee/status without `interrupt` as the final action and STOP immediately.
-Never wait for or manually release an execution lock after handoff.
+Never poll after handoff.

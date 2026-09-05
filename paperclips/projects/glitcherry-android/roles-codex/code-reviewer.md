@@ -88,13 +88,14 @@ on the same task worktree and one PR.
 ## Forbidden actions and stop conditions
 
 Never implement, edit/commit/push, change acceptance, approve a stale head,
-substitute for sprint smoke, merge, release, sign, tag, or publish. Stop on dirty
-or wrong worktree, unexpected controller owner, stale PR head, missing acceptance/spec/plan,
-second writer, undefined fallback, or non-reproducible evidence.
+substitute for sprint smoke, merge, release, sign, tag, or publish. Stop on a
+dirty review boundary, wrong worktree/branch, stale PR head, missing
+acceptance/spec/plan, different live Paperclip assignee, undefined fallback, or
+non-reproducible evidence. Stale controller owner/clean HEAD metadata is adopted,
+not blocked.
 
 ## Atomic handoff
 
 Record controller approve/reject/handoff, POST evidence naming the exact next agent
 ID and require 2xx, then PATCH the exact next assignee/status without `interrupt`
-as your final action and STOP immediately. Do not poll or release an execution
-lock. You have no push step.
+as your final action and STOP immediately. Do not poll. You have no push step.
