@@ -26,6 +26,7 @@ from gimle_watchdog.detection import HangedProc, PaperclipProcessIdentity
 from gimle_watchdog.models import (
     Agent,
     AlertResult,
+    CommentOnlyHandoffFinding,
     FindingType,
     ReviewOwnedByImplementerFinding,
 )
@@ -732,12 +733,24 @@ _PE_ID = "127068ee-b564-4b37-9370-616c81c63f35"
 _CR_ID = "bd2d7e20-7ed8-474c-91fc-353d610f4c52"
 
 
-def _handoff_cfg(tmp_path: Path, enabled: bool = True) -> Config:
+def _handoff_cfg(
+    tmp_path: Path,
+    enabled: bool = True,
+    *,
+    company_name: str = "gimle",
+    auto_repair: bool = False,
+) -> Config:
     base = _cfg(tmp_path)
     return Config(
         version=base.version,
         paperclip=base.paperclip,
-        companies=base.companies,
+        companies=[
+            CompanyConfig(
+                id=base.companies[0].id,
+                name=company_name,
+                thresholds=base.companies[0].thresholds,
+            )
+        ],
         daemon=base.daemon,
         cooldowns=base.cooldowns,
         logging=base.logging,
@@ -750,6 +763,7 @@ def _handoff_cfg(tmp_path: Path, enabled: bool = True) -> Config:
             handoff_comments_per_issue=5,
             handoff_max_issues_per_tick=30,
             handoff_alert_cooldown_min=30,
+            handoff_auto_repair_enabled=auto_repair,
         ),
     )
 
@@ -774,6 +788,20 @@ def _ro_finding() -> ReviewOwnedByImplementerFinding:
         implementer_role_name="PythonEngineer",
         implementer_role_class="implementer",
         age_seconds=3600,
+    )
+
+
+def _co_finding() -> CommentOnlyHandoffFinding:
+    return CommentOnlyHandoffFinding(
+        type=FindingType.COMMENT_ONLY_HANDOFF,
+        issue_id="issue-42",
+        issue_number=42,
+        current_assignee_id=_PE_ID,
+        mentioned_agent_id=_CR_ID,
+        mention_comment_id="cmt-1",
+        mention_author_agent_id=_PE_ID,
+        mention_age_seconds=300,
+        issue_status="in_review",
     )
 
 
@@ -819,6 +847,83 @@ async def test_handoff_pass_posts_alert_first_time(tmp_path: Path):
             "gimle_watchdog.daemon.actions.post_handoff_alert", new=AsyncMock(return_value=posted)
         ) as mock_post:
             await daemon._run_handoff_pass(cfg, state, client, _NOW_SERVER)
+    mock_post.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_handoff_pass_immediately_repairs_glitcherry_comment_handoff(tmp_path: Path):
+    cfg = _handoff_cfg(
+        tmp_path,
+        company_name="Glitcherry Android",
+        auto_repair=True,
+    )
+    state = State.load(tmp_path / "state.json")
+    issue = _in_review_issue()
+    client = MagicMock()
+    client.list_active_issues = AsyncMock(return_value=[issue])
+    client.list_company_agents = AsyncMock(
+        return_value=[
+            Agent(id=_PE_ID, name="GlitcherryAndroidEngineer", status="working"),
+            Agent(id=_CR_ID, name="GlitcherryCodeReviewer", status="idle"),
+        ]
+    )
+    client.list_recent_comments = AsyncMock(return_value=[])
+
+    with patch(
+        "gimle_watchdog.daemon.detection_semantic.scan_handoff_inconsistencies",
+        new=AsyncMock(return_value=[_co_finding()]),
+    ):
+        with (
+            patch(
+                "gimle_watchdog.daemon.actions.repair_comment_only_handoff",
+                new=AsyncMock(return_value=True),
+            ) as mock_repair,
+            patch("gimle_watchdog.daemon.actions.post_handoff_alert", new=AsyncMock()) as mock_post,
+        ):
+            await daemon._run_handoff_pass(cfg, state, client, _NOW_SERVER)
+
+    mock_repair.assert_awaited_once_with(client, _co_finding(), frozenset({_PE_ID, _CR_ID}))
+    mock_post.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_handoff_pass_does_not_auto_repair_other_company(tmp_path: Path):
+    cfg = _handoff_cfg(tmp_path, company_name="gimle", auto_repair=True)
+    state = State.load(tmp_path / "state.json")
+    client = MagicMock()
+    client.list_active_issues = AsyncMock(return_value=[_in_review_issue()])
+    client.list_company_agents = AsyncMock(
+        return_value=[
+            Agent(id=_PE_ID, name="PythonEngineer", status="working"),
+            Agent(id=_CR_ID, name="CodeReviewer", status="idle"),
+        ]
+    )
+    client.list_recent_comments = AsyncMock(return_value=[])
+    posted = AlertResult(
+        finding_type=FindingType.COMMENT_ONLY_HANDOFF,
+        issue_id="issue-42",
+        posted=True,
+        comment_id="cmt-alert",
+        error=None,
+    )
+
+    with patch(
+        "gimle_watchdog.daemon.detection_semantic.scan_handoff_inconsistencies",
+        new=AsyncMock(return_value=[_co_finding()]),
+    ):
+        with (
+            patch(
+                "gimle_watchdog.daemon.actions.repair_comment_only_handoff",
+                new=AsyncMock(),
+            ) as mock_repair,
+            patch(
+                "gimle_watchdog.daemon.actions.post_handoff_alert",
+                new=AsyncMock(return_value=posted),
+            ) as mock_post,
+        ):
+            await daemon._run_handoff_pass(cfg, state, client, _NOW_SERVER)
+
+    mock_repair.assert_not_awaited()
     mock_post.assert_awaited_once()
 
 

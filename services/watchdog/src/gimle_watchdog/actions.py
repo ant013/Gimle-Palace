@@ -273,6 +273,60 @@ async def repair_cross_team_handoff(
         return False
 
 
+async def repair_comment_only_handoff(
+    client: PaperclipClient,
+    finding: CommentOnlyHandoffFinding,
+    hired_agent_ids: frozenset[str],
+) -> bool:
+    """Finish an explicit same-issue handoff without a delayed alert tier.
+
+    The detector supplies a target explicitly mentioned by the current
+    assignee.  Re-read the issue once immediately before mutation so a stale
+    watchdog scan cannot overwrite a handoff that has already completed.
+    """
+    if (
+        finding.mentioned_agent_id == finding.current_assignee_id
+        or finding.mentioned_agent_id not in hired_agent_ids
+    ):
+        return False
+
+    try:
+        current = await client.get_issue(finding.issue_id)
+        if (
+            current.assignee_agent_id != finding.current_assignee_id
+            or current.status != finding.issue_status
+        ):
+            return False
+        await client.patch_issue(
+            finding.issue_id,
+            {
+                "assigneeAgentId": finding.mentioned_agent_id,
+                "status": finding.issue_status,
+                "interrupt": True,
+            },
+        )
+        log.info(
+            "comment_only_handoff_repair_ok issue=%s assignee_was=%s assignee_now=%s",
+            finding.issue_id,
+            finding.current_assignee_id,
+            finding.mentioned_agent_id,
+            extra={
+                "event": "comment_only_handoff_repair_ok",
+                "issue_id": finding.issue_id,
+                "assignee_was": finding.current_assignee_id,
+                "assignee_now": finding.mentioned_agent_id,
+            },
+        )
+        return True
+    except Exception as exc:
+        log.warning(
+            "comment_only_handoff_repair_failed issue=%s error=%s",
+            finding.issue_id,
+            exc,
+        )
+        return False
+
+
 async def repair_ownerless_completion(
     client: PaperclipClient,
     finding: OwnerlessCompletionFinding,

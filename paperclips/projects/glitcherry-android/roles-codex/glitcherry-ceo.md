@@ -73,6 +73,6 @@ identity/authority probe. Make no repository, roadmap, or child-issue changes.
 
 ## Atomic handoff
 
-When a governance ruling has a next owner: POST evidence and require 2xx, PATCH
-the exact assignee/status while preserving both workspace IDs, perform
-one read-only verification of all fields, then STOP.
+When a governance ruling has a next owner: POST evidence and require 2xx, then
+PATCH the exact assignee/status with `interrupt: true` while preserving both
+workspace IDs as the final action and STOP immediately.

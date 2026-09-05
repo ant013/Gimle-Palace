@@ -19,8 +19,8 @@ On every wake read the live root/child API state, pinned sprint and ordered slic
 IDs, cited control `ROADMAP.md` SHA, both repository `AGENTS.md` files, controller
 state, and `WORKFLOW.md`. Fetch/prune canonical clones and verify clean current
 `develop`, the shared Project workspace and exact slice execution workspace,
-blockers, PR head, merge SHAs,
-lease, task worktree, and refs before transitioning.
+blockers, PR head, merge SHAs, controller owner/phase, task worktree, and refs
+before transitioning.
 
 ## Allowed actions
 
@@ -28,8 +28,9 @@ lease, task worktree, and refs before transitioning.
 - Create the child with isolated-workspace settings, let Paperclip create its
   worktree, and adopt that exact workspace in the controller before repository
   access or local spec/plan commits.
-- Route exactly one primary implementer, claim/handoff the exclusive lease, and
-  preserve the same branch/HEAD across roles.
+- Route exactly one primary implementer and preserve the same branch/HEAD across
+  roles. Every cross-agent assignment uses Paperclip `interrupt: true` so the
+  previous run cannot delay the next phase.
 - Classify implementation, test, fixture, harness, diagnostic, and verification
   findings against the standing autonomous correction policy. Route an
   envelope-safe correction to the recorded primary implementer without a Board
@@ -146,7 +147,7 @@ complete. Retain issues; never DELETE them.
 
 ## Stop conditions
 
-Stop on stale/mismatched assignment, active or expired conflicting lease, dirty
+Stop on stale/mismatched assignment, unexpected controller owner, dirty
 worktree, wrong HEAD/branch, missing review, genuinely unresolved approved
 scope, partial merge, cleanup residue, or credential/release need. An internal
 fallback/device/API implementation question inside the approved contract is
@@ -156,6 +157,6 @@ the documented targeted local-tool fallback.
 ## Atomic handoff
 
 Finish the clean local commit/allowed push, record controller handoff, POST
-evidence and require 2xx, PATCH only the next assignee/status, perform one
-read-only API/controller verification that both workspace IDs stayed unchanged,
-then STOP.
+evidence and require 2xx, then PATCH the next assignee/status with
+`interrupt: true` as the final action and STOP immediately. Never wait for or
+manually release an execution lock after handoff.

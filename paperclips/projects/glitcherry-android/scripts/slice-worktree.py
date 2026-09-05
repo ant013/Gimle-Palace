@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Lease controller for one Paperclip-owned Glitcherry execution workspace."""
+"""State controller for one Paperclip-owned Glitcherry execution workspace."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ import subprocess
 import sys
 import tempfile
 from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -50,10 +50,6 @@ def _now() -> datetime:
 
 def _iso(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
-
-
-def _parse_iso(value: str) -> datetime:
-    return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
 def _run(
@@ -115,13 +111,6 @@ def _configured_path(values: dict[str, Any], key: str) -> Path:
     if not isinstance(raw, str) or not raw:
         raise ContractError(f"paths file is missing {key}")
     return _validate_directory(Path(raw), key)
-
-
-def _lease_seconds(values: dict[str, Any]) -> int:
-    raw = values.get("slice_lease_seconds", 2700)
-    if not isinstance(raw, int) or not 60 <= raw <= 7200:
-        raise ContractError("slice_lease_seconds must be between 60 and 7200")
-    return raw
 
 
 def _validate_remote(
@@ -291,22 +280,9 @@ def _verify_worktree(state: dict[str, Any], worktree_root: Path, *, clean: bool 
     return _git(worktree, "rev-parse", "HEAD").stdout.strip()
 
 
-def _require_lease(state: dict[str, Any], owner: str, run_id: str) -> None:
-    lease = state.get("lease")
-    if not isinstance(lease, dict):
-        raise ContractError("no active lease")
-    if lease.get("owner") != owner or lease.get("run_id") != run_id:
-        raise ContractError("active lease belongs to another owner or run")
-    if _parse_iso(lease["expires_at"]) <= _now():
-        raise ContractError("active lease expired; explicit recovery is required")
-
-
-def _new_lease(owner: str, run_id: str, seconds: int) -> dict[str, str]:
-    return {
-        "owner": owner,
-        "run_id": run_id,
-        "expires_at": _iso(_now() + timedelta(seconds=seconds)),
-    }
+def _require_expected_owner(state: dict[str, Any], owner: str) -> None:
+    if state.get("expected_owner") != owner:
+        raise ContractError("controller owner does not match expected owner")
 
 
 def _active_states(state_root: Path) -> list[str]:
@@ -318,7 +294,7 @@ def _active_states(state_root: Path) -> list[str]:
     return active
 
 
-def _context(args: argparse.Namespace) -> tuple[dict[str, Any], Path, Path, Path, str, str, int]:
+def _context(args: argparse.Namespace) -> tuple[dict[str, Any], Path, Path, Path, str, str]:
     values = _load_paths(Path(args.paths))
     primary = _configured_path(values, "primary_repo_root")
     worktrees = _configured_path(values, "task_worktree_root")
@@ -336,11 +312,11 @@ def _context(args: argparse.Namespace) -> tuple[dict[str, Any], Path, Path, Path
         label="control",
     )
     _validate_repo(primary, android_remote, "Android")
-    return values, primary, worktrees, states, android_remote, control_remote, _lease_seconds(values)
+    return values, primary, worktrees, states, android_remote, control_remote
 
 
 def _adopt(args: argparse.Namespace) -> dict[str, Any]:
-    _, primary, worktree_root, state_root, android_remote, _, lease_seconds = _context(args)
+    _, primary, worktree_root, state_root, android_remote, _ = _context(args)
     issue_key = _validate_issue_key(args.issue_key)
     slug = _validate_slug(args.slug)
     owner = _validate_owner(args.owner)
@@ -400,7 +376,7 @@ def _adopt(args: argparse.Namespace) -> dict[str, Any]:
             "approved_head_sha": None,
             "phase": "spec",
             "expected_owner": owner,
-            "lease": _new_lease(owner, run_id, lease_seconds),
+            "lease": None,
             "primary_implementer": None,
             "review_rejections": 0,
             "last_rejected_head": None,
@@ -421,7 +397,7 @@ def _adopt(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _claim(args: argparse.Namespace) -> dict[str, Any]:
-    _, _, worktree_root, state_root, _, _, lease_seconds = _context(args)
+    _, _, worktree_root, state_root, _, _ = _context(args)
     owner = _validate_owner(args.owner)
     run_id = _validate_run_id(args.run_id)
     state_path = _state_path(state_root, args.issue_key)
@@ -429,51 +405,33 @@ def _claim(args: argparse.Namespace) -> dict[str, Any]:
         state = _read_state(state_path)
         if state["phase"] in TERMINAL_PHASES or state["phase"] == "blocked":
             raise ContractError("terminal or blocked slice cannot be claimed")
-        lease = state.get("lease")
-        if lease:
-            if lease.get("owner") == owner and lease.get("run_id") == run_id:
-                lease["expires_at"] = _iso(_now() + timedelta(seconds=lease_seconds))
-                state["updated_at"] = _iso(_now())
-                _write_state(state_path, state)
-                return state
-            raise ContractError("active lease is held by another owner or run")
-        if state.get("expected_owner") != owner:
-            raise ContractError("claim owner does not match expected owner")
+        _require_expected_owner(state, owner)
         dirty_recovery = state["phase"] == IMPLEMENTATION_RECOVERY_PHASE
         if dirty_recovery and state.get("primary_implementer") != owner:
             raise ContractError("dirty recovery is reserved for the primary implementer")
         head = _verify_worktree(state, worktree_root, clean=not dirty_recovery)
         if head != state["head_sha"]:
             raise ContractError("task worktree HEAD differs from handed-off HEAD")
-        state["lease"] = _new_lease(owner, run_id, lease_seconds)
-        state["updated_at"] = _iso(_now())
-        _write_state(state_path, state)
+        if state.get("lease") is not None:
+            state["lease"] = None
+            state["updated_at"] = _iso(_now())
+            _write_state(state_path, state)
         return state
 
 
 def _renew(args: argparse.Namespace) -> dict[str, Any]:
-    _, _, _, state_root, _, _, lease_seconds = _context(args)
-    owner = _validate_owner(args.owner)
-    run_id = _validate_run_id(args.run_id)
-    state_path = _state_path(state_root, args.issue_key)
-    with _state_lock(state_path):
-        state = _read_state(state_path)
-        _require_lease(state, owner, run_id)
-        state["lease"]["expires_at"] = _iso(_now() + timedelta(seconds=lease_seconds))
-        state["updated_at"] = _iso(_now())
-        _write_state(state_path, state)
-        return state
+    return _claim(args)
 
 
 def _handoff(args: argparse.Namespace) -> dict[str, Any]:
-    _, _, worktree_root, state_root, _, _, _ = _context(args)
+    _, _, worktree_root, state_root, _, _ = _context(args)
     owner = _validate_owner(args.owner)
     run_id = _validate_run_id(args.run_id)
     next_owner = _validate_owner(args.next_owner)
     state_path = _state_path(state_root, args.issue_key)
     with _state_lock(state_path):
         state = _read_state(state_path)
-        _require_lease(state, owner, run_id)
+        _require_expected_owner(state, owner)
         if state["phase"] == IMPLEMENTATION_RECOVERY_PHASE and (
             owner != state.get("primary_implementer")
             or next_owner != CTO
@@ -509,14 +467,14 @@ def _handoff(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _reject(args: argparse.Namespace) -> dict[str, Any]:
-    _, _, worktree_root, state_root, _, _, _ = _context(args)
+    _, _, worktree_root, state_root, _, _ = _context(args)
     owner = _validate_owner(args.owner)
     run_id = _validate_run_id(args.run_id)
     next_owner = _validate_owner(args.next_owner)
     state_path = _state_path(state_root, args.issue_key)
     with _state_lock(state_path):
         state = _read_state(state_path)
-        _require_lease(state, owner, run_id)
+        _require_expected_owner(state, owner)
         if state["phase"] != "code_review":
             raise ContractError("rejection is allowed only during code_review")
         if owner != REVIEWER or next_owner != state.get("primary_implementer"):
@@ -540,14 +498,14 @@ def _reject(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _approve(args: argparse.Namespace) -> dict[str, Any]:
-    _, _, worktree_root, state_root, _, _, _ = _context(args)
+    _, _, worktree_root, state_root, _, _ = _context(args)
     owner = _validate_owner(args.owner)
     run_id = _validate_run_id(args.run_id)
     next_owner = _validate_owner(args.next_owner)
     state_path = _state_path(state_root, args.issue_key)
     with _state_lock(state_path):
         state = _read_state(state_path)
-        _require_lease(state, owner, run_id)
+        _require_expected_owner(state, owner)
         if state["phase"] != "code_review":
             raise ContractError("approval is allowed only during code_review")
         if owner != REVIEWER or next_owner != CTO:
@@ -568,7 +526,7 @@ def _approve(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _block(args: argparse.Namespace) -> dict[str, Any]:
-    _, _, worktree_root, state_root, _, _, _ = _context(args)
+    _, _, worktree_root, state_root, _, _ = _context(args)
     owner = _validate_owner(args.owner)
     run_id = _validate_run_id(args.run_id)
     if len(args.reason.strip()) < 8:
@@ -576,7 +534,7 @@ def _block(args: argparse.Namespace) -> dict[str, Any]:
     state_path = _state_path(state_root, args.issue_key)
     with _state_lock(state_path):
         state = _read_state(state_path)
-        _require_lease(state, owner, run_id)
+        _require_expected_owner(state, owner)
         head = _verify_worktree(state, worktree_root, clean=False)
         if head != state["head_sha"]:
             raise ContractError("task worktree HEAD differs from recorded HEAD")
@@ -608,7 +566,7 @@ def _block(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _resume_blocked(args: argparse.Namespace) -> dict[str, Any]:
-    _, _, worktree_root, state_root, _, _, _ = _context(args)
+    _, _, worktree_root, state_root, _, _ = _context(args)
     operator = _validate_owner(args.operator)
     operator_run_id = _validate_run_id(args.run_id)
     next_owner = _validate_owner(args.next_owner)
@@ -680,7 +638,7 @@ def _resume_blocked(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _recover(args: argparse.Namespace) -> dict[str, Any]:
-    _, _, _, state_root, _, _, _ = _context(args)
+    _, _, _, state_root, _, _ = _context(args)
     operator = _validate_owner(args.operator)
     expected_owner = _validate_owner(args.expected_owner)
     expected_run = _validate_run_id(args.expected_run_id)
@@ -719,7 +677,7 @@ def _recover(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _adopt_recovery_checkpoint(args: argparse.Namespace) -> dict[str, Any]:
-    _, _, worktree_root, state_root, _, _, _ = _context(args)
+    _, _, worktree_root, state_root, _, _ = _context(args)
     operator = _validate_owner(args.operator)
     operator_run_id = _validate_run_id(args.run_id)
     evidence = args.evidence.strip()
@@ -856,13 +814,13 @@ def _commit_is_on_develop(repo: Path, sha: str) -> None:
 
 
 def _record_merge(args: argparse.Namespace) -> dict[str, Any]:
-    values, primary, worktree_root, state_root, _, control_remote, _ = _context(args)
+    values, primary, worktree_root, state_root, _, control_remote = _context(args)
     owner = _validate_owner(args.owner)
     run_id = _validate_run_id(args.run_id)
     state_path = _state_path(state_root, args.issue_key)
     with _state_lock(state_path):
         state = _read_state(state_path)
-        _require_lease(state, owner, run_id)
+        _require_expected_owner(state, owner)
         if owner != CTO:
             raise ContractError("only GlitcherryCTO may record merge evidence")
         if state["phase"] not in {"review_approved", "integrating"}:
@@ -890,13 +848,13 @@ def _record_merge(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _prepare_cleanup(args: argparse.Namespace) -> dict[str, Any]:
-    values, primary, worktree_root, state_root, _, control_remote, _ = _context(args)
+    values, primary, worktree_root, state_root, _, control_remote = _context(args)
     owner = _validate_owner(args.owner)
     run_id = _validate_run_id(args.run_id)
     state_path = _state_path(state_root, args.issue_key)
     with _state_lock(state_path):
         state = _read_state(state_path)
-        _require_lease(state, owner, run_id)
+        _require_expected_owner(state, owner)
         if owner != CTO:
             raise ContractError("only GlitcherryCTO may prepare an integrated slice for cleanup")
         if not state.get("android_merge_sha") or not state.get("control_merge_sha"):
@@ -932,7 +890,7 @@ def _prepare_cleanup(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _cleanup(args: argparse.Namespace) -> dict[str, Any]:
-    values, primary, worktree_root, state_root, _, control_remote, _ = _context(args)
+    values, primary, worktree_root, state_root, _, control_remote = _context(args)
     owner = _validate_owner(args.owner)
     _validate_run_id(args.run_id)
     state_path = _state_path(state_root, args.issue_key)
@@ -992,7 +950,7 @@ def _cleanup(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _show(args: argparse.Namespace) -> dict[str, Any]:
-    _, _, _, state_root, _, _, _ = _context(args)
+    _, _, _, state_root, _, _ = _context(args)
     state_path = _state_path(state_root, args.issue_key)
     with _state_lock(state_path):
         return _read_state(state_path)

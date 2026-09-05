@@ -129,7 +129,7 @@ def test_glitcherry_project_files_and_portable_local_examples_exist():
     assert paths["task_worktree_root"] == "/opt/example/glitcherry-slice-worktrees"
     assert paths["task_state_root"] == "/opt/example/glitcherry-slice-state"
     assert paths["slice_controller_path"].endswith("/scripts/slice-worktree.py")
-    assert paths["slice_lease_seconds"] == 2700
+    assert "slice_lease_seconds" not in paths
     assert paths["android_repository_url"] == "https://github.com/ant013/Glitcherry-Android.git"
     assert paths["control_repository_url"] == "https://github.com/ant013/Glitcherry.git"
     assert paths["paperclip_runtime_api_url"].startswith("http://127.0.0.1:")
@@ -157,14 +157,14 @@ def test_workflow_is_the_single_worktree_parent_child_contract():
         "Sprint smoke gate — QA only here",
         "task_worktree_root",
         "task_state_root",
-        "exclusive lease",
+        "GLITCHERRY_INTERRUPT_HANDOFF_V1",
         "maximum three",
         "fourth autonomous",
         "SPRINT_SMOKE_REQUIRED",
         "GLA-N + Android merge SHA",
         "POST evidence",
         "PATCH assignee/status",
-        "one read-only verification",
+        "interrupt: true",
         "STOP",
         "LOCAL_BLOCKED",
         "ROADMAP_BLOCKED",
@@ -284,7 +284,7 @@ def test_standing_autonomous_corrections_are_scenario_complete_and_role_safe():
         assert obsolete not in reviewer
 
     assert "governance authority only" in ceo
-    assert "never claim an active slice worktree" in qa
+    assert "never access an active slice worktree" in qa
     assert "never commit or push" in qa
     assert "never implement fixes" in reviewer
 
@@ -314,7 +314,7 @@ def test_common_overlay_enforces_authority_repositories_and_one_writer():
         "Human Engineering Lead",
         "task_worktree_root",
         "task_state_root",
-        "exclusive lease",
+        "GLITCHERRY_INTERRUPT_HANDOFF_V1",
         "workspace/control",
         "required `instructionsFilePath`",
         "Project workspace",
@@ -322,7 +322,7 @@ def test_common_overlay_enforces_authority_repositories_and_one_writer():
         "integration branch is `develop`",
         "never release, sign, tag, or publish",
         "POST evidence",
-        "one read-only verification",
+        "interrupt: true",
     ]
     for marker in required:
         assert marker in text
@@ -481,5 +481,7 @@ def test_rendered_glitcherry_roles_have_no_templates_or_forbidden_authority():
     assert "commit push" not in qa.lower()
     for text in rendered.values():
         assert "task_worktree_root" in text
-        assert "exclusive lease" in text
+        assert "GLITCHERRY_INTERRUPT_HANDOFF_V1" in text
+        assert "interrupt: true" in text
+        assert "exclusive lease" not in text
         assert "all persistent clones" not in text

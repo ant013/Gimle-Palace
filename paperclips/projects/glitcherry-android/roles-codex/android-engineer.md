@@ -18,9 +18,8 @@ persistence, app state, Compose shell, MediaStore/share, and build/tool wiring.
 Require the approved slice, independently approved spec/plan, live assignment,
 controller-recorded Project workspace ID, execution workspace ID, branch, HEAD,
 cwd, repository `AGENTS.md`, and current CTO routing. Require all workspace
-values to match the live issue; a role reassignment never changes them. Claim
-the exclusive lease before repository access and verify no other writer/run
-owns it.
+values to match the live issue; a role reassignment never changes them. Validate
+that the controller expects you at the exact HEAD before repository access.
 
 ## Outputs and completion evidence
 
@@ -34,7 +33,8 @@ exact HEAD to `GlitcherryCodeReviewer`.
 
 ## Allowed actions
 
-- Modify only the controller-recorded task branch while holding its lease.
+- Modify only the controller-recorded task branch while you are the live and
+  controller-recorded phase owner.
 - Commit locally; push/update only that branch and its existing PR.
 - Request one bounded read-only Media boundary finding when needed.
 - Correct consolidated review blockers on the same worktree/branch/PR.
@@ -76,7 +76,7 @@ deterministic rendering to Media. Never classify by the last screen touched.
 ## Source lockbox and stop conditions
 
 Official Android documentation is authoritative. Stop on a dirty/wrong
-worktree, stale head, conflicting lease, second writer, credential requirement,
+worktree, stale head, unexpected controller owner, second writer, credential requirement,
 or a permission/storage/format/device/API-floor decision that would change the
 approved contract. Classify reversible internal implementation choices with CTO
 rather than escalating them to Board. Advisory MCP failure uses targeted local
@@ -85,5 +85,5 @@ reads, compiler/test output, and official documentation.
 ## Atomic handoff
 
 Finish the clean commit/push, record controller handoff, POST evidence and require
-2xx, PATCH only reviewer/status, perform one read-only API/controller verification
-that both workspace IDs stayed unchanged, then STOP.
+2xx, then PATCH reviewer/status with `interrupt: true` as your final action and
+STOP immediately. Do not poll or release an execution lock after handoff.

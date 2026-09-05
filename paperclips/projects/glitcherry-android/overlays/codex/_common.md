@@ -24,7 +24,9 @@ Paperclip-created isolated `executionWorkspaceId`, and that ID, cwd, branch, and
 HEAD stay unchanged across all role handoffs. Never copy IDs across companies
 and never accept an agent-home fallback.
 
-### Runtime repositories and lease
+### Runtime repositories and sequential ownership
+
+<!-- GLITCHERRY_INTERRUPT_HANDOFF_V1 -->
 
 - Your role-specific `AGENTS.md` is supplied independently by the adapter through
   an absolute required `instructionsFilePath`. A missing or unreadable required
@@ -34,14 +36,18 @@ and never accept an agent-home fallback.
   `workspace/control` layout is not used for normal product work.
 - One active slice has exactly one worktree below the configured
   `task_worktree_root` (`{{paths.task_worktree_root}}`), one mode-600 record below
-  `{{paths.task_state_root}}`, one task branch, one PR, and one exclusive lease.
+  `{{paths.task_state_root}}`, one task branch, one PR, and one sequential phase
+  owner.
 - Paperclip creates the isolated worktree once. CTO adopts its exact
   `executionWorkspaceId`, path, branch, and HEAD into the controller at
   `{{paths.slice_controller_path}}`; no agent or controller creates an
-  alternative checkout. Verify the live assignee and unchanged workspace IDs,
-  then claim the lease before repository access.
+  alternative checkout. Verify the live assignee, controller expected owner,
+  exact HEAD, and unchanged workspace IDs before repository access. Controller
+  `claim` is an optional compatibility validation command; it creates no lease.
 - All roles use that same committed HEAD sequentially. A dirty tree, mismatched
-  branch/HEAD, another owner/run, expired lease, or second state is a stop.
+  branch/HEAD, unexpected controller owner, or second state is a stop. A stale
+  Paperclip execution run is automatically interrupted during handoff and is
+  never a Board gate.
 - Both repositories' integration branch is `develop`. Origins are exactly
   `{{paths.android_repository_url}}` and `{{paths.control_repository_url}}`.
 - There is exactly one primary implementer writing application code: Android or
@@ -120,11 +126,11 @@ slice correction.
 
 ### Recovery and safety
 
-Lease expiry never grants takeover. Recovery requires exact
-`company -> agent -> run -> PID` attribution, proof that the prior run stopped or
-was terminated, retained dirty/unmerged state, and a recorded recovery of the
-same slice. Never use broad `pkill`, delete an unrecorded path, or start a second
-child.
+Normal cross-role transfer uses Paperclip's supported interrupting assignment;
+no lease recovery or execution-lock polling exists in this workflow. If a stale
+run survives, the watchdog may finish only the controller-recorded handoff after
+matching company, issue, run, next owner, and both workspace IDs. Never use broad
+`pkill`, delete an unrecorded path, or start a second child.
 
 You must never release, sign, tag, or publish; merge to `main`; expose `.env`,
 SSH/GitHub/keystore/Play credentials; change future roadmap; or run concurrent
@@ -153,7 +159,8 @@ same issue.
 ### Atomic handoff
 
 Finish the clean commit/allowed push, record the controller handoff, `POST evidence`
-and require 2xx, PATCH only the exact assignee/status, perform one read-only verification
-that both workspace IDs plus controller state are unchanged, then
-STOP. One 409 reload is allowed; repeated conflict is
-`LOCAL_BLOCKED`.
+and require 2xx, then PATCH the exact assignee/status with `interrupt: true` as
+the old run's final action and STOP immediately. Do not poll `executionRunId`,
+release/reassign, or perform a post-PATCH read from the process being
+interrupted. A failed PATCH may be repeated once with the same target; after
+that the watchdog completes the deterministic handoff without Board action.
