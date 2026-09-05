@@ -574,9 +574,7 @@ async def _run_handoff_pass(
                     and h.handoff_auto_repair_enabled
                     and isinstance(finding, CommentOnlyHandoffFinding)
                 ):
-                    repaired = await actions.repair_comment_only_handoff(
-                        client, finding, hired_ids
-                    )
+                    repaired = await actions.repair_comment_only_handoff(client, finding, hired_ids)
                     if repaired:
                         state.clear_handoff_alert(issue.id, ftype)
                         state.save()

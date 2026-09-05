@@ -446,9 +446,7 @@ async def test_repair_comment_only_handoff_skips_changed_or_unknown_target(
     )
     client.patch_issue = AsyncMock()
 
-    repaired = await act.repair_comment_only_handoff(
-        client, _co_finding(), hired_ids
-    )
+    repaired = await act.repair_comment_only_handoff(client, _co_finding(), hired_ids)
 
     assert repaired is False
     client.patch_issue.assert_not_awaited()

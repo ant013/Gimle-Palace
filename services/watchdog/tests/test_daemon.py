@@ -878,15 +878,11 @@ async def test_handoff_pass_immediately_repairs_glitcherry_comment_handoff(tmp_p
                 "gimle_watchdog.daemon.actions.repair_comment_only_handoff",
                 new=AsyncMock(return_value=True),
             ) as mock_repair,
-            patch(
-                "gimle_watchdog.daemon.actions.post_handoff_alert", new=AsyncMock()
-            ) as mock_post,
+            patch("gimle_watchdog.daemon.actions.post_handoff_alert", new=AsyncMock()) as mock_post,
         ):
             await daemon._run_handoff_pass(cfg, state, client, _NOW_SERVER)
 
-    mock_repair.assert_awaited_once_with(
-        client, _co_finding(), frozenset({_PE_ID, _CR_ID})
-    )
+    mock_repair.assert_awaited_once_with(client, _co_finding(), frozenset({_PE_ID, _CR_ID}))
     mock_post.assert_not_awaited()
 
 
