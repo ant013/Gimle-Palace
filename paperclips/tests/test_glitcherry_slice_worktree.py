@@ -361,7 +361,7 @@ def _route_to_code_review(fixture: dict[str, Path]) -> tuple[Path, str]:
     return worktree, reviewer_run
 
 
-def test_adopt_handoff_and_claim_validate_expected_owner_without_lease(tmp_path: Path) -> None:
+def test_claim_adopts_stale_owner_and_clean_head_without_lease(tmp_path: Path) -> None:
     fixture = _fixture(tmp_path)
     created = _create(fixture)
 
@@ -376,8 +376,16 @@ def test_adopt_handoff_and_claim_validate_expected_owner_without_lease(tmp_path:
     )
 
     overlap = _claim(fixture, "GlitcherryAndroidEngineer", "run-android-overlap")
-    assert overlap.returncode != 0
-    assert "expected owner" in overlap.stderr.lower()
+    assert overlap.returncode == 0, overlap.stderr
+    adopted_owner = _state(fixture)
+    assert adopted_owner["expected_owner"] == "GlitcherryAndroidEngineer"
+    assert adopted_owner["routing_adoptions"][-1] == {
+        "kind": "owner",
+        "owner": "GlitcherryAndroidEngineer",
+        "previous_owner": "GlitcherryCTO",
+        "recorded_at": adopted_owner["routing_adoptions"][-1]["recorded_at"],
+        "run_id": "run-android-overlap",
+    }
 
     handoff = _handoff(
         fixture,
@@ -395,11 +403,19 @@ def test_adopt_handoff_and_claim_validate_expected_owner_without_lease(tmp_path:
     }
     state_path.write_text(json.dumps(legacy_state, indent=2, sort_keys=True) + "\n")
     state_path.chmod(0o600)
+    (worktree / "spec.md").write_text("approved clean checkpoint\n")
+    _git("add", "spec.md", cwd=worktree)
+    _git("commit", "-m", "record spec checkpoint", cwd=worktree)
+    clean_head = _git("rev-parse", "HEAD", cwd=worktree).stdout.strip()
     claimed = _claim(fixture, "GlitcherryCodeReviewer", "run-review-1")
     assert claimed.returncode == 0, claimed.stderr
     state = _state(fixture)
     assert state["lease"] is None
     assert state["phase"] == "spec_review"
+    assert state["head_sha"] == clean_head
+    assert state["routing_adoptions"][-1]["kind"] == "head"
+    assert state["routing_adoptions"][-1]["previous_head_sha"] == created["head_sha"]
+    assert state["routing_adoptions"][-1]["head_sha"] == clean_head
 
 
 def test_adopt_tolerates_terminal_v1_history(tmp_path: Path) -> None:
@@ -502,15 +518,14 @@ def test_recovery_requires_exact_run_and_preserves_dirty_work(tmp_path: Path) ->
     assert state["recovery_resume_phase"] == "spec"
 
 
-def test_recovery_adopts_clean_linear_implementation_checkpoint(tmp_path: Path) -> None:
+def test_recovery_claim_adopts_clean_linear_implementation_checkpoint(tmp_path: Path) -> None:
     fixture = _fixture(tmp_path)
-    worktree, old_head, new_head, engineer_run = _recover_advanced_checkpoint(fixture)
+    worktree, old_head, new_head, _ = _recover_advanced_checkpoint(fixture)
     assert _state(fixture)["head_sha"] == old_head
-    assert _claim(fixture, "GlitcherryCTO", "run-cto-before-adopt").returncode != 0
 
     before_status = _git("status", "--porcelain=v2", cwd=worktree).stdout
-    adopted = _adopt_recovery_checkpoint(fixture, old_head, new_head)
-    assert adopted.returncode == 0, adopted.stderr
+    claimed = _claim(fixture, "GlitcherryCTO", "run-cto-direct-adopt")
+    assert claimed.returncode == 0, claimed.stderr
 
     state = _state(fixture)
     assert state["head_sha"] == new_head
@@ -519,20 +534,18 @@ def test_recovery_adopts_clean_linear_implementation_checkpoint(tmp_path: Path) 
     assert state["lease"] is None
     assert state["recovery_resume_owner"] == "GlitcherryAndroidEngineer"
     assert state["recovery_resume_phase"] == "implementation"
-    adoption = state["checkpoint_adoptions"][-1]
-    assert adoption["old_head_sha"] == old_head
-    assert adoption["new_head_sha"] == new_head
-    assert adoption["operator"] == "GlitcherryCTO"
-    assert adoption["operator_run_id"] == "run-cto-adopt"
-    assert adoption["recovered_owner"] == "GlitcherryAndroidEngineer"
-    assert adoption["recovered_run_id"] == engineer_run
+    adoption = state["routing_adoptions"][-1]
+    assert adoption["kind"] == "head"
+    assert adoption["previous_head_sha"] == old_head
+    assert adoption["head_sha"] == new_head
+    assert adoption["owner"] == "GlitcherryCTO"
+    assert adoption["run_id"] == "run-cto-direct-adopt"
     assert _git("status", "--porcelain=v2", cwd=worktree).stdout == before_status
 
-    assert _claim(fixture, "GlitcherryCTO", "run-cto-after-adopt").returncode == 0
     handed_off = _handoff(
         fixture,
         "GlitcherryCTO",
-        "run-cto-after-adopt",
+        "run-cto-direct-adopt",
         "GlitcherryCTO",
         "plan_revision",
     )
@@ -576,16 +589,6 @@ def test_recovery_checkpoint_adoption_rejects_invalid_controller_state(
 
     mutations = (
         lambda state: state.update({"phase": "plan_revision"}),
-        lambda state: state.update({"expected_owner": "GlitcherryCodeReviewer"}),
-        lambda state: state.update(
-            {
-                "lease": {
-                    "owner": "GlitcherryCTO",
-                    "run_id": "run-live",
-                    "expires_at": "2099-01-01T00:00:00Z",
-                }
-            }
-        ),
         lambda state: state.update({"android_merge_sha": "1" * 40}),
         lambda state: state.update({"recovery": []}),
         lambda state: state["recovery"][-1].update(
@@ -779,6 +782,31 @@ def test_clean_blocked_slice_resumes_and_routes_without_synthetic_plan_edit(
     ).returncode == 0
 
 
+def test_clean_blocked_slice_can_resume_directly_to_authorized_next_role(
+    tmp_path: Path,
+) -> None:
+    fixture = _fixture(tmp_path)
+    _create(fixture)
+    assert _block(fixture, "GlitcherryCTO", "run-cto-0").returncode == 0
+
+    resumed = _resume_blocked(
+        fixture,
+        "GlitcherryCodeReviewer",
+        "spec_review",
+        evidence="HEL authorized direct exact-head spec review",
+    )
+
+    assert resumed.returncode == 0, resumed.stderr
+    state = _state(fixture)
+    assert state["phase"] == "spec_review"
+    assert state["expected_owner"] == "GlitcherryCodeReviewer"
+    assert _claim(
+        fixture,
+        "GlitcherryCodeReviewer",
+        "run-review-direct-resume",
+    ).returncode == 0
+
+
 def test_dirty_blocked_slice_requires_primary_implementer_recovery(
     tmp_path: Path,
 ) -> None:
@@ -961,32 +989,29 @@ def test_blocked_resume_rejections_leave_state_unchanged(tmp_path: Path) -> None
             "plan_revision",
             evidence="too short",
         ),
-        _resume_blocked(
-            fixture,
-            "GlitcherryCodeReviewer",
-            "plan_revision",
-        ),
     )
 
     assert all(attempt.returncode != 0 for attempt in attempts)
     assert state_path.read_bytes() == blocked_state
 
 
-def test_blocked_resume_rejects_changed_head(tmp_path: Path) -> None:
+def test_blocked_resume_adopts_clean_changed_head(tmp_path: Path) -> None:
     fixture = _fixture(tmp_path)
     created = _create(fixture)
     assert _block(fixture, "GlitcherryCTO", "run-cto-0").returncode == 0
-    state_path = fixture["states"] / "GLA-123.json"
-    blocked_state = state_path.read_bytes()
     worktree = Path(created["worktree_path"])
 
     (worktree / "unexpected.txt").write_text("unexpected commit\n")
     _git("add", "unexpected.txt", cwd=worktree)
     _git("commit", "-m", "unexpected head", cwd=worktree)
+    current_head = _git("rev-parse", "HEAD", cwd=worktree).stdout.strip()
     changed_head = _resume_blocked(fixture, "GlitcherryCTO", "plan_revision")
-    assert changed_head.returncode != 0
-    assert "head" in changed_head.stderr.lower()
-    assert state_path.read_bytes() == blocked_state
+    assert changed_head.returncode == 0, changed_head.stderr
+    state = _state(fixture)
+    assert state["head_sha"] == current_head
+    assert state["routing_adoptions"][-1]["kind"] == "head"
+    assert state["routing_adoptions"][-1]["previous_head_sha"] == created["head_sha"]
+    assert state["routing_adoptions"][-1]["head_sha"] == current_head
 
 
 def test_blocked_resume_rejects_started_merge_state(tmp_path: Path) -> None:

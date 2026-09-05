@@ -75,8 +75,9 @@ deterministic rendering to Media. Never classify by the last screen touched.
 
 ## Source lockbox and stop conditions
 
-Official Android documentation is authoritative. Stop on a dirty/wrong
-worktree, stale head, unexpected controller owner, second writer, credential requirement,
+Official Android documentation is authoritative. Continue your own assigned
+dirty implementation work; require a clean commit before handoff. Stop on a wrong
+worktree/branch, different live Paperclip assignee, credential requirement,
 or a permission/storage/format/device/API-floor decision that would change the
 approved contract. Classify reversible internal implementation choices with CTO
 rather than escalating them to Board. Advisory MCP failure uses targeted local
@@ -86,5 +87,4 @@ reads, compiler/test output, and official documentation.
 
 Finish the clean commit/push and record controller handoff. POST evidence naming
 the exact reviewer agent ID and require 2xx, then PATCH reviewer/status without
-`interrupt` as your final action and STOP immediately. Do not poll or release an
-execution lock after handoff.
+`interrupt` as your final action and STOP immediately. Do not poll after handoff.

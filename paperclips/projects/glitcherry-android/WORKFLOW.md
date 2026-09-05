@@ -70,11 +70,11 @@ does not select another sprint until the sprint smoke gate below is resolved.
   required `instructionsFilePath` supplies its own generated `AGENTS.md`; there
   is no per-agent product checkout.
 - The task controller is `scripts/slice-worktree.py`. Every role verifies the
-  live Paperclip assignee/workspace, controller expected owner, branch, and exact
-  HEAD before repository access. `claim` remains an optional compatibility
-  validation command and creates no persistent ownership record. A different
-  expected owner, dirty tree, wrong branch, unexpected HEAD, or second active
-  slice fails closed.
+  live Paperclip assignee/workspace and exact worktree/branch before repository
+  access. `claim` is optional reconciliation: it creates no persistent ownership
+  record and audibly adopts stale controller owner or clean committed HEAD
+  metadata. A dirty review boundary, wrong worktree/branch, or second active
+  slice still fails closed.
 - Exactly one of `GlitcherryAndroidEngineer` or
   `GlitcherryMediaPipelineEngineer` is the primary application-code writer. The
   other may give one bounded read-only boundary finding only.
@@ -164,18 +164,18 @@ plan change and routes the exact plan revision through independent review.
 Use controller `block` only when there is genuinely no safe next transition.
 When a previously blocked decision is later resolved, never edit controller JSON
 or the Paperclip database and never create a replacement child or worktree. CTO
-uses `resume-blocked` with the decision evidence. A clean worktree resumes to
-`GlitcherryCTO / plan_revision`; a dirty worktree resumes only to its recorded
-primary implementer in `implementation_recovery`. That implementer preserves the
-files in one local WIP commit and hands the resulting clean HEAD to
-`GlitcherryCTO / plan_revision`.
+uses `resume-blocked` with the decision evidence. A clean worktree resumes
+directly to the HEL-authorized next role/phase on its current linear commit; a
+stale controller HEAD is adopted and audited. A dirty worktree resumes only to
+its recorded primary implementer in `implementation_recovery`. That implementer
+preserves the files in one local WIP commit and hands the resulting clean HEAD
+onward.
 
 Legacy `recover` and `adopt-recovery-checkpoint` commands remain readable only
-for historical state created before this contract. New runs never create a
-lease or enter lease-recovery choreography. A clean committed worktree that is
-ahead of a stale controller HEAD goes to CTO technical triage and may use the
-legacy audited checkpoint-adoption command only when that historical recovery
-record already exists.
+for historical state created before this contract, but no longer require an
+active lease. New runs never create a lease or enter lease-recovery choreography.
+A clean committed worktree ahead of stale controller metadata is adopted by the
+next assigned role's normal claim/resume command.
 
 ## Six child phases
 
@@ -405,7 +405,7 @@ directly.
 
 - `LOCAL_BLOCKED` and `ROADMAP_BLOCKED` are reason codes; API status is
   `blocked`. Neither permits the next child.
-- A stale head, unexpected controller owner, dirty task worktree, wrong
+- A dirty review boundary, wrong
   branch, residual exact ref, partial merge, or incomplete cleanup stops work.
 - Missing/mismatched Project or execution workspace identity stops work. A
   role-specific workspace mismatch is not a condition because all roles share

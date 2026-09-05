@@ -83,7 +83,8 @@ single-thread requirements. AGSL `RuntimeShader` is optional on Android 13+
 
 ## Stop conditions
 
-Stop on stale/dirty worktree, unexpected controller owner, second writer, or an input/
+Continue your own assigned dirty implementation work and commit before handoff.
+Stop on a wrong worktree/branch, different live Paperclip assignee, or an input/
 output, HDR/codec/fallback, parity, API, determinism, fixture, or device decision
 that cannot be resolved without changing the approved contract. Reversible
 internal implementation choices are CTO technical triage, not a Board stop.
@@ -94,5 +95,4 @@ official documentation.
 
 Finish the clean commit/push and record controller handoff. POST evidence naming
 the exact reviewer agent ID and require 2xx, then PATCH reviewer/status without
-`interrupt` as your final action and STOP immediately. Do not poll or release an
-execution lock after handoff.
+`interrupt` as your final action and STOP immediately. Do not poll after handoff.

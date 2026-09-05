@@ -280,9 +280,63 @@ def _verify_worktree(state: dict[str, Any], worktree_root: Path, *, clean: bool 
     return _git(worktree, "rev-parse", "HEAD").stdout.strip()
 
 
-def _require_expected_owner(state: dict[str, Any], owner: str) -> None:
-    if state.get("expected_owner") != owner:
-        raise ContractError("controller owner does not match expected owner")
+def _adopt_expected_owner(
+    state: dict[str, Any], owner: str, run_id: str
+) -> bool:
+    """Keep routing metadata current without turning it into a workflow lock."""
+    previous = state.get("expected_owner")
+    if previous == owner:
+        return False
+    state.setdefault("routing_adoptions", []).append(
+        {
+            "kind": "owner",
+            "previous_owner": previous,
+            "owner": owner,
+            "run_id": run_id,
+            "recorded_at": _iso(_now()),
+        }
+    )
+    state["expected_owner"] = owner
+    return True
+
+
+def _adopt_clean_head(
+    state: dict[str, Any],
+    worktree_root: Path,
+    owner: str,
+    run_id: str,
+) -> tuple[str, bool]:
+    """Follow a clean linear task checkpoint instead of blocking on stale metadata."""
+    head = _verify_worktree(state, worktree_root)
+    previous = state.get("head_sha")
+    if previous == head:
+        return head, False
+    worktree = _worktree_path(state, worktree_root)
+    base = state.get("base_sha")
+    if not isinstance(base, str) or (
+        _git(
+            worktree,
+            "merge-base",
+            "--is-ancestor",
+            base,
+            head,
+            check=False,
+        ).returncode
+        != 0
+    ):
+        raise ContractError("task worktree HEAD is outside the recorded slice history")
+    state.setdefault("routing_adoptions", []).append(
+        {
+            "kind": "head",
+            "previous_head_sha": previous,
+            "head_sha": head,
+            "owner": owner,
+            "run_id": run_id,
+            "recorded_at": _iso(_now()),
+        }
+    )
+    state["head_sha"] = head
+    return head, True
 
 
 def _active_states(state_root: Path) -> list[str]:
@@ -386,9 +440,11 @@ def _adopt(args: argparse.Namespace) -> dict[str, Any]:
             "control_merge_sha": None,
             "recovery": [],
             "checkpoint_adoptions": [],
+            "routing_adoptions": [],
             "recovery_resume_owner": None,
             "recovery_resume_phase": None,
             "adopted_at": _iso(_now()),
+            "adopted_by_run_id": run_id,
             "updated_at": _iso(_now()),
             "cleaned_at": None,
         }
@@ -405,15 +461,21 @@ def _claim(args: argparse.Namespace) -> dict[str, Any]:
         state = _read_state(state_path)
         if state["phase"] in TERMINAL_PHASES or state["phase"] == "blocked":
             raise ContractError("terminal or blocked slice cannot be claimed")
-        _require_expected_owner(state, owner)
+        changed = _adopt_expected_owner(state, owner, run_id)
         dirty_recovery = state["phase"] == IMPLEMENTATION_RECOVERY_PHASE
         if dirty_recovery and state.get("primary_implementer") != owner:
             raise ContractError("dirty recovery is reserved for the primary implementer")
-        head = _verify_worktree(state, worktree_root, clean=not dirty_recovery)
-        if head != state["head_sha"]:
-            raise ContractError("task worktree HEAD differs from handed-off HEAD")
+        if dirty_recovery:
+            head = _verify_worktree(state, worktree_root, clean=False)
+            if head != state["head_sha"]:
+                raise ContractError("dirty recovery HEAD is outside its recorded checkpoint")
+        else:
+            head, head_changed = _adopt_clean_head(state, worktree_root, owner, run_id)
+            changed = changed or head_changed
         if state.get("lease") is not None:
             state["lease"] = None
+            changed = True
+        if changed:
             state["updated_at"] = _iso(_now())
             _write_state(state_path, state)
         return state
@@ -431,7 +493,7 @@ def _handoff(args: argparse.Namespace) -> dict[str, Any]:
     state_path = _state_path(state_root, args.issue_key)
     with _state_lock(state_path):
         state = _read_state(state_path)
-        _require_expected_owner(state, owner)
+        _adopt_expected_owner(state, owner, run_id)
         if state["phase"] == IMPLEMENTATION_RECOVERY_PHASE and (
             owner != state.get("primary_implementer")
             or next_owner != CTO
@@ -474,7 +536,7 @@ def _reject(args: argparse.Namespace) -> dict[str, Any]:
     state_path = _state_path(state_root, args.issue_key)
     with _state_lock(state_path):
         state = _read_state(state_path)
-        _require_expected_owner(state, owner)
+        _adopt_expected_owner(state, owner, run_id)
         if state["phase"] != "code_review":
             raise ContractError("rejection is allowed only during code_review")
         if owner != REVIEWER or next_owner != state.get("primary_implementer"):
@@ -505,7 +567,7 @@ def _approve(args: argparse.Namespace) -> dict[str, Any]:
     state_path = _state_path(state_root, args.issue_key)
     with _state_lock(state_path):
         state = _read_state(state_path)
-        _require_expected_owner(state, owner)
+        _adopt_expected_owner(state, owner, run_id)
         if state["phase"] != "code_review":
             raise ContractError("approval is allowed only during code_review")
         if owner != REVIEWER or next_owner != CTO:
@@ -534,10 +596,20 @@ def _block(args: argparse.Namespace) -> dict[str, Any]:
     state_path = _state_path(state_root, args.issue_key)
     with _state_lock(state_path):
         state = _read_state(state_path)
-        _require_expected_owner(state, owner)
+        _adopt_expected_owner(state, owner, run_id)
         head = _verify_worktree(state, worktree_root, clean=False)
         if head != state["head_sha"]:
-            raise ContractError("task worktree HEAD differs from recorded HEAD")
+            state.setdefault("routing_adoptions", []).append(
+                {
+                    "kind": "head",
+                    "previous_head_sha": state.get("head_sha"),
+                    "head_sha": head,
+                    "owner": owner,
+                    "run_id": run_id,
+                    "recorded_at": _iso(_now()),
+                }
+            )
+            state["head_sha"] = head
         blocked_at = _iso(_now())
         state.setdefault("block_history", []).append(
             {
@@ -581,8 +653,7 @@ def _resume_blocked(args: argparse.Namespace) -> dict[str, Any]:
         state = _read_state(state_path)
         if state["phase"] != "blocked":
             raise ContractError("only a blocked slice may be resumed")
-        if state.get("expected_owner") is not None or state.get("lease") is not None:
-            raise ContractError("blocked slice still has an owner or lease")
+        state["lease"] = None
         if any(
             state.get(field)
             for field in ("android_merge_sha", "control_merge_sha", "cleaned_at")
@@ -590,12 +661,38 @@ def _resume_blocked(args: argparse.Namespace) -> dict[str, Any]:
             raise ContractError("blocked slice merge or cleanup has already started")
 
         head = _verify_worktree(state, worktree_root, clean=False)
-        if head != state["head_sha"]:
-            raise ContractError("task worktree HEAD differs from recorded HEAD")
         worktree = _worktree_path(state, worktree_root)
         dirty = bool(
             _git(worktree, "status", "--porcelain", "--untracked-files=all").stdout
         )
+
+        if head != state["head_sha"]:
+            if dirty:
+                raise ContractError("dirty blocked worktree advanced beyond its recorded checkpoint")
+            base = state.get("base_sha")
+            if not isinstance(base, str) or (
+                _git(
+                    worktree,
+                    "merge-base",
+                    "--is-ancestor",
+                    base,
+                    head,
+                    check=False,
+                ).returncode
+                != 0
+            ):
+                raise ContractError("blocked worktree HEAD is outside the recorded slice history")
+            state.setdefault("routing_adoptions", []).append(
+                {
+                    "kind": "head",
+                    "previous_head_sha": state.get("head_sha"),
+                    "head_sha": head,
+                    "owner": operator,
+                    "run_id": operator_run_id,
+                    "recorded_at": _iso(_now()),
+                }
+            )
+            state["head_sha"] = head
 
         if dirty:
             if (
@@ -606,10 +703,8 @@ def _resume_blocked(args: argparse.Namespace) -> dict[str, Any]:
                     "dirty blocked worktree must resume to its primary implementer "
                     "for implementation recovery"
                 )
-        elif next_owner != CTO or args.next_phase != PLAN_REVISION_PHASE:
-            raise ContractError(
-                "clean blocked worktree must resume to GlitcherryCTO plan revision"
-            )
+        # A clean checkpoint may return directly to the HEL-authorized next
+        # phase. Requiring a synthetic CTO plan-revision hop was a workflow lock.
 
         resumed_at = _iso(_now())
         state.setdefault("blocked_resumes", []).append(
@@ -643,17 +738,14 @@ def _recover(args: argparse.Namespace) -> dict[str, Any]:
     expected_owner = _validate_owner(args.expected_owner)
     expected_run = _validate_run_id(args.expected_run_id)
     if args.terminated_run_id != expected_run:
-        raise ContractError("terminated run proof does not match the active lease")
+        raise ContractError("terminated run proof does not match the recorded run")
     if operator != CTO:
-        raise ContractError("only GlitcherryCTO may recover a slice lease")
+        raise ContractError("only GlitcherryCTO may record runtime recovery")
     if len(args.evidence.strip()) < 12:
         raise ContractError("recovery requires bounded exact-run evidence")
     state_path = _state_path(state_root, args.issue_key)
     with _state_lock(state_path):
         state = _read_state(state_path)
-        lease = state.get("lease")
-        if not lease or lease.get("owner") != expected_owner or lease.get("run_id") != expected_run:
-            raise ContractError("recovery target does not match the active lease")
         state["recovery"].append(
             {
                 "owner": expected_owner,
@@ -697,12 +789,8 @@ def _adopt_recovery_checkpoint(args: argparse.Namespace) -> dict[str, Any]:
         state = _read_state(state_path)
         if (
             state.get("phase") != "recovery"
-            or state.get("expected_owner") != CTO
-            or state.get("lease") is not None
         ):
-            raise ContractError(
-                "checkpoint adoption requires unleased CTO recovery state"
-            )
+            raise ContractError("checkpoint adoption requires recovery state")
         if any(
             state.get(field)
             for field in ("android_merge_sha", "control_merge_sha", "cleaned_at")
@@ -820,7 +908,7 @@ def _record_merge(args: argparse.Namespace) -> dict[str, Any]:
     state_path = _state_path(state_root, args.issue_key)
     with _state_lock(state_path):
         state = _read_state(state_path)
-        _require_expected_owner(state, owner)
+        _adopt_expected_owner(state, owner, run_id)
         if owner != CTO:
             raise ContractError("only GlitcherryCTO may record merge evidence")
         if state["phase"] not in {"review_approved", "integrating"}:
@@ -854,7 +942,7 @@ def _prepare_cleanup(args: argparse.Namespace) -> dict[str, Any]:
     state_path = _state_path(state_root, args.issue_key)
     with _state_lock(state_path):
         state = _read_state(state_path)
-        _require_expected_owner(state, owner)
+        _adopt_expected_owner(state, owner, run_id)
         if owner != CTO:
             raise ContractError("only GlitcherryCTO may prepare an integrated slice for cleanup")
         if not state.get("android_merge_sha") or not state.get("control_merge_sha"):
