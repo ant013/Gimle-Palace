@@ -87,32 +87,74 @@ the exact `company -> agent -> run -> PID`, prove the prior run stopped or was
 terminated, preserve dirty/unmerged state, record evidence, and resume the same
 slice. Never use broad process-name matching or broad `pkill`.
 
-## Human decision pause — do not controller-block
+## Standing autonomous correction policy
 
-Needing a product or technical decision from the Human Engineering Lead is a
-pause, not a terminal controller failure. Do not call the controller `block`
-command merely to wait for a Board answer.
+<!-- GLITCHERRY_STANDING_AUTONOMY_V1 -->
 
-1. The current owner records the concrete question and evidence. If its worktree
-   is dirty, only the primary implementer creates one clearly named local WIP
-   commit containing the current slice work. Do not push or open a PR.
-2. Hand the clean exact HEAD to `GlitcherryCTO / plan_revision` in the same
-   issue, branch, and worktree.
-3. The CTO claims that HEAD, creates the structured Board interaction, then
-   releases its lease by handing the unchanged HEAD to itself in
-   `plan_revision`. Set the Paperclip child to `in_review` and stop.
-4. The answered interaction wakes the same CTO-owned child. The new CTO run
-   claims the same worktree, applies the decision to the existing plan, commits,
-   and routes the exact plan HEAD through independent review before returning
-   implementation to the recorded primary implementer.
+The Human Engineering Lead grants a permanent, project-wide delegation for
+bounded corrections inside an approved slice. This is not tied to GLA-41, TP1,
+or one plan revision. Correcting actual buggy behavior so it conforms to the
+already approved behavior does not change the approved product contract.
 
-An answered structured Human Engineering Lead delegation may authorize a named,
-bounded correction class for CTO plus independent Code Reviewer. A plan revision
-inside that delegation proceeds without duplicate confirmation only when product
-behavior, roadmap or slice scope/order, production dependency, toolchain, or API
-floor, quality threshold or pass/fail meaning, and every accepted ADR or
-architecture decision are unchanged. Ambiguity returns one structured question
-to the Human Engineering Lead; agents never broaden the delegation themselves.
+The primary implementer fixes product code, tests, fixtures, harnesses,
+diagnostics, verification tooling, synchronization, parsing, evidence capture,
+and local build wiring autonomously when the approved behavior/acceptance,
+threshold and pass/fail meaning, roadmap/scope/order, production dependencies,
+toolchain/API floor, accepted ADRs, explicitly named architecture boundaries,
+security policy, and single-writer ownership remain unchanged. Reversible
+internal implementation choices inside those boundaries belong to CTO plus the
+primary implementer and independent Code Reviewer; the word "architecture" by
+itself never creates a human gate.
+
+Use these exact routes:
+
+- A finding made by the implementer before review stays in `implementation` or
+  `implementation_fix`; correct it, commit, run focused checks, and hand the new
+  clean HEAD to `GlitcherryCodeReviewer / code_review`.
+- A Code Reviewer finding uses controller `reject` to the recorded primary
+  implementer. The controller enters `implementation_fix`; the corrected new
+  HEAD returns to `code_review` on the same PR.
+- Initially ambiguous evidence is committed if legitimate slice work is dirty,
+  then handed to `GlitcherryCTO / technical_triage`. CTO classifies it against
+  the pinned contract and hands the unchanged clean HEAD to the recorded primary
+  implementer in `implementation`. It does not revise the plan merely to narrate
+  the correction.
+- A clean correction-only incident already in controller `blocked` resumes by
+  supported `resume-blocked` to `GlitcherryCTO / plan_revision`, using the
+  accepted standing-policy merge SHA as decision evidence. CTO claims it, makes
+  no synthetic plan edit, and hands the unchanged HEAD to the recorded primary
+  implementer in `implementation`.
+- A dirty correction-only incident already in `blocked` resumes to the recorded
+  primary implementer in `implementation_recovery`. That implementer preserves
+  legitimate files in one commit and hands them to CTO in `plan_revision`; CTO
+  makes no synthetic plan edit and routes the clean HEAD back to that implementer
+  in `implementation`.
+- A correction discovered after Code Review approval invalidates that approval.
+  CTO returns the clean HEAD to the primary implementer in `implementation`; the
+  new correction HEAD must pass `code_review` again before integration.
+
+Local implementer attempts before the first Code Review do not consume a review
+cycle. Every controller `reject` from `code_review` consumes exactly one of the
+three cycles, for product or support code alike. CTO routing never resets or
+bypasses this counter.
+
+A harness, fixture, emulator-startup, adb-transport, or evidence-capture attempt
+that fails before valid application evidence does not consume a product
+verification attempt. Each new clean correction HEAD gets the one focused rerun
+needed to verify its correction and affected acceptance criterion. Do not retry
+an unchanged failing HEAD, run a full matrix/per-slice QA, add a second emulator,
+or weaken a threshold or pass/fail meaning.
+
+Board interaction is reserved for changing approved product behavior or
+acceptance, a threshold/pass-fail meaning, roadmap/slice scope/order/READY state,
+production dependency, toolchain/API floor, a cited accepted ADR or explicitly
+named architecture boundary, credentials, signing/publication, destructive
+external authority, or a sprint/stage gate. A real conflict between current
+authoritative contracts also returns one structured question. For that human
+decision only: preserve legitimate dirty work in one implementer WIP commit,
+hand the clean HEAD to `GlitcherryCTO / plan_revision`, create one interaction,
+and wait on the same issue/worktree. After the answer, CTO applies any required
+plan change and routes the exact plan revision through independent review.
 
 Use controller `block` only when there is genuinely no safe next transition.
 When a previously blocked decision is later resolved, never edit controller JSON
@@ -189,19 +231,32 @@ writer stops the handoff; it never creates a replacement plan or issue.
 Exact-revision Human Engineering Lead confirmation is mandatory when a revision
 introduces or changes product behavior, roadmap or slice scope/order, a
 production dependency, toolchain, or API floor, a quality threshold or
-pass/fail meaning, an accepted ADR or architecture decision, or another choice
-reserved to the Human Engineering Lead. No additional confirmation is required
-when a structured Human Engineering Lead delegation explicitly covers the named
-correction, the revision remains within it, all those decision dimensions are
-unchanged, the mirror is byte-identical, and the independent reviewer approves
-the exact changed HEAD.
+pass/fail meaning, a cited accepted ADR or explicitly named architecture
+boundary, or another choice reserved to the Human Engineering Lead. The standing
+autonomous correction policy is sufficient authority when every listed decision
+dimension is unchanged, the mirror is byte-identical, and the independent
+reviewer approves the exact changed HEAD; no issue-specific delegation or
+duplicate confirmation is required.
+
+Acceptance criteria, explicit contract invariants, security constraints,
+accepted ADRs, named architecture boundaries, and a file allowlist explicitly
+marked `strict` are mandatory. Implementation sketches, helper names, ordinary
+file estimates, assertion mechanics, fixture seeding, synchronization, parsing,
+and other incidental mechanics are guidance unless the approved acceptance
+contract makes them observable. Crossing into a new module or named layer needs
+CTO disposition and independent review, not Board confirmation, when the
+reserved decision dimensions stay unchanged. An assertion proving an explicit
+acceptance criterion/numeric threshold, or the only remaining evidence for an
+acceptance criterion, cannot be removed or weakened; an unstated internal-detail
+assertion may be repaired or replaced only with equally strong or stronger
+stable evidence of the approved behavior.
 
 The reviewer stays read-only. It first verifies the exact HEAD/hash/revision
 tuple and returns an absent, stale, or divergent mirror as one consolidated
 process finding to CTO before technical review. Once synchronized, it either
 approves the exact plan HEAD for one named implementer or returns one
 consolidated technical finding list. It must not add a duplicate human gate when
-the recorded delegation classifier above is fully satisfied.
+the standing autonomous correction classifier above is fully satisfied.
 
 ### Phase 4 — Implementation by exactly one engineer
 
@@ -209,11 +264,13 @@ Owner: either `GlitcherryAndroidEngineer` or
 `GlitcherryMediaPipelineEngineer`, never both as writers.
 
 The assigned implementer claims the same approved worktree/HEAD, reads its
-tracked `AGENTS.md`, makes only plan-traceable code/test changes, and creates
-focused local commits. It runs risk-scaled targeted checks only. When the first
-implementation head is reviewable, it pushes the task branch, opens one PR whose
-base is exactly `develop`, records the PR/head, hands the clean exact HEAD to
-`GlitcherryCodeReviewer` for `code_review`, and stops.
+tracked `AGENTS.md`, makes changes traceable to the approved acceptance contract
+and the plan hierarchy above, and creates focused local commits. It applies the
+standing autonomous correction policy during implementation and bounded checks;
+an envelope-safe finding is fixed on the same lease/branch without CTO or Board.
+When the first implementation head is reviewable, it pushes the task branch,
+opens one PR whose base is exactly `develop`, records the PR/head, hands the clean
+exact HEAD to `GlitcherryCodeReviewer` for `code_review`, and stops.
 
 ### Phase 5 — Exact-head code and architecture review
 
@@ -232,7 +289,9 @@ Code Review rejection/fix/re-review cycles. After the third correction, the next
 reviewer decision must be exact-head approval or API status `blocked` with
 `LOCAL_BLOCKED`; a fourth autonomous correction loop is forbidden. Non-blocking
 suggestions do not reject or increment the counter. Scope/spec gaps go to the CTO
-and are not disguised as code defects.
+and are not disguised as code defects. Product-code and support-code findings
+inside the standing envelope both return directly through `reject`; they do not
+trigger a plan revision or Board interaction. Reviewer never fixes them.
 
 Approval records `reviewed_head` and hands the lease directly to
 `GlitcherryCTO`. QA does not run inside a normal slice.
@@ -351,7 +410,15 @@ Never write the Paperclip database directly.
 - Missing/mismatched Project or execution workspace identity stops work. A
   role-specific workspace mismatch is not a condition because all roles share
   one Project workspace.
-- Undefined product, media fallback, API-floor, format, device, credential, or
-  release decision blocks rather than being guessed.
+- Missing authority that actually requires changing the approved product,
+  acceptance, roadmap, production dependency/toolchain/API floor, cited ADR,
+  named architecture boundary, credential, or release decision blocks rather
+  than being guessed. Internal implementation uncertainty is CTO technical
+  triage, not a Board stop.
+- Unavailability of Serena, codebase-memory, Context7, or another advisory MCP is
+  not a blocker. Record it and continue with the remaining indexed tool plus
+  targeted `rg`, local reads, compiler/test output, and official Android docs;
+  stop only when the active acceptance contract explicitly requires that exact
+  tool and no equivalent evidence path exists.
 - Agents never release, sign, tag, publish, merge to `main`, or use operator
   secrets.

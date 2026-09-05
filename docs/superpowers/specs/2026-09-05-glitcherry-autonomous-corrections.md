@@ -1,7 +1,7 @@
 # Glitcherry autonomous correction policy
 
 Date: 2026-09-05  
-Status: PROPOSED  
+Status: APPROVED
 Branch: `feature/glitcherry-autonomous-corrections`  
 Baseline: `da3e67763b026198f14b1d62cc301651e0607102` (`origin/develop`)
 
@@ -42,15 +42,17 @@ exception tied to GLA-41, TP1, or a particular plan revision.
 
 The current primary implementer may diagnose, edit, commit, push, run bounded
 checks, and return to Code Review on the existing issue/worktree/branch/PR when
-all of the following remain unchanged:
+the approved intent and contract remain unchanged. Correcting actual buggy
+behavior so it conforms to the already approved behavior is explicitly inside
+this envelope. All of the following contract dimensions must remain unchanged:
 
 - user-visible behavior and approved acceptance criteria;
 - acceptance threshold and the meaning of pass/fail;
 - roadmap, sprint, slice scope, order, and READY state;
 - production dependencies, toolchain versions, `minSdk`, `targetSdk`, and API
   floor;
-- accepted ADRs, architecture boundaries, security policy, and ownership of the
-  single primary writer;
+- accepted ADRs, explicitly named cross-slice or cross-module architecture
+  boundaries, security policy, and ownership of the single primary writer;
 - credentials, signing, publishing, and destructive external actions.
 
 This envelope includes:
@@ -90,21 +92,68 @@ it before acting:
    implementation.
 4. Evidence is initially ambiguous: the CTO makes the technical classification
    from the pinned contract and routes the same issue to the correct existing
-   owner. Ambiguity alone is not a reason to ask the Board.
+   owner. Ambiguity alone is not a reason to ask the Board. Reversible internal
+   implementation choices inside accepted boundaries belong to CTO plus the
+   primary implementer and independent Code Reviewer.
 
 `ROADMAP_BLOCKED` or a structured Board interaction is allowed only when the
 correction cannot be made without changing one of the reserved dimensions
 listed above, the authoritative contracts actually conflict, or the required
 action needs human-only credentials, signing, publication, a stage-gate ruling,
-or unsafe/destructive external authority.
+or unsafe/destructive external authority. "Architecture" alone is not a reason:
+the proposed correction must change a cited accepted ADR or an explicitly named
+architecture boundary before it becomes a Board decision.
+
+### Executable controller routes
+
+The instruction implementation must name these exact supported routes. It must
+not leave phase names to individual agents:
+
+| Starting situation | Required controller route |
+| --- | --- |
+| Implementer finds an envelope-safe defect before review | Keep the current `implementation` or `implementation_fix` lease, correct it, commit, run focused checks, then hand off the clean HEAD to `GlitcherryCodeReviewer / code_review`. |
+| Code Reviewer finds a product or support-code defect | Use controller `reject` to the recorded primary implementer. The controller sets `implementation_fix`; the implementer corrects the same PR and returns the new HEAD to `code_review`. |
+| Implementer cannot initially classify evidence | Commit any legitimate dirty slice work, then `handoff` the clean HEAD to `GlitcherryCTO / technical_triage`. CTO claims it and, without editing the plan, hands the unchanged HEAD to the recorded primary implementer in `implementation`. |
+| A clean correction-only incident was already controller-blocked | CTO uses supported `resume-blocked` to `GlitcherryCTO / plan_revision` with the accepted autonomy-policy merge SHA as decision evidence, claims it, makes no synthetic plan edit, and hands the unchanged HEAD to the recorded primary implementer in `implementation`. |
+| A dirty correction-only incident was already controller-blocked | CTO uses supported `resume-blocked` to the recorded primary implementer in `implementation_recovery`; that implementer preserves legitimate work in one commit and hands it to `GlitcherryCTO / plan_revision`; CTO makes no synthetic plan edit and routes the clean HEAD to that implementer in `implementation`. |
+| A correction is discovered after exact-head Code Review approval but before merge | Do not merge the stale approval. CTO hands the clean approved HEAD to the primary implementer in `implementation`; the new correction HEAD must return through `code_review`. |
+
+No direct controller JSON/database edit, replacement issue/worktree/branch, or
+review-counter reset is allowed. A local implementer attempt before the first
+Code Review does not consume a rejection cycle. Each controller `reject` from
+`code_review` consumes exactly one cycle whether it identifies product code or
+support code. CTO routing must never be used to bypass that counter.
+
+### Focused replacement runs
+
+A harness, fixture, emulator-startup, adb-transport, or evidence-capture attempt
+that fails before producing valid application evidence does not consume a
+product verification attempt. After an envelope-safe fix is committed, each new
+clean correction HEAD receives the one focused rerun needed to verify that
+correction and the affected acceptance criterion. This does not authorize a
+second emulator, a full matrix, per-slice QA, repeated unchanged-HEAD retries,
+or any threshold/pass-fail relaxation.
 
 ### Plans describe intent, not incidental mechanics
 
 A plan must map acceptance criteria to implementation ownership and
-verification, but exact helper names, file lists, assertion mechanics, fixture
-seeding mechanics, synchronization details, parser implementation, and other
-incidental details are not frozen requirements unless the approved acceptance
-contract explicitly makes them observable.
+verification. Acceptance criteria, explicit contract invariants, security
+constraints, accepted ADRs, named architecture boundaries, and a file allowlist
+explicitly marked `strict` remain mandatory. An implementation sketch, helper
+names, ordinary file estimates, assertion mechanics, fixture seeding mechanics,
+synchronization details, parser implementation, and other incidental details
+are not frozen requirements unless the approved acceptance contract explicitly
+makes them observable. Moving into a new module or across a named layer requires
+CTO disposition and independent review, but not Board confirmation when every
+reserved contract dimension remains unchanged.
+
+An assertion that proves an explicit acceptance criterion, numeric threshold,
+or the only remaining evidence for an acceptance criterion cannot be removed or
+weakened autonomously. An assertion about an unstated internal detail may be
+repaired or replaced when an equally strong or stronger stable proof of the
+approved behavior remains. Implementer/reviewer disagreement is classified by
+CTO against the pinned contract; Board is required only when that contract is
+insufficient or must change.
 
 If a bounded correction stays inside the autonomous envelope, the implementer
 records it in commit and issue evidence. The CTO does not revise the tracked
@@ -172,8 +221,13 @@ equivalent evidence path exists.
   - carry the permanent standing-delegation summary and MCP fallback to all six
     generated roles.
 - `paperclips/tests/test_glitcherry_android_assembly.py`
-  - assert the policy in workflow/source roles and all rendered roles, and
-    assert preserved human-only and safety boundaries.
+  - scenario-style assertions over workflow/source roles and all rendered roles,
+    including removal of conflicting legacy language and preservation of
+    human-only and role-write boundaries.
+- `paperclips/tests/test_glitcherry_slice_worktree.py`
+  - exercise the supported implementer/reviewer/CTO routes, legacy clean/dirty
+    correction-only recovery, stale approval invalidation, and unchanged review
+    rejection counter semantics.
 - Generated `paperclips/dist/glitcherry-android*` assembly artifacts
   - rebuild from source; never hand-edit.
 
@@ -206,33 +260,59 @@ instruction-only change.
    cleanup, and three-review-cycle safeguards remain intact.
 8. Advisory MCP failure has an explicit local-tool fallback and is not listed as
    an unconditional blocker.
-9. No full sprint smoke or per-slice QA is introduced; TP1 still stops only
+9. A failed support/infrastructure attempt without application evidence does not
+   consume the product attempt; one focused rerun is allowed for each new clean
+   correction HEAD without relaxing acceptance.
+10. Scenario tests prove the exact supported controller routes for findings
+    before review, reviewer rejection, CTO technical triage, correction-only
+    blocked recovery, and a correction after stale approval.
+11. Common instructions do not expand write authority: CEO remains outside the
+    normal slice chain, QA remains sprint-smoke-only, Code Reviewer remains
+    read-only, and only the primary implementer writes corrections.
+12. No full sprint smoke or per-slice QA is introduced; TP1 still stops only
    after its final slice at `SPRINT_SMOKE_REQUIRED`.
-10. The project assembly builds, instruction validation passes, Glitcherry
+13. The project assembly builds, instruction validation passes, Glitcherry
     assembly regression tests pass, and `git diff --check` is clean.
-11. The implementation branch is merged to `develop`, the Glitcherry bundle is
+14. The implementation branch is merged to `develop`, the Glitcherry bundle is
     deployed from that merged result, and live read-back proves every Paperclip
     role's generated instructions contain the durable policy marker.
-12. The active GLA-41 task branch/worktree/controller/PR and Android/control
+15. Live read-back also proves byte-for-byte SHA-256 equality between each of the
+    six rendered files and its deployed instruction bundle, with agent IDs,
+    models, reasoning effort, reports-to bindings, and workspaces unchanged.
+16. The active GLA-41 task branch/worktree/controller/PR and Android/control
     repository contents are not modified by this change.
 
 ## Verification plan
 
-1. Run focused source assertions covering the workflow and four participating
-   role files.
-2. Build the Glitcherry project assembly with the repository's compatibility
+1. Run scenario-style source assertions covering the workflow, four
+   participating role files, all generated roles, forbidden legacy language,
+   and unchanged CEO/QA/reviewer write boundaries.
+2. Run focused controller tests for every row in the executable route table and
+   prove only real `CodeReviewer reject` transitions increment the durable
+   rejection counter.
+3. Build the Glitcherry project assembly with the repository's compatibility
    builder.
-3. Run `paperclips/scripts/validate_instructions.py`.
-4. Run
+4. Run `paperclips/scripts/validate_instructions.py`.
+5. Run
    `python3 -m pytest paperclips/tests/test_glitcherry_android_assembly.py -q`.
-5. Run `git diff --check` and inspect the changed-file allowlist.
-6. Push the implementation head, review the exact diff, merge to `develop`, and
+6. Run the focused Glitcherry controller test file.
+7. Run `git diff --check` and inspect the changed-file allowlist.
+8. Push the implementation head, review the exact diff, merge to `develop`, and
    verify the merge SHA is reachable from `origin/develop`.
-7. On the iMac, deploy Glitcherry instructions from the merged `develop` result
-   with the supported agent deploy script.
-8. Read back the six live instruction files/API bindings and prove the permanent
-   marker is present without changing role models, workspaces, or the active
-   GLA-41 controller tuple.
+9. The Human Engineering Lead explicitly authorizes immediate Glitcherry
+   instruction deployment from the exact merged `develop` SHA. On the iMac run:
+
+   ```bash
+   bash paperclips/scripts/imac-agents-deploy.sh \
+     glitcherry-android \
+     --target-sha <exact-develop-merge-sha>
+   ```
+
+10. Read back all six live instruction files/API bindings. Prove SHA-256 equality
+    with the corresponding rendered files and prove the permanent marker is
+    present without changing agent IDs, models, reasoning effort, reports-to
+    bindings, Project/execution workspaces, or the active GLA-41 controller
+    tuple.
 
 ## Rollback
 

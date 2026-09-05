@@ -672,7 +672,45 @@ def test_recovery_checkpoint_adoption_rejects_divergence_merge_and_replay(
     assert replay_state_path.read_bytes() == replay_state
 
 
-def test_clean_blocked_slice_resumes_to_cto_plan_revision(tmp_path: Path) -> None:
+def test_technical_triage_returns_to_same_implementer_without_review_rejection(
+    tmp_path: Path,
+) -> None:
+    fixture = _fixture(tmp_path)
+    _create(fixture)
+    _, engineer_run = _route_to_implementation(fixture)
+    head = _state(fixture)["head_sha"]
+
+    triage = _handoff(
+        fixture,
+        "GlitcherryAndroidEngineer",
+        engineer_run,
+        "GlitcherryCTO",
+        "technical_triage",
+    )
+    assert triage.returncode == 0, triage.stderr
+    assert _claim(fixture, "GlitcherryCTO", "run-cto-triage").returncode == 0
+    routed = _handoff(
+        fixture,
+        "GlitcherryCTO",
+        "run-cto-triage",
+        "GlitcherryAndroidEngineer",
+        "implementation",
+    )
+    assert routed.returncode == 0, routed.stderr
+    state = _state(fixture)
+    assert state["head_sha"] == head
+    assert state["primary_implementer"] == "GlitcherryAndroidEngineer"
+    assert state["review_rejections"] == 0
+    assert _claim(
+        fixture,
+        "GlitcherryAndroidEngineer",
+        "run-engineer-after-triage",
+    ).returncode == 0
+
+
+def test_clean_blocked_slice_resumes_and_routes_without_synthetic_plan_edit(
+    tmp_path: Path,
+) -> None:
     fixture = _fixture(tmp_path)
     created = _create(fixture)
 
@@ -697,6 +735,22 @@ def test_clean_blocked_slice_resumes_to_cto_plan_revision(tmp_path: Path) -> Non
 
     claimed = _claim(fixture, "GlitcherryCTO", "run-cto-plan-revision")
     assert claimed.returncode == 0, claimed.stderr
+    routed = _handoff(
+        fixture,
+        "GlitcherryCTO",
+        "run-cto-plan-revision",
+        "GlitcherryAndroidEngineer",
+        "implementation",
+    )
+    assert routed.returncode == 0, routed.stderr
+    state = _state(fixture)
+    assert state["head_sha"] == created["head_sha"]
+    assert state["review_rejections"] == 0
+    assert _claim(
+        fixture,
+        "GlitcherryAndroidEngineer",
+        "run-engineer-after-block",
+    ).returncode == 0
 
 
 def test_dirty_blocked_slice_requires_primary_implementer_recovery(
@@ -767,6 +821,92 @@ def test_dirty_blocked_slice_requires_primary_implementer_recovery(
         "GlitcherryCTO",
         "run-cto-plan-revision",
     ).returncode == 0
+    routed = _handoff(
+        fixture,
+        "GlitcherryCTO",
+        "run-cto-plan-revision",
+        "GlitcherryAndroidEngineer",
+        "implementation",
+    )
+    assert routed.returncode == 0, routed.stderr
+    assert _state(fixture)["review_rejections"] == 0
+    assert _claim(
+        fixture,
+        "GlitcherryAndroidEngineer",
+        "run-engineer-after-dirty-recovery",
+    ).returncode == 0
+
+
+def test_correction_after_approval_requires_fresh_exact_head_review(
+    tmp_path: Path,
+) -> None:
+    fixture = _fixture(tmp_path)
+    _create(fixture)
+    worktree, reviewer_run = _route_to_code_review(fixture)
+    approved_head = _state(fixture)["head_sha"]
+
+    approved = _run(
+        fixture,
+        "approve",
+        "--issue-key",
+        "GLA-123",
+        "--owner",
+        "GlitcherryCodeReviewer",
+        "--run-id",
+        reviewer_run,
+        "--next-owner",
+        "GlitcherryCTO",
+    )
+    assert approved.returncode == 0, approved.stderr
+    assert _state(fixture)["reviewed_head"] == approved_head
+    assert _claim(fixture, "GlitcherryCTO", "run-cto-after-approval").returncode == 0
+    assert _handoff(
+        fixture,
+        "GlitcherryCTO",
+        "run-cto-after-approval",
+        "GlitcherryAndroidEngineer",
+        "implementation",
+    ).returncode == 0
+
+    engineer_run = "run-engineer-post-approval-fix"
+    assert _claim(fixture, "GlitcherryAndroidEngineer", engineer_run).returncode == 0
+    (worktree / "post-approval-fix.txt").write_text("fresh review required\n")
+    _git("add", "post-approval-fix.txt", cwd=worktree)
+    _git("commit", "-m", "GLA-123 post-approval correction", cwd=worktree)
+    correction_head = _git("rev-parse", "HEAD", cwd=worktree).stdout.strip()
+    assert correction_head != approved_head
+    assert _handoff(
+        fixture,
+        "GlitcherryAndroidEngineer",
+        engineer_run,
+        "GlitcherryCodeReviewer",
+        "code_review",
+    ).returncode == 0
+    state = _state(fixture)
+    assert state["head_sha"] == correction_head
+    assert state["reviewed_head"] == approved_head
+    assert state["review_rejections"] == 0
+
+    second_review_run = "run-review-post-approval-fix"
+    assert _claim(
+        fixture,
+        "GlitcherryCodeReviewer",
+        second_review_run,
+    ).returncode == 0
+    reapproved = _run(
+        fixture,
+        "approve",
+        "--issue-key",
+        "GLA-123",
+        "--owner",
+        "GlitcherryCodeReviewer",
+        "--run-id",
+        second_review_run,
+        "--next-owner",
+        "GlitcherryCTO",
+    )
+    assert reapproved.returncode == 0, reapproved.stderr
+    assert _state(fixture)["reviewed_head"] == correction_head
 
 
 def test_blocked_resume_rejections_leave_state_unchanged(tmp_path: Path) -> None:

@@ -373,10 +373,13 @@ owns it.
 
 ## Outputs and completion evidence
 
-Create the smallest plan-traceable code/tests and focused local commits in the
-same task worktree. Run targeted risk-scaled checks. Push/open the one PR to
-`develop` only when first reviewable; every correction updates that same PR.
-Handoff a clean committed exact HEAD to `GlitcherryCodeReviewer`.
+Create the smallest code/tests traceable to the approved acceptance contract and
+focused local commits in the same task worktree. Plan sketches and incidental
+mechanics are guidance; explicit acceptance/invariants, security constraints,
+accepted ADRs/named boundaries, and `strict` allowlists remain mandatory. Run
+targeted risk-scaled checks. Push/open the one PR to `develop` only when first
+reviewable; every correction updates that same PR. Handoff a clean committed
+exact HEAD to `GlitcherryCodeReviewer`.
 
 ## Allowed actions
 
@@ -384,6 +387,12 @@ Handoff a clean committed exact HEAD to `GlitcherryCodeReviewer`.
 - Commit locally; push/update only that branch and its existing PR.
 - Request one bounded read-only Media boundary finding when needed.
 - Correct consolidated review blockers on the same worktree/branch/PR.
+- Under the standing autonomous correction policy, correct product code, tests,
+  fixtures, harnesses, diagnostics,
+  evidence capture, parsing/synchronization, and local build wiring when doing so
+  brings actual behavior to the already approved contract without changing its
+  behavior/acceptance meaning, thresholds, scope/order, production dependencies,
+  toolchain/API floor, accepted ADRs/named boundaries, security, or writer.
 
 ## Forbidden actions
 
@@ -395,8 +404,17 @@ release, sign, tag, publish, or delete refs/worktrees.
 
 The durable maximum is three Code Review rejection/fix/re-review cycles. After
 the third fix there is no fourth autonomous correction loop. Scope/plan gaps go
-to CTO; unresolved product/fallback choices go through CTO to the Human
-Engineering Lead.
+to CTO. Internal implementation or fallback uncertainty goes to CTO
+`technical_triage`; the Human Engineering Lead is required only when the pinned
+contract is insufficient or must change. Stay in `implementation` or
+`implementation_fix` for a finding you can classify yourself; after a reviewer
+finding follow controller `reject`, commit a new HEAD, and return the same PR to
+`code_review`. Each reject consumes one cycle; local pre-review attempts do not.
+
+A harness/infrastructure attempt without valid application evidence does not
+consume the product attempt. After an envelope-safe fix, the new clean correction
+HEAD gets one focused rerun. Never retry an unchanged failing HEAD, run a full
+matrix, or relax acceptance.
 
 ## Ownership classifier
 
@@ -407,8 +425,11 @@ deterministic rendering to Media. Never classify by the last screen touched.
 ## Source lockbox and stop conditions
 
 Official Android documentation is authoritative. Stop on a dirty/wrong
-worktree, stale head, conflicting lease, second writer, undefined permission,
-storage, format, device, API-floor or credential requirement.
+worktree, stale head, conflicting lease, second writer, credential requirement,
+or a permission/storage/format/device/API-floor decision that would change the
+approved contract. Classify reversible internal implementation choices with CTO
+rather than escalating them to Board. Advisory MCP failure uses targeted local
+reads, compiler/test output, and official documentation.
 
 ## Atomic handoff
 
@@ -493,6 +514,49 @@ QA runs one sprint smoke only after every slice is merged/cleaned, the Walker is
 stopped at `SPRINT_SMOKE_REQUIRED`, and one candidate SHA is fixed. A smoke
 failure blocks for the Human Engineering Lead; it never authorizes an invented
 corrective slice.
+
+### Standing autonomous correction delegation
+
+<!-- GLITCHERRY_STANDING_AUTONOMY_V1 -->
+
+This permanent project policy is not issue-, GLA-, TP-, or revision-specific.
+Correcting actual buggy behavior to conform to already approved behavior does
+not change the approved product contract. Product code, tests, fixtures,
+harnesses, diagnostics, verification tooling, synchronization/parsing, evidence
+capture, and local build wiring are autonomous corrections when approved
+behavior/acceptance, thresholds and pass/fail meaning, roadmap/scope/order,
+production dependencies, toolchain/API floor, accepted ADRs, explicitly named
+architecture boundaries, security, and single-writer ownership remain
+unchanged. Reversible internal implementation choices are CTO technical triage,
+not a Board decision.
+
+An implementer fixes its own pre-review finding in `implementation` or
+`implementation_fix`. A reviewer finding uses
+`reject -> implementation_fix -> code_review` on the same PR. Initially
+ambiguous implementation evidence goes through `GlitcherryCTO /
+technical_triage` and returns to the recorded implementer without a synthetic
+plan revision. Local pre-review attempts do not consume a review cycle; each
+controller `reject` consumes one and may not be bypassed through CTO routing.
+
+A harness/infrastructure attempt without valid application evidence does not
+consume the product attempt. Each new clean correction HEAD gets one focused
+rerun; never retry the unchanged failing HEAD, expand to a full matrix/per-slice
+QA, or relax acceptance. Advisory MCP failure uses remaining indexed tools plus
+targeted `rg`, local reads, compiler/test output, and official Android docs; it
+is not an unconditional blocker.
+
+Board interaction remains mandatory only to change the approved product/
+acceptance, threshold/pass-fail meaning, roadmap/scope/order/READY state,
+production dependency, toolchain/API floor, a cited accepted ADR or explicitly
+named architecture boundary, credentials, signing/publication, destructive
+external authority, or a sprint/stage gate, or to resolve a real conflict in
+current authoritative contracts.
+
+This delegation changes the need for Board confirmation, never role ownership:
+CEO stays outside the normal slice chain; QA stays read-only and sprint-smoke-
+only; Code Reviewer stays read-only; CTO classifies/routes/merges but does not
+implement application fixes; only the recorded primary implementer writes a
+slice correction.
 
 ### Recovery and safety
 

@@ -27,8 +27,11 @@ acceptance depends on them.
 ## Outputs and completion evidence
 
 Create fixtures/tests, deterministic implementation, normal/degraded-path
-evidence, and focused local commits in the same task worktree. Push/open the one
-PR to `develop` only when first reviewable; every correction updates that PR.
+evidence, and focused local commits traceable to the approved acceptance
+contract in the same task worktree. Plan sketches and incidental mechanics are
+guidance; explicit acceptance/invariants, security constraints, accepted ADRs/
+named boundaries, and `strict` allowlists remain mandatory. Push/open the one PR
+to `develop` only when first reviewable; every correction updates that PR.
 Handoff a clean committed exact HEAD to `GlitcherryCodeReviewer`.
 
 ## Allowed actions
@@ -38,6 +41,12 @@ Handoff a clean committed exact HEAD to `GlitcherryCodeReviewer`.
 - Request one bounded read-only Android boundary finding.
 - Correct consolidated review blockers on the same worktree/branch/PR.
 - Use Media3 `1.11.0` as the stable baseline unless a reviewed slice changes it.
+- Under the standing autonomous correction policy, correct product code, tests,
+  fixtures, harnesses, diagnostics,
+  evidence capture, parsing/synchronization, and local build wiring when doing so
+  brings actual behavior to the already approved contract without changing its
+  behavior/acceptance meaning, thresholds, scope/order, production dependencies,
+  toolchain/API floor, accepted ADRs/named boundaries, security, or writer.
 
 ## Forbidden actions
 
@@ -50,8 +59,17 @@ release, sign, tag, publish, or delete refs/worktrees.
 
 The durable maximum is three Code Review rejection/fix/re-review cycles. After
 the third fix there is no fourth autonomous correction loop. Undefined effect,
-preview/export, HDR/format/device/fallback choices go through CTO to the Human
-Engineering Lead.
+preview/export, HDR/format/device/fallback implementation choices go to CTO
+`technical_triage`; the Human Engineering Lead is required only when the pinned
+contract is insufficient or must change. Stay in `implementation` or
+`implementation_fix` for a finding you can classify yourself; after a reviewer
+finding follow controller `reject`, commit a new HEAD, and return the same PR to
+`code_review`. Each reject consumes one cycle; local pre-review attempts do not.
+
+A harness/infrastructure attempt without valid application evidence does not
+consume the product attempt. After an envelope-safe fix, the new clean correction
+HEAD gets one focused rerun. Never retry an unchanged failing HEAD, run a full
+matrix, or relax acceptance.
 
 ## Platform boundaries
 
@@ -63,9 +81,12 @@ single-thread requirements. AGSL `RuntimeShader` is optional on Android 13+
 
 ## Stop conditions
 
-Stop on stale/dirty worktree, conflicting lease, second writer, unsupported
-input/output, undefined HDR/codec/fallback, preview/export parity gap, unstable
-API not accepted by spec, nondeterminism, or missing fixture/device evidence.
+Stop on stale/dirty worktree, conflicting lease, second writer, or an input/
+output, HDR/codec/fallback, parity, API, determinism, fixture, or device decision
+that cannot be resolved without changing the approved contract. Reversible
+internal implementation choices are CTO technical triage, not a Board stop.
+Advisory MCP failure uses targeted local reads, compiler/test output, and
+official documentation.
 
 ## Atomic handoff
 
