@@ -69,15 +69,17 @@ lease.
 Every cross-agent handoff uses this order:
 
 1. Commit and push the exact checkpoint when the current role is a writer.
-2. Record the controller transition.
-3. PATCH the same issue once with the evidence/handoff `comment`, next
-   `assigneeAgentId`, and status. Agent-authored handoff does not set `interrupt`.
+2. Record the controller transition and POST an evidence comment that explicitly
+   names the exact next agent ID. This durable intent lets watchdog finish a failed
+   reassignment without guessing.
+3. PATCH the same issue to the next `assigneeAgentId` and status. Agent-authored
+   handoff does not set `interrupt`.
 4. Stop immediately; no execution-run polling or release loop is required.
 
-The combined comment/reassignment PATCH is the final mutation by the old role and
-queues the new assignee. There is no release/poll/reassign loop and no
-`executionRunId` wait. A failed HTTP request may be retried once with the same
-idempotent target; after that the watchdog repairs the exact handoff.
+The reassignment PATCH is the final mutation by the old role and queues the new
+assignee. There is no release/poll/reassign loop and no `executionRunId` wait. A
+failed HTTP request may be retried once with the same idempotent target; after that
+the watchdog uses the preceding evidence comment to repair the exact handoff.
 
 ### 3. Watchdog repair without waiting tiers
 
@@ -100,7 +102,8 @@ All six Glitcherry role bundles describe the same model:
 - one sequential phase owner, not an exclusive lease holder;
 - controller validation before repository access;
 - clean commit at each writer boundary;
-- one combined comment/reassignment PATCH on every normal cross-agent handoff;
+- one durable evidence POST followed by one reassignment PATCH on every normal
+  cross-agent handoff;
 - Board-only `interrupt: true` only in watchdog recovery, always with a comment;
 - no Board escalation for stale run/lease, assignment lag, or recoverable
   controller bookkeeping;
@@ -143,8 +146,8 @@ All six Glitcherry role bundles describe the same model:
 - `paperclips/projects/glitcherry-android/overlays/codex/_common.md`
   - carry the durable lock-free handoff rule into all generated roles.
 - `paperclips/projects/glitcherry-android/roles-codex/*.md`
-  - remove claim/renew/conflicting-lease stops and require one final combined
-    comment/reassignment PATCH without agent-authored interrupt.
+  - remove claim/renew/conflicting-lease stops and require a durable evidence POST
+    followed by one final reassignment PATCH without agent-authored interrupt.
 - `services/watchdog/src/gimle_watchdog/{models,paperclip,detection_semantic,actions,daemon}.py`
   - expose active execution owner and immediately repair deterministic
     Glitcherry cross-agent handoffs.
@@ -163,9 +166,9 @@ All six Glitcherry role bundles describe the same model:
    unsafe cleanup without using a lease.
 4. A legacy state containing an active or expired lease proceeds through the
    correct current owner transition and removes the legacy lease automatically.
-5. Every generated cross-agent handoff uses one PATCH containing the evidence
-   comment, exact next assignee, and status; it is the old run's final action and
-   does not wait for `executionRunId` to clear.
+5. Every generated cross-agent handoff records exact next-agent intent in a POST,
+   then uses one PATCH containing exact next assignee and status; the PATCH is the
+   old run's final action and does not wait for `executionRunId` to clear.
 6. Watchdog interrupt recovery includes a non-empty recovery comment and is
    verified against Paperclip's Board-only interrupt contract; no generic server
    lock removal is necessary.
