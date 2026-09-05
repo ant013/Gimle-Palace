@@ -133,7 +133,7 @@ def test_parse_mention_case_insensitive_uuid():
 # comment_only_handoff detector
 # ---------------------------------------------------------------------------
 
-_CO_BODY = f"[@CR](agent://{CR_ID}?i=eye) please review."
+_CO_BODY = f"Evidence is complete.\nGLITCHERRY_HANDOFF_TARGET_V2 [@CR](agent://{CR_ID}?i=eye)"
 
 
 def test_comment_only_handoff_happy_path():
@@ -152,6 +152,18 @@ def test_mention_from_non_assignee_ignored():
     assert ds._detect_comment_only_handoff(issue, comments, lookback_min=5) is None
 
 
+def test_unmarked_comment_is_not_handoff_intent():
+    issue = _issue(assignee_id=PE_ID)
+    comments = [
+        _comment(
+            body=f"Please ask [@CR](agent://{CR_ID}?i=eye) for advice.",
+            author_id=PE_ID,
+            created_at=NOW - timedelta(minutes=10),
+        )
+    ]
+    assert ds._detect_comment_only_handoff(issue, comments, lookback_min=5) is None
+
+
 def test_mention_from_none_author_ignored():
     """Watchdog self-authored alert: authorAgentId is None — must not trigger."""
     issue = _issue(assignee_id=PE_ID)
@@ -167,7 +179,7 @@ def test_mention_age_below_threshold_no_finding():
 
 def test_mention_target_already_matches_assignee_no_finding():
     issue = _issue(assignee_id=CR_ID)
-    body = f"[@CR](agent://{CR_ID}?i=eye)"
+    body = f"GLITCHERRY_HANDOFF_TARGET_V2 [@CR](agent://{CR_ID}?i=eye)"
     comments = [_comment(body=body, author_id=CR_ID, created_at=NOW - timedelta(minutes=10))]
     assert ds._detect_comment_only_handoff(issue, comments, lookback_min=5) is None
 
@@ -205,13 +217,13 @@ def test_comment_only_multiple_comments_most_recent_wins():
     issue = _issue(updated_at=NOW)
     old = _comment(
         id="old",
-        body=f"[@CR](agent://{CR_ID}?i=eye)",
+        body=f"GLITCHERRY_HANDOFF_TARGET_V2 [@CR](agent://{CR_ID}?i=eye)",
         author_id=PE_ID,
         created_at=NOW - timedelta(minutes=20),
     )
     recent = _comment(
         id="new",
-        body=f"[@CTO](agent://{CTO_ID}?i=crown)",
+        body=f"GLITCHERRY_HANDOFF_TARGET_V2 [@CTO](agent://{CTO_ID}?i=crown)",
         author_id=PE_ID,
         created_at=NOW - timedelta(minutes=8),
     )
@@ -219,6 +231,50 @@ def test_comment_only_multiple_comments_most_recent_wins():
     assert result is not None
     assert result.mention_comment_id == "new"
     assert result.mentioned_agent_id == CTO_ID
+
+
+def test_latest_unmarked_comment_suppresses_older_handoff_marker():
+    issue = _issue(updated_at=NOW)
+    old = _comment(
+        id="old",
+        body=_CO_BODY,
+        author_id=PE_ID,
+        created_at=NOW - timedelta(minutes=20),
+    )
+    recent = _comment(
+        id="new",
+        body="Still working; this is not a handoff.",
+        author_id=PE_ID,
+        created_at=NOW - timedelta(minutes=8),
+    )
+    assert ds._detect_comment_only_handoff(issue, [old, recent], lookback_min=5) is None
+
+
+def test_watchdog_recovery_comment_suppresses_historical_marker_replay():
+    issue = _issue(assignee_id=CR_ID, updated_at=NOW)
+    historical = _comment(
+        id="historical",
+        body=f"GLITCHERRY_HANDOFF_TARGET_V2 [@PE](agent://{PE_ID}?i=code)",
+        author_id=CR_ID,
+        created_at=NOW - timedelta(minutes=20),
+    )
+    recovery = _comment(
+        id="recovery",
+        body="Watchdog completed deterministic handoff.",
+        author_id=None,
+        created_at=NOW - timedelta(minutes=8),
+    )
+    assert ds._detect_comment_only_handoff(issue, [historical, recovery], lookback_min=5) is None
+
+
+def test_multiple_targets_are_ambiguous_and_ignored():
+    issue = _issue(assignee_id=PE_ID, updated_at=NOW)
+    body = (
+        "GLITCHERRY_HANDOFF_TARGET_V2 "
+        f"[@CR](agent://{CR_ID}?i=eye) [@CTO](agent://{CTO_ID}?i=crown)"
+    )
+    comments = [_comment(body=body, author_id=PE_ID)]
+    assert ds._detect_comment_only_handoff(issue, comments, lookback_min=5) is None
 
 
 # ---------------------------------------------------------------------------

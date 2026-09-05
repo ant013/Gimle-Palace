@@ -82,8 +82,10 @@ does not select another sprint until the sprint smoke gate below is resolved.
   branch. The branch is pushed and one PR to `develop` is opened when the first
   implementation head is reviewable. Corrections update that same PR.
 - Handoff records a clean committed HEAD and posts evidence naming the exact next
-  agent ID, then reassigns the same issue without `interrupt` as the old run's
-  final action. Agent credentials cannot use Paperclip's Board-only interrupt.
+  agent ID. Its final line is `GLITCHERRY_HANDOFF_TARGET_V2` followed by exactly
+  one canonical `agent://<next-agent-uuid>` link; no other agent link appears in
+  that comment. It then reassigns the same issue without `interrupt` as the old
+  run's final action. Agent credentials cannot use Paperclip's Board-only interrupt.
   The old role stops immediately; no role polls `executionRunId`, performs a
   release/reassign loop, or asks Board to clear ownership. If reassignment is
   stranded, the Board-authenticated watchdog sends one update containing its own
@@ -387,7 +389,8 @@ Every transition uses this exact order:
 1. finish the required local commit and/or allowed push and verify a clean HEAD;
 2. record the controller handoff to the exact next owner/phase;
 3. `POST evidence` to `/api/issues/{id}/comments`, explicitly name the exact next
-   agent ID, and require 2xx;
+   agent ID, end with `GLITCHERRY_HANDOFF_TARGET_V2` plus exactly one canonical
+   `agent://<next-agent-uuid>` link, and require 2xx;
 4. `PATCH assignee/status` to the exact next owner and API state without
    `interrupt`; do not change `projectWorkspaceId` or `executionWorkspaceId`;
 5. `STOP` immediately. The reassignment PATCH is the old run's final action; do
