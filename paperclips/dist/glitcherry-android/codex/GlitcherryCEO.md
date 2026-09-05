@@ -398,7 +398,9 @@ same issue.
 ### Atomic handoff
 
 Finish the clean commit/allowed push and record the controller handoff. `POST evidence`
-that explicitly names the exact next agent ID and require 2xx, then PATCH
+that explicitly names the exact next agent ID. End the comment with
+`GLITCHERRY_HANDOFF_TARGET_V2` followed by exactly one canonical
+`agent://<next-agent-uuid>` link; include no other `agent://` link. Require 2xx, then PATCH
 the exact assignee/status without `interrupt` as the old run's final action and
 STOP immediately. Agent credentials cannot use the Board-only interrupt. Do not
 poll `executionRunId`, release/reassign, or perform a post-PATCH read. A failed

@@ -34,6 +34,7 @@ _UUID_RE = re.compile(
     r"[0-9a-f]{4}-[0-9a-f]{12})",
     re.IGNORECASE,
 )
+_GLITCHERRY_HANDOFF_MARKER = "GLITCHERRY_HANDOFF_TARGET_V2"
 
 _ELIGIBLE_STATUSES = frozenset({"todo", "in_progress", "in_review"})
 _COMMENT_ONLY_STATUSES = _ELIGIBLE_STATUSES
@@ -125,23 +126,26 @@ def _detect_comment_only_handoff(
     if issue.assignee_agent_id is None:
         return None
 
-    qualifying = [
-        c
-        for c in comments
-        if c.author_agent_id == issue.assignee_agent_id and parse_mention_targets(c.body)
-    ]
-    if not qualifying:
+    if not comments:
         return None
 
-    c_star = max(qualifying, key=lambda c: c.created_at)
+    c_star = max(comments, key=lambda c: c.created_at)
+    if (
+        c_star.author_agent_id != issue.assignee_agent_id
+        or _GLITCHERRY_HANDOFF_MARKER not in c_star.body
+    ):
+        return None
+
     targets = parse_mention_targets(c_star.body)
+    if len(targets) != 1:
+        return None
     target_uuid = targets[0]
 
     if target_uuid == issue.assignee_agent_id:
         return None
 
-    age_seconds = (issue.updated_at - c_star.created_at).total_seconds()
-    if age_seconds / 60 < lookback_min:
+    age_seconds = (server_now - c_star.created_at).total_seconds()
+    if age_seconds < lookback_min * 60 or age_seconds > recent_window_min * 60:
         return None
 
     return CommentOnlyHandoffFinding(

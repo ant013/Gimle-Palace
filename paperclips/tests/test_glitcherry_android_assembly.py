@@ -158,6 +158,7 @@ def test_workflow_is_the_single_worktree_parent_child_contract():
         "task_worktree_root",
         "task_state_root",
         "GLITCHERRY_INTERRUPT_HANDOFF_V2",
+        "GLITCHERRY_HANDOFF_TARGET_V2",
         "maximum three",
         "fourth autonomous",
         "SPRINT_SMOKE_REQUIRED",
@@ -316,6 +317,7 @@ def test_common_overlay_enforces_authority_repositories_and_one_writer():
         "task_worktree_root",
         "task_state_root",
         "GLITCHERRY_INTERRUPT_HANDOFF_V2",
+        "GLITCHERRY_HANDOFF_TARGET_V2",
         "workspace/control",
         "required `instructionsFilePath`",
         "Project workspace",
@@ -484,6 +486,7 @@ def test_rendered_glitcherry_roles_have_no_templates_or_forbidden_authority():
     for text in rendered.values():
         assert "task_worktree_root" in text
         assert "GLITCHERRY_INTERRUPT_HANDOFF_V2" in text
+        assert "GLITCHERRY_HANDOFF_TARGET_V2" in text
         assert "interrupt: true" in text
         assert "exclusive lease" not in text
         assert "all persistent clones" not in text

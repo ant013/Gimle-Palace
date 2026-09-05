@@ -70,7 +70,8 @@ Every cross-agent handoff uses this order:
 
 1. Commit and push the exact checkpoint when the current role is a writer.
 2. Record the controller transition and POST an evidence comment that explicitly
-   names the exact next agent ID. This durable intent lets watchdog finish a failed
+   names the exact next agent ID and contains the machine marker
+   `GLITCHERRY_HANDOFF_TARGET_V2`. This durable intent lets watchdog finish a failed
    reassignment without guessing.
 3. PATCH the same issue to the next `assigneeAgentId` and status. Agent-authored
    handoff does not set `interrupt`.
@@ -90,6 +91,12 @@ target/status, and `interrupt: true`, instead of alerting, waiting 60/90 minutes
 or asking Board. Exact company,
 issue, current run, next assignee, controller owner/phase, and workspace IDs are
 checked before the mutation.
+
+Only the latest issue comment is eligible, and it must be authored by the current
+assignee, contain the exact machine marker, and resolve to exactly one different
+hired agent. Ordinary discussion and older handoff comments never trigger repair.
+The watchdog's recovery comment has no marker, so a successful repair cannot replay
+or oscillate between historical role comments.
 
 The watchdog must not infer a next role. It only finishes a controller-recorded
 handoff. If no deterministic target exists, it wakes CTO for technical triage;
@@ -173,7 +180,9 @@ All six Glitcherry role bundles describe the same model:
    verified against Paperclip's Board-only interrupt contract; no generic server
    lock removal is necessary.
 7. Watchdog repairs a deterministic Glitcherry assignee/execution-owner mismatch
-   on its first eligible scan, with no 60/90-minute tier and no Board comment.
+   on its first eligible scan, with no 60/90-minute tier or human Board decision.
+   The repair consumes only the latest marked handoff intent and cannot replay an
+   older handoff after assignment changes.
 8. Watchdog does not kill or reassign when controller target, issue, workspace,
    or exact execution identity is ambiguous.
 9. The same issue, execution workspace, task worktree, branch, PR, review counter,
@@ -190,8 +199,10 @@ All six Glitcherry role bundles describe the same model:
   wrong-owner, stale/dirty HEAD, reject counter, review approval, merge, cleanup.
 - Assembly tests over all six source and rendered roles, including forbidden
   lease phrases and required interrupt marker/payload.
-- Watchdog tests: first-scan deterministic repair, idempotent replay, already
-  healthy owner, ambiguous target, wrong company, changed run, and API failure.
+- Watchdog tests: first-scan deterministic repair, unmarked discussion ignored,
+  latest-comment boundary, historical-marker replay/oscillation prevention,
+  idempotent replay, already healthy owner, ambiguous target, wrong company,
+  changed run, and API failure.
 - Paperclip targeted tests proving `interrupt: true` cancels a running old agent
   and wakes the new assignee.
 - Live canary on a disposable Glitcherry diagnostic issue: writer handoff to
