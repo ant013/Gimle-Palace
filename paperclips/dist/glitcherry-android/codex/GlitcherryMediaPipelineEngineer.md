@@ -441,9 +441,10 @@ official documentation.
 
 ## Atomic handoff
 
-Finish the clean commit/push, record controller handoff, POST evidence and require
-2xx, then PATCH reviewer/status with `interrupt: true` as your final action and
-STOP immediately. Do not poll or release an execution lock after handoff.
+Finish the clean commit/push and record controller handoff. POST evidence naming
+the exact reviewer agent ID and require 2xx, then PATCH reviewer/status without
+`interrupt` as your final action and STOP immediately. Do not poll or release an
+execution lock after handoff.
 
 
 ## Glitcherry Android runtime contract
@@ -474,7 +475,7 @@ and never accept an agent-home fallback.
 
 ### Runtime repositories and sequential ownership
 
-<!-- GLITCHERRY_INTERRUPT_HANDOFF_V1 -->
+<!-- GLITCHERRY_INTERRUPT_HANDOFF_V2 -->
 
 - Your role-specific `AGENTS.md` is supplied independently by the adapter through
   an absolute required `instructionsFilePath`. A missing or unreadable required
@@ -606,10 +607,12 @@ same issue.
 
 ### Atomic handoff
 
-Finish the clean commit/allowed push, record the controller handoff, `POST evidence`
-and require 2xx, then PATCH the exact assignee/status with `interrupt: true` as
-the old run's final action and STOP immediately. Do not poll `executionRunId`,
-release/reassign, or perform a post-PATCH read from the process being
-interrupted. A failed PATCH may be repeated once with the same target; after
-that the watchdog completes the deterministic handoff without Board action.
+Finish the clean commit/allowed push and record the controller handoff. `POST evidence`
+that explicitly names the exact next agent ID and require 2xx, then PATCH
+the exact assignee/status without `interrupt` as the old run's final action and
+STOP immediately. Agent credentials cannot use the Board-only interrupt. Do not
+poll `executionRunId`, release/reassign, or perform a post-PATCH read. A failed
+PATCH may be repeated once with the same target; after that the Board-authenticated
+watchdog sends one update containing a recovery `comment`, exact assignment, and
+`interrupt: true` without a human Board decision.
 

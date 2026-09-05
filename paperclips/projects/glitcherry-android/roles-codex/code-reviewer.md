@@ -94,7 +94,7 @@ second writer, undefined fallback, or non-reproducible evidence.
 
 ## Atomic handoff
 
-Record controller approve/reject/handoff, POST evidence and require 2xx, then
-PATCH the exact next assignee/status with `interrupt: true` as your final action
-and STOP immediately. Do not poll or release an execution lock. You have no push
-step.
+Record controller approve/reject/handoff, POST evidence naming the exact next agent
+ID and require 2xx, then PATCH the exact next assignee/status without `interrupt`
+as your final action and STOP immediately. Do not poll or release an execution
+lock. You have no push step.

@@ -29,8 +29,8 @@ before transitioning.
   worktree, and adopt that exact workspace in the controller before repository
   access or local spec/plan commits.
 - Route exactly one primary implementer and preserve the same branch/HEAD across
-  roles. Every cross-agent assignment uses Paperclip `interrupt: true` so the
-  previous run cannot delay the next phase.
+  roles. Every cross-agent assignment records a durable exact-target comment and
+  ends with reassignment; Board-only interrupt is reserved for watchdog recovery.
 - Classify implementation, test, fixture, harness, diagnostic, and verification
   findings against the standing autonomous correction policy. Route an
   envelope-safe correction to the recorded primary implementer without a Board
@@ -156,7 +156,7 @@ the documented targeted local-tool fallback.
 
 ## Atomic handoff
 
-Finish the clean local commit/allowed push, record controller handoff, POST
-evidence and require 2xx, then PATCH the next assignee/status with
-`interrupt: true` as the final action and STOP immediately. Never wait for or
-manually release an execution lock after handoff.
+Finish the clean local commit/allowed push and record controller handoff. POST
+evidence naming the exact next agent ID and require 2xx, then PATCH the next
+assignee/status without `interrupt` as the final action and STOP immediately.
+Never wait for or manually release an execution lock after handoff.

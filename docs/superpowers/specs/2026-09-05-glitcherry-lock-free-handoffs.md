@@ -12,18 +12,21 @@ by cross-agent execution ownership. Preserve the intended sequential workflow:
 one issue, one execution workspace, one task worktree, committed checkpoints,
 and one active phase owner at a time.
 
-Every normal handoff must terminate the previous Paperclip run and immediately
-wake the newly assigned role. No agent may stop for an expired/conflicting
-controller lease, wait for a stale execution lock, or request Board recovery for
-either condition.
+Every normal handoff must atomically publish its evidence, reassign the issue,
+immediately wake the newly assigned role, and then stop the old process. If the
+old run remains stranded, the watchdog interrupts it on the first eligible scan.
+No agent may stop for an expired/conflicting controller lease, wait for a stale
+execution lock, or request Board recovery for either condition.
 
 ## Assumptions and evidence
 
 - Glitcherry roles work sequentially. Removing waits does not authorize two
   roles to edit the task worktree concurrently.
-- Paperclip already implements the required primitive: issue reassignment with
-  `interrupt: true` cancels the active run and wakes the new assignee with
-  handoff context. Its server regression tests cover this behavior.
+- Paperclip already implements the recovery primitive: a Board-authored issue
+  update that combines a handoff comment, reassignment, and `interrupt: true`
+  cancels the active run and wakes the new assignee. `interrupt` without
+  `comment` returns 400, and agent-authored interrupt returns 403; generated
+  role instructions must not claim otherwise.
 - The Glitcherry controller's persisted lease duplicates Paperclip ownership and
   caused the observed blocked/resume/adopt recovery loops. Exact branch, path,
   clean/dirty state, HEAD, phase, primary implementer, review count, merge, and
@@ -66,22 +69,25 @@ lease.
 Every cross-agent handoff uses this order:
 
 1. Commit and push the exact checkpoint when the current role is a writer.
-2. Record the controller transition and POST the evidence comment.
-3. PATCH the same issue to the next assignee/status with `interrupt: true`.
-4. Stop immediately; no post-PATCH read-back is required from the process being
-   interrupted.
+2. Record the controller transition and POST an evidence comment that explicitly
+   names the exact next agent ID. This durable intent lets watchdog finish a failed
+   reassignment without guessing.
+3. PATCH the same issue to the next `assigneeAgentId` and status. Agent-authored
+   handoff does not set `interrupt`.
+4. Stop immediately; no execution-run polling or release loop is required.
 
-The interrupt PATCH is the final mutation by the old role. Paperclip cancels its
-active run and queues the new assignee. There is no release/poll/reassign loop
-and no `executionRunId` wait. A failed HTTP request may be retried once with the
-same idempotent target; after that the watchdog repairs the exact handoff.
+The reassignment PATCH is the final mutation by the old role and queues the new
+assignee. There is no release/poll/reassign loop and no `executionRunId` wait. A
+failed HTTP request may be retried once with the same idempotent target; after that
+the watchdog uses the preceding evidence comment to repair the exact handoff.
 
 ### 3. Watchdog repair without waiting tiers
 
 For the Glitcherry company only, an issue whose live assignee differs from the
-active execution owner is immediately actionable. The watchdog uses the
-supported issue PATCH with `interrupt: true` for the already recorded target,
-instead of alerting, waiting 60/90 minutes, or asking Board. Exact company,
+active execution owner is immediately actionable. The Board-authenticated watchdog
+uses one supported issue PATCH containing a recovery comment, the already recorded
+target/status, and `interrupt: true`, instead of alerting, waiting 60/90 minutes,
+or asking Board. Exact company,
 issue, current run, next assignee, controller owner/phase, and workspace IDs are
 checked before the mutation.
 
@@ -96,7 +102,9 @@ All six Glitcherry role bundles describe the same model:
 - one sequential phase owner, not an exclusive lease holder;
 - controller validation before repository access;
 - clean commit at each writer boundary;
-- `interrupt: true` on every cross-agent handoff;
+- one durable evidence POST followed by one reassignment PATCH on every normal
+  cross-agent handoff;
+- Board-only `interrupt: true` only in watchdog recovery, always with a comment;
 - no Board escalation for stale run/lease, assignment lag, or recoverable
   controller bookkeeping;
 - only real contract conflicts, unsafe human-only actions, credentials,
@@ -138,8 +146,8 @@ All six Glitcherry role bundles describe the same model:
 - `paperclips/projects/glitcherry-android/overlays/codex/_common.md`
   - carry the durable lock-free handoff rule into all generated roles.
 - `paperclips/projects/glitcherry-android/roles-codex/*.md`
-  - remove claim/renew/conflicting-lease stops and require final
-    `interrupt: true` reassignment.
+  - remove claim/renew/conflicting-lease stops and require a durable evidence POST
+    followed by one final reassignment PATCH without agent-authored interrupt.
 - `services/watchdog/src/gimle_watchdog/{models,paperclip,detection_semantic,actions,daemon}.py`
   - expose active execution owner and immediately repair deterministic
     Glitcherry cross-agent handoffs.
@@ -158,10 +166,12 @@ All six Glitcherry role bundles describe the same model:
    unsafe cleanup without using a lease.
 4. A legacy state containing an active or expired lease proceeds through the
    correct current owner transition and removes the legacy lease automatically.
-5. Every generated cross-agent handoff PATCH contains `interrupt: true`, is the
-   old run's final action, and does not wait for `executionRunId` to clear.
-6. Paperclip's existing interrupt contract is verified by targeted server tests;
-   no generic server lock removal is necessary.
+5. Every generated cross-agent handoff records exact next-agent intent in a POST,
+   then uses one PATCH containing exact next assignee and status; the PATCH is the
+   old run's final action and does not wait for `executionRunId` to clear.
+6. Watchdog interrupt recovery includes a non-empty recovery comment and is
+   verified against Paperclip's Board-only interrupt contract; no generic server
+   lock removal is necessary.
 7. Watchdog repairs a deterministic Glitcherry assignee/execution-owner mismatch
    on its first eligible scan, with no 60/90-minute tier and no Board comment.
 8. Watchdog does not kill or reassign when controller target, issue, workspace,

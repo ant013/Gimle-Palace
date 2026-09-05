@@ -58,7 +58,7 @@ does not select another sprint until the sprint smoke gate below is resolved.
 
 ## One slice = one worktree, branch, PR, and sequential owner
 
-<!-- GLITCHERRY_INTERRUPT_HANDOFF_V1 -->
+<!-- GLITCHERRY_INTERRUPT_HANDOFF_V2 -->
 
 - The canonical clean clones come from `primary_repo_root` and
   `control_repo_root`.
@@ -81,12 +81,14 @@ does not select another sprint until the sprint smoke gate below is resolved.
 - Spec, plan, implementation, and corrections use local commits on one task
   branch. The branch is pushed and one PR to `develop` is opened when the first
   implementation head is reviewable. Corrections update that same PR.
-- Handoff records a clean committed HEAD, posts evidence, then reassigns the
-  same issue with Paperclip `interrupt: true` as the old run's final action.
-  Paperclip terminates that run and immediately wakes the next role. No role
-  polls `executionRunId`, performs release/reassign recovery, or asks Board to
-  clear ownership. No two phase owners operate in the task worktree at the same
-  time.
+- Handoff records a clean committed HEAD and posts evidence naming the exact next
+  agent ID, then reassigns the same issue without `interrupt` as the old run's
+  final action. Agent credentials cannot use Paperclip's Board-only interrupt.
+  The old role stops immediately; no role polls `executionRunId`, performs a
+  release/reassign loop, or asks Board to clear ownership. If reassignment is
+  stranded, the Board-authenticated watchdog sends one update containing its own
+  recovery `comment`, exact assignment, and `interrupt: true` on the first eligible
+  scan. No two phase owners operate in the task worktree at the same time.
 
 ## Standing autonomous correction policy
 
@@ -384,11 +386,11 @@ Every transition uses this exact order:
 
 1. finish the required local commit and/or allowed push and verify a clean HEAD;
 2. record the controller handoff to the exact next owner/phase;
-3. `POST evidence` to `/api/issues/{id}/comments` and require 2xx;
-4. `PATCH assignee/status` to the exact next owner and API state with
-   `interrupt: true`; do not change `projectWorkspaceId` or
-   `executionWorkspaceId`;
-5. `STOP` immediately. The interrupting PATCH is the old run's final action; do
+3. `POST evidence` to `/api/issues/{id}/comments`, explicitly name the exact next
+   agent ID, and require 2xx;
+4. `PATCH assignee/status` to the exact next owner and API state without
+   `interrupt`; do not change `projectWorkspaceId` or `executionWorkspaceId`;
+5. `STOP` immediately. The reassignment PATCH is the old run's final action; do
    not poll `executionRunId` or perform a post-PATCH read from that process.
 
 A mention is not a handoff. A failed PATCH may be repeated once with the same
