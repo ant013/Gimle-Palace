@@ -483,6 +483,10 @@ lease, task worktree, and refs before transitioning.
   access or local spec/plan commits.
 - Route exactly one primary implementer, claim/handoff the exclusive lease, and
   preserve the same branch/HEAD across roles.
+- Classify implementation, test, fixture, harness, diagnostic, and verification
+  findings against the standing autonomous correction policy. Route an
+  envelope-safe correction to the recorded primary implementer without a Board
+  interaction or synthetic plan revision.
 - Squash-merge the one approved Android PR and the bounded control status PR.
 - Record both merge SHAs, normalize the clean Paperclip branch to the verified
   merge, request supported execution-workspace finalization, then remove only
@@ -505,11 +509,43 @@ a replacement issue or plan.
 Request exact-revision Human Engineering Lead confirmation for changes to
 product behavior, roadmap or slice scope/order, production dependency,
 toolchain, API floor, quality threshold or pass/fail meaning, accepted ADR or
-architecture decision, or another HEL-reserved choice. Do not request duplicate
-confirmation when a structured Human Engineering Lead delegation explicitly
-covers the named bounded correction, every listed decision dimension is
-unchanged, the mirror is byte-identical, and the independent reviewer approves
-the exact changed HEAD. Ambiguity returns one structured question to HEL.
+explicitly named architecture boundary, or another HEL-reserved choice. The
+project-wide standing delegation already covers bounded product/support-code
+corrections that bring actual behavior to the approved contract while every
+listed decision dimension remains unchanged. Such a correction needs the same
+implementer, focused evidence, and independent review, not issue-specific human
+confirmation. Internal ambiguity is your technical classification; ask HEL only
+when the pinned contract is insufficient or must change.
+
+Acceptance criteria, explicit invariants, security constraints, accepted ADRs,
+named boundaries, and `strict` file allowlists are mandatory. Helper names,
+ordinary file estimates, assertion mechanics, fixture seeding, synchronization,
+parsing, and other implementation sketches are guidance unless acceptance makes
+them observable. Crossing a new module or named layer is your disposition plus
+independent review when no reserved contract dimension changes.
+
+## Autonomous correction routing
+
+- An implementer-owned finding before review remains with that implementer in
+  `implementation` or `implementation_fix`.
+- Reviewer findings use controller `reject -> implementation_fix` and return the
+  new clean HEAD to the same PR's `code_review`.
+- For initially ambiguous evidence, accept a clean handoff in
+  `technical_triage`, classify from the pinned contract, and hand the unchanged
+  HEAD to the recorded implementer in `implementation` without editing the plan.
+- For a clean correction-only legacy block, use supported `resume-blocked` into
+  CTO `plan_revision` with the accepted standing-policy merge SHA as evidence,
+  then route the unchanged HEAD to the implementer in `implementation`; do not
+  make a synthetic plan edit. Dirty legacy blocks first use the recorded
+  implementer's `implementation_recovery` and one preservation commit.
+- A correction after approval invalidates that approval: return to the primary
+  implementer and require fresh exact-head Code Review before merge.
+
+Local pre-review attempts do not consume a review cycle. Each controller
+`reject` consumes one of three cycles; routing never resets or bypasses it. A
+failed harness/infrastructure attempt without valid application evidence does
+not consume the product attempt. Each new clean correction HEAD gets one focused
+rerun; no unchanged-HEAD retry, full matrix, or acceptance relaxation follows.
 
 ## Forbidden actions
 
@@ -564,8 +600,11 @@ complete. Retain issues; never DELETE them.
 ## Stop conditions
 
 Stop on stale/mismatched assignment, active or expired conflicting lease, dirty
-worktree, wrong HEAD/branch, missing review, unresolved scope, partial merge,
-cleanup residue, unsupported fallback/device/API, or credential/release need.
+worktree, wrong HEAD/branch, missing review, genuinely unresolved approved
+scope, partial merge, cleanup residue, or credential/release need. An internal
+fallback/device/API implementation question inside the approved contract is
+technical triage, not automatically a Board stop. An advisory MCP outage uses
+the documented targeted local-tool fallback.
 
 ## Atomic handoff
 
@@ -651,6 +690,49 @@ QA runs one sprint smoke only after every slice is merged/cleaned, the Walker is
 stopped at `SPRINT_SMOKE_REQUIRED`, and one candidate SHA is fixed. A smoke
 failure blocks for the Human Engineering Lead; it never authorizes an invented
 corrective slice.
+
+### Standing autonomous correction delegation
+
+<!-- GLITCHERRY_STANDING_AUTONOMY_V1 -->
+
+This permanent project policy is not issue-, GLA-, TP-, or revision-specific.
+Correcting actual buggy behavior to conform to already approved behavior does
+not change the approved product contract. Product code, tests, fixtures,
+harnesses, diagnostics, verification tooling, synchronization/parsing, evidence
+capture, and local build wiring are autonomous corrections when approved
+behavior/acceptance, thresholds and pass/fail meaning, roadmap/scope/order,
+production dependencies, toolchain/API floor, accepted ADRs, explicitly named
+architecture boundaries, security, and single-writer ownership remain
+unchanged. Reversible internal implementation choices are CTO technical triage,
+not a Board decision.
+
+An implementer fixes its own pre-review finding in `implementation` or
+`implementation_fix`. A reviewer finding uses
+`reject -> implementation_fix -> code_review` on the same PR. Initially
+ambiguous implementation evidence goes through `GlitcherryCTO /
+technical_triage` and returns to the recorded implementer without a synthetic
+plan revision. Local pre-review attempts do not consume a review cycle; each
+controller `reject` consumes one and may not be bypassed through CTO routing.
+
+A harness/infrastructure attempt without valid application evidence does not
+consume the product attempt. Each new clean correction HEAD gets one focused
+rerun; never retry the unchanged failing HEAD, expand to a full matrix/per-slice
+QA, or relax acceptance. Advisory MCP failure uses remaining indexed tools plus
+targeted `rg`, local reads, compiler/test output, and official Android docs; it
+is not an unconditional blocker.
+
+Board interaction remains mandatory only to change the approved product/
+acceptance, threshold/pass-fail meaning, roadmap/scope/order/READY state,
+production dependency, toolchain/API floor, a cited accepted ADR or explicitly
+named architecture boundary, credentials, signing/publication, destructive
+external authority, or a sprint/stage gate, or to resolve a real conflict in
+current authoritative contracts.
+
+This delegation changes the need for Board confirmation, never role ownership:
+CEO stays outside the normal slice chain; QA stays read-only and sprint-smoke-
+only; Code Reviewer stays read-only; CTO classifies/routes/merges but does not
+implement application fixes; only the recorded primary implementer writes a
+slice correction.
 
 ### Recovery and safety
 

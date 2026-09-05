@@ -24,10 +24,13 @@ owns it.
 
 ## Outputs and completion evidence
 
-Create the smallest plan-traceable code/tests and focused local commits in the
-same task worktree. Run targeted risk-scaled checks. Push/open the one PR to
-`develop` only when first reviewable; every correction updates that same PR.
-Handoff a clean committed exact HEAD to `GlitcherryCodeReviewer`.
+Create the smallest code/tests traceable to the approved acceptance contract and
+focused local commits in the same task worktree. Plan sketches and incidental
+mechanics are guidance; explicit acceptance/invariants, security constraints,
+accepted ADRs/named boundaries, and `strict` allowlists remain mandatory. Run
+targeted risk-scaled checks. Push/open the one PR to `develop` only when first
+reviewable; every correction updates that same PR. Handoff a clean committed
+exact HEAD to `GlitcherryCodeReviewer`.
 
 ## Allowed actions
 
@@ -35,6 +38,12 @@ Handoff a clean committed exact HEAD to `GlitcherryCodeReviewer`.
 - Commit locally; push/update only that branch and its existing PR.
 - Request one bounded read-only Media boundary finding when needed.
 - Correct consolidated review blockers on the same worktree/branch/PR.
+- Under the standing autonomous correction policy, correct product code, tests,
+  fixtures, harnesses, diagnostics,
+  evidence capture, parsing/synchronization, and local build wiring when doing so
+  brings actual behavior to the already approved contract without changing its
+  behavior/acceptance meaning, thresholds, scope/order, production dependencies,
+  toolchain/API floor, accepted ADRs/named boundaries, security, or writer.
 
 ## Forbidden actions
 
@@ -46,8 +55,17 @@ release, sign, tag, publish, or delete refs/worktrees.
 
 The durable maximum is three Code Review rejection/fix/re-review cycles. After
 the third fix there is no fourth autonomous correction loop. Scope/plan gaps go
-to CTO; unresolved product/fallback choices go through CTO to the Human
-Engineering Lead.
+to CTO. Internal implementation or fallback uncertainty goes to CTO
+`technical_triage`; the Human Engineering Lead is required only when the pinned
+contract is insufficient or must change. Stay in `implementation` or
+`implementation_fix` for a finding you can classify yourself; after a reviewer
+finding follow controller `reject`, commit a new HEAD, and return the same PR to
+`code_review`. Each reject consumes one cycle; local pre-review attempts do not.
+
+A harness/infrastructure attempt without valid application evidence does not
+consume the product attempt. After an envelope-safe fix, the new clean correction
+HEAD gets one focused rerun. Never retry an unchanged failing HEAD, run a full
+matrix, or relax acceptance.
 
 ## Ownership classifier
 
@@ -58,8 +76,11 @@ deterministic rendering to Media. Never classify by the last screen touched.
 ## Source lockbox and stop conditions
 
 Official Android documentation is authoritative. Stop on a dirty/wrong
-worktree, stale head, conflicting lease, second writer, undefined permission,
-storage, format, device, API-floor or credential requirement.
+worktree, stale head, conflicting lease, second writer, credential requirement,
+or a permission/storage/format/device/API-floor decision that would change the
+approved contract. Classify reversible internal implementation choices with CTO
+rather than escalating them to Board. Advisory MCP failure uses targeted local
+reads, compiler/test output, and official documentation.
 
 ## Atomic handoff
 

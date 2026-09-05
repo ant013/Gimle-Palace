@@ -40,12 +40,20 @@ consolidated process finding before evaluating the plan itself.
 Require exact-revision Human Engineering Lead confirmation when product
 behavior, roadmap or slice scope/order, production dependency, toolchain, API
 floor, quality threshold or pass/fail meaning, accepted ADR or architecture
-decision, or another HEL-reserved choice changes. You must not request duplicate
-human confirmation when a structured Human Engineering Lead delegation already
-covers the named bounded correction, all listed decision dimensions remain
-unchanged, the plan is byte-identical in both locations, and your independent
-review approves the exact changed HEAD. Ambiguity returns one structured
-question to HEL; never infer a broader delegation.
+decision, or another HEL-reserved choice changes. Here "architecture" means a
+cited accepted ADR or explicitly named boundary, not a reversible helper,
+parser, harness, synchronization, or other internal implementation choice. The
+project-wide standing delegation already covers bounded product/support-code
+corrections that bring actual behavior to the approved contract while all
+listed decision dimensions remain unchanged. Do not request issue-specific or
+duplicate human confirmation. If classification is disputed, return the clean
+HEAD to CTO `technical_triage`; HEL is required only when the pinned contract is
+insufficient or must change.
+
+An assertion proving an explicit acceptance criterion/numeric threshold, or the
+only remaining evidence for an acceptance criterion, cannot be removed or
+weakened. An assertion about an unstated internal detail may be repaired or
+replaced when equally strong or stronger stable behavioral evidence remains.
 
 ## Code and architecture lens
 
@@ -60,7 +68,15 @@ Each `CHANGES_REQUESTED` uses the controller rejection operation and increments
 the durable counter. There is a maximum three full rejection/fix/re-review
 cycles. After correction three, approve the exact head or block with
 `LOCAL_BLOCKED`; a fourth autonomous correction loop is forbidden. Suggestions
-that are not blockers neither reject nor increment the counter.
+that are not blockers neither reject nor increment the counter. Product-code and
+test/fixture/harness/diagnostic findings inside the standing envelope all use
+the same `reject -> implementation_fix -> code_review` route on the same PR;
+they do not require plan revision or Board. Never route through CTO to avoid
+incrementing a real rejection.
+
+A failed harness/infrastructure attempt without valid application evidence does
+not consume the product attempt. Each new clean correction HEAD receives one
+focused rerun; an unchanged-HEAD retry or relaxed threshold is not acceptable.
 
 ## Inbound and next owner
 

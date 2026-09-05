@@ -201,8 +201,8 @@ def test_plan_authority_mirror_and_confirmation_classifier_are_explicit():
         "roadmap or slice scope/order",
         "production dependency, toolchain, or API floor",
         "quality threshold or pass/fail meaning",
-        "accepted ADR or architecture decision",
-        "structured Human Engineering Lead delegation",
+        "cited accepted ADR or explicitly named architecture boundary",
+        "standing autonomous correction policy",
     ]:
         assert marker in workflow
 
@@ -213,7 +213,7 @@ def test_plan_authority_mirror_and_confirmation_classifier_are_explicit():
         "read back",
         "both SHA-256 hashes",
         "revision ID and revision number",
-        "structured Human Engineering Lead delegation",
+        "project-wide standing delegation",
     ]:
         assert marker in cto
 
@@ -221,10 +221,90 @@ def test_plan_authority_mirror_and_confirmation_classifier_are_explicit():
         "verify the plan mirror before technical review",
         "absent, stale, or divergent",
         "byte-identical",
-        "must not request duplicate human confirmation",
-        "structured Human Engineering Lead delegation",
+        "Do not request issue-specific or duplicate human confirmation",
+        "project-wide standing delegation",
     ]:
         assert marker in reviewer
+
+
+def test_standing_autonomous_corrections_are_scenario_complete_and_role_safe():
+    workflow = _flat((PROJECT / "WORKFLOW.md").read_text())
+    common = _flat((PROJECT / "overlays" / "codex" / "_common.md").read_text())
+    cto = _flat(_role("glitcherry-cto.md"))
+    android = _flat(_role("android-engineer.md"))
+    media = _flat(_role("media-pipeline-engineer.md"))
+    reviewer = _flat(_role("code-reviewer.md"))
+    ceo = _flat(_role("glitcherry-ceo.md"))
+    qa = _flat(_role("qa-engineer.md"))
+
+    for marker in [
+        "GLITCHERRY_STANDING_AUTONOMY_V1",
+        "Correcting actual buggy behavior",
+        "technical_triage",
+        "Each new clean correction HEAD",
+    ]:
+        assert marker in workflow
+        assert marker in common
+
+    for marker in [
+        "uses controller `reject`",
+        "no synthetic plan edit",
+        "does not consume a product verification attempt",
+        "a cited accepted ADR or explicitly named architecture boundary",
+        "Unavailability of Serena, codebase-memory, Context7",
+    ]:
+        assert marker in workflow
+
+    for marker in [
+        "reject -> implementation_fix -> code_review",
+        "without a synthetic plan revision",
+        "does not consume the product attempt",
+        "a cited accepted ADR or explicitly named architecture boundary",
+        "Advisory MCP failure",
+    ]:
+        assert marker in common
+
+    for role in (cto, android, media, reviewer):
+        assert "standing" in role.lower()
+        assert "technical_triage" in role
+        assert "pinned contract" in role
+
+    assert "do not consume a review cycle" in cto
+    assert "Each controller `reject` consumes one" in cto
+    assert "same worktree/branch/PR" in android
+    assert "same worktree/branch/PR" in media
+    assert "same `reject -> implementation_fix -> code_review` route" in reviewer
+
+    for obsolete in [
+        "Ambiguity returns one structured question to the Human Engineering Lead",
+        "Ambiguity returns one structured question to HEL",
+    ]:
+        assert obsolete not in workflow
+        assert obsolete not in cto
+        assert obsolete not in reviewer
+
+    assert "governance authority only" in ceo
+    assert "never claim an active slice worktree" in qa
+    assert "never commit or push" in qa
+    assert "never implement fixes" in reviewer
+
+    resolved = json.loads(RESOLVED.read_text())
+    for role in resolved["targets"]["codex"]["roles"]:
+        rendered = _flat((REPO / role["output"]).read_text())
+        assert "GLITCHERRY_STANDING_AUTONOMY_V1" in rendered
+        assert (
+            "This delegation changes the need for Board confirmation, never role ownership"
+            in rendered
+        )
+        assert "Advisory MCP failure" in rendered
+
+    rendered_by_name = {
+        role["agentName"]: _flat((REPO / role["output"]).read_text())
+        for role in resolved["targets"]["codex"]["roles"]
+    }
+    assert "governance authority only" in rendered_by_name["GlitcherryCEO"]
+    assert "never commit or push" in rendered_by_name["GlitcherryQAEngineer"]
+    assert "never implement fixes" in rendered_by_name["GlitcherryCodeReviewer"]
 
 
 def test_common_overlay_enforces_authority_repositories_and_one_writer():
@@ -394,7 +474,7 @@ def test_rendered_glitcherry_roles_have_no_templates_or_forbidden_authority():
         assert marker in _flat(cto)
     for marker in [
         "verify the plan mirror before technical review",
-        "must not request duplicate human confirmation",
+        "Do not request issue-specific or duplicate human confirmation",
     ]:
         assert marker in _flat(reviewer)
     assert "## Commit and Push" not in qa

@@ -75,6 +75,49 @@ stopped at `SPRINT_SMOKE_REQUIRED`, and one candidate SHA is fixed. A smoke
 failure blocks for the Human Engineering Lead; it never authorizes an invented
 corrective slice.
 
+### Standing autonomous correction delegation
+
+<!-- GLITCHERRY_STANDING_AUTONOMY_V1 -->
+
+This permanent project policy is not issue-, GLA-, TP-, or revision-specific.
+Correcting actual buggy behavior to conform to already approved behavior does
+not change the approved product contract. Product code, tests, fixtures,
+harnesses, diagnostics, verification tooling, synchronization/parsing, evidence
+capture, and local build wiring are autonomous corrections when approved
+behavior/acceptance, thresholds and pass/fail meaning, roadmap/scope/order,
+production dependencies, toolchain/API floor, accepted ADRs, explicitly named
+architecture boundaries, security, and single-writer ownership remain
+unchanged. Reversible internal implementation choices are CTO technical triage,
+not a Board decision.
+
+An implementer fixes its own pre-review finding in `implementation` or
+`implementation_fix`. A reviewer finding uses
+`reject -> implementation_fix -> code_review` on the same PR. Initially
+ambiguous implementation evidence goes through `GlitcherryCTO /
+technical_triage` and returns to the recorded implementer without a synthetic
+plan revision. Local pre-review attempts do not consume a review cycle; each
+controller `reject` consumes one and may not be bypassed through CTO routing.
+
+A harness/infrastructure attempt without valid application evidence does not
+consume the product attempt. Each new clean correction HEAD gets one focused
+rerun; never retry the unchanged failing HEAD, expand to a full matrix/per-slice
+QA, or relax acceptance. Advisory MCP failure uses remaining indexed tools plus
+targeted `rg`, local reads, compiler/test output, and official Android docs; it
+is not an unconditional blocker.
+
+Board interaction remains mandatory only to change the approved product/
+acceptance, threshold/pass-fail meaning, roadmap/scope/order/READY state,
+production dependency, toolchain/API floor, a cited accepted ADR or explicitly
+named architecture boundary, credentials, signing/publication, destructive
+external authority, or a sprint/stage gate, or to resolve a real conflict in
+current authoritative contracts.
+
+This delegation changes the need for Board confirmation, never role ownership:
+CEO stays outside the normal slice chain; QA stays read-only and sprint-smoke-
+only; Code Reviewer stays read-only; CTO classifies/routes/merges but does not
+implement application fixes; only the recorded primary implementer writes a
+slice correction.
+
 ### Recovery and safety
 
 Lease expiry never grants takeover. Recovery requires exact
