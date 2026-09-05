@@ -528,6 +528,7 @@ async def _run_handoff_pass(
     )
 
     total_alerts = 0
+    total_repairs = 0
     for company in cfg.companies:
         try:
             agents = await client.list_company_agents(company.id)
@@ -568,6 +569,22 @@ async def _run_handoff_pass(
 
                 ftype = finding.type
                 snapshot = _finding_snapshot(finding)
+                if (
+                    company.name.strip().casefold() == "glitcherry android"
+                    and h.handoff_auto_repair_enabled
+                    and isinstance(finding, CommentOnlyHandoffFinding)
+                ):
+                    repaired = await actions.repair_comment_only_handoff(
+                        client, finding, hired_ids
+                    )
+                    if repaired:
+                        state.clear_handoff_alert(issue.id, ftype)
+                        state.save()
+                        total_repairs += 1
+                    # A failed API request is retried on the next scan. Do not
+                    # turn deterministic Glitcherry handoff lag into a Board
+                    # alert or a 60/90-minute repair tier.
+                    continue
                 decision = _alert_decision(
                     state, issue.id, ftype, snapshot, now_server, h.handoff_alert_cooldown_min
                 )
@@ -611,9 +628,14 @@ async def _run_handoff_pass(
             )
 
     log.info(
-        "handoff_pass_complete alerts=%d",
+        "handoff_pass_complete alerts=%d repairs=%d",
         total_alerts,
-        extra={"event": "handoff_pass_complete", "alerts": total_alerts},
+        total_repairs,
+        extra={
+            "event": "handoff_pass_complete",
+            "alerts": total_alerts,
+            "repairs": total_repairs,
+        },
     )
 
 

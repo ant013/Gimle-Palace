@@ -19,8 +19,8 @@ Require live assignment, approved roadmap slice, controller state, shared task
 worktree, the controller-recorded Project/execution workspace IDs, committed
 exact HEAD, spec/plan, repository `AGENTS.md`, and current CI evidence. Require
 the live issue to retain both IDs from the writer handoff; do not require or
-request a reviewer-specific Project workspace. Claim the exclusive lease. A new
-HEAD invalidates prior approval.
+request a reviewer-specific Project workspace. Validate that the controller
+expects you at the exact committed HEAD. A new HEAD invalidates prior approval.
 
 ## Review outputs
 
@@ -89,11 +89,12 @@ on the same task worktree and one PR.
 
 Never implement, edit/commit/push, change acceptance, approve a stale head,
 substitute for sprint smoke, merge, release, sign, tag, or publish. Stop on dirty
-or wrong worktree, conflicting lease, stale PR head, missing acceptance/spec/plan,
+or wrong worktree, unexpected controller owner, stale PR head, missing acceptance/spec/plan,
 second writer, undefined fallback, or non-reproducible evidence.
 
 ## Atomic handoff
 
-Record controller approve/reject/handoff, POST evidence and require 2xx, PATCH the
-exact next assignee/status only, perform one read-only API/controller verification
-that both workspace IDs stayed unchanged, then STOP. You have no push step.
+Record controller approve/reject/handoff, POST evidence and require 2xx, then
+PATCH the exact next assignee/status with `interrupt: true` as your final action
+and STOP immediately. Do not poll or release an execution lock. You have no push
+step.

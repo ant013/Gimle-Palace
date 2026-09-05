@@ -56,7 +56,9 @@ When all pinned slices are `DONE`, the CTO sets the root to `blocked` with reaso
 candidate SHA, and stops the Walker. It does not mark the sprint complete and
 does not select another sprint until the sprint smoke gate below is resolved.
 
-## One slice = one worktree, branch, PR, and lease
+## One slice = one worktree, branch, PR, and sequential owner
+
+<!-- GLITCHERRY_INTERRUPT_HANDOFF_V1 -->
 
 - The canonical clean clones come from `primary_repo_root` and
   `control_repo_root`.
@@ -68,24 +70,23 @@ does not select another sprint until the sprint smoke gate below is resolved.
   required `instructionsFilePath` supplies its own generated `AGENTS.md`; there
   is no per-agent product checkout.
 - The task controller is `scripts/slice-worktree.py`. Every role verifies the
-  live Paperclip assignee/workspace, then obtains the exclusive lease before
-  repository access. A different owner/run, expired lease, dirty tree, wrong
-  branch, unexpected HEAD, or second active slice fails closed.
+  live Paperclip assignee/workspace, controller expected owner, branch, and exact
+  HEAD before repository access. `claim` remains an optional compatibility
+  validation command and creates no persistent ownership record. A different
+  expected owner, dirty tree, wrong branch, unexpected HEAD, or second active
+  slice fails closed.
 - Exactly one of `GlitcherryAndroidEngineer` or
   `GlitcherryMediaPipelineEngineer` is the primary application-code writer. The
   other may give one bounded read-only boundary finding only.
 - Spec, plan, implementation, and corrections use local commits on one task
   branch. The branch is pushed and one PR to `develop` is opened when the first
   implementation head is reviewable. Corrections update that same PR.
-- Handoff releases the current lease only after a clean committed HEAD is
-  recorded. The next role claims that exact HEAD. No two phase owners operate in
-  the task worktree at the same time.
-
-The default lease is 2700 seconds. A healthy long-running role renews it. A lease
-expiry is not permission to overwrite or delete anything: recovery must identify
-the exact `company -> agent -> run -> PID`, prove the prior run stopped or was
-terminated, preserve dirty/unmerged state, record evidence, and resume the same
-slice. Never use broad process-name matching or broad `pkill`.
+- Handoff records a clean committed HEAD, posts evidence, then reassigns the
+  same issue with Paperclip `interrupt: true` as the old run's final action.
+  Paperclip terminates that run and immediately wakes the next role. No role
+  polls `executionRunId`, performs release/reassign recovery, or asks Board to
+  clear ownership. No two phase owners operate in the task worktree at the same
+  time.
 
 ## Standing autonomous correction policy
 
@@ -121,7 +122,7 @@ Use these exact routes:
   the correction.
 - A clean correction-only incident already in controller `blocked` resumes by
   supported `resume-blocked` to `GlitcherryCTO / plan_revision`, using the
-  accepted standing-policy merge SHA as decision evidence. CTO claims it, makes
+  accepted standing-policy merge SHA as decision evidence. CTO validates it, makes
   no synthetic plan edit, and hands the unchanged HEAD to the recorded primary
   implementer in `implementation`.
 - A dirty correction-only incident already in `blocked` resumes to the recorded
@@ -165,21 +166,12 @@ primary implementer in `implementation_recovery`. That implementer preserves the
 files in one local WIP commit and hands the resulting clean HEAD to
 `GlitcherryCTO / plan_revision`.
 
-If a terminated primary-implementer run leaves the recorded task worktree clean
-on committed work but `recover` still records the older handed-off HEAD, this is
-a recovery-checkpoint incident. The CTO must not reset the worktree, edit the
-state file, or weaken normal claim/handoff checks. From the same CTO-owned
-`phase=recovery`, with no lease, use `adopt-recovery-checkpoint` once with the
-exact recorded old HEAD, actual clean new HEAD, current CTO run ID, and the
-Human Engineering Lead's evidence. The controller accepts only a linear,
-non-merge descendant tied to the latest unused recovery record for the recorded
-primary implementer and appends an immutable adoption record.
-
-Checkpoint adoption is bookkeeping, not approval or resumed implementation. It
-keeps the controller in CTO-owned `recovery` with no lease. The CTO then performs
-the ordinary claim and hands the unchanged adopted HEAD to itself in
-`plan_revision`; any revised plan still requires independent review before the
-recorded primary implementer may continue.
+Legacy `recover` and `adopt-recovery-checkpoint` commands remain readable only
+for historical state created before this contract. New runs never create a
+lease or enter lease-recovery choreography. A clean committed worktree that is
+ahead of a stale controller HEAD goes to CTO technical triage and may use the
+legacy audited checkpoint-adoption command only when that historical recovery
+record already exists.
 
 ## Six child phases
 
@@ -194,14 +186,14 @@ Project workspace ID, execution workspace ID, cwd, branch, base SHA, issue, and
 run. Do not create a second worktree. Materialize only the approved technical
 spec, cite the pinned roadmap slice, and commit locally. The spec may narrow
 execution detail but cannot expand product scope. Record the clean HEAD, hand
-the lease to `GlitcherryCodeReviewer` for `spec_review`, perform the atomic
+controller ownership to `GlitcherryCodeReviewer` for `spec_review`, perform the atomic
 Paperclip handoff, and stop.
 
 ### Phase 2 — Independent spec review
 
 Owner: `GlitcherryCodeReviewer`.
 
-Claim the same worktree and verify the recorded spec HEAD. Review feasibility,
+Validate the same worktree and recorded spec HEAD. Review feasibility,
 hidden product choices, Android/media ownership, failure paths, and testability.
 Never edit or commit. Approval hands the same clean HEAD to the CTO. Findings
 return to the CTO with one consolidated list. At most two spec/plan revision
@@ -217,7 +209,7 @@ slice implementation authority. The Paperclip `plan` document is a
 byte-identical mirror of those exact bytes, never a separately authored source
 of requirements.
 
-The CTO claims the same worktree, adds a plan mapping every acceptance criterion
+The CTO validates the same worktree, adds a plan mapping every acceptance criterion
 to ownership, implementation, tests, and verification, then commits locally.
 Before every `plan_review` handoff the CTO must prove the worktree clean, record
 the exact Android HEAD, hash the tracked plan bytes, and create or update the
@@ -263,11 +255,11 @@ the standing autonomous correction classifier above is fully satisfied.
 Owner: either `GlitcherryAndroidEngineer` or
 `GlitcherryMediaPipelineEngineer`, never both as writers.
 
-The assigned implementer claims the same approved worktree/HEAD, reads its
+The assigned implementer validates the same approved worktree/HEAD, reads its
 tracked `AGENTS.md`, makes changes traceable to the approved acceptance contract
 and the plan hierarchy above, and creates focused local commits. It applies the
 standing autonomous correction policy during implementation and bounded checks;
-an envelope-safe finding is fixed on the same lease/branch without CTO or Board.
+an envelope-safe finding is fixed on the same branch without CTO or Board.
 When the first implementation head is reviewable, it pushes the task branch,
 opens one PR whose base is exactly `develop`, records the PR/head, hands the clean
 exact HEAD to `GlitcherryCodeReviewer` for `code_review`, and stops.
@@ -276,7 +268,7 @@ exact HEAD to `GlitcherryCodeReviewer` for `code_review`, and stops.
 
 Owner: `GlitcherryCodeReviewer`.
 
-Claim and review the controller-recorded PR HEAD in the same worktree. Apply both
+Validate and review the controller-recorded PR HEAD in the same worktree. Apply both
 code and architecture lenses: boundaries, Kotlin correctness, lifecycle,
 concurrency, regressions, test quality, and relevant media/API/codec/HDR/fallback
 and preview/export parity risks. The first pass returns one consolidated blocker
@@ -293,14 +285,14 @@ and are not disguised as code defects. Product-code and support-code findings
 inside the standing envelope both return directly through `reject`; they do not
 trigger a plan revision or Board interaction. Reviewer never fixes them.
 
-Approval records `reviewed_head` and hands the lease directly to
+Approval records `reviewed_head` and hands controller ownership directly to
 `GlitcherryCTO`. QA does not run inside a normal slice.
 
 ### Phase 6 — Integrate, synchronize, and clean
 
 Owner: `GlitcherryCTO`.
 
-Claim the exact approved state. Verify the PR base is `develop`, its live head
+Validate the exact approved state. Verify the PR base is `develop`, its live head
 equals `reviewed_head`, required targeted checks are complete, and current Code
 Reviewer approval cites that head. Squash-merge the Android PR and record its PR
 number and merge SHA.
@@ -338,8 +330,8 @@ failed, resume from the recorded SHA; never reimplement or remerge Android.
 QA is activated once per sprint, only after every sprint slice is merged and
 cleaned, the root is stopped at `SPRINT_SMOKE_REQUIRED`, and the candidate SHA is
 fixed. `GlitcherryQAEngineer` verifies that exact Android `develop` candidate in
-a separate read-only test checkout or detached state; it never claims an active
-slice worktree.
+a separate read-only test checkout or detached state; it never becomes an active
+slice worktree writer.
 
 Run the deliberately small sprint smoke suite: launch/import, preview/navigation,
 save/share, and any sprint-specific critical media path on the declared AVD and,
@@ -378,7 +370,8 @@ Paperclip issue.
   product slices use the single-worktree contract above.
 - `DX-004 diagnostic` permits controlled watchdog qualification only after exact
   `company -> agent -> run -> PID` attribution. Ambiguity means no kill,
-  `NOT_READY`, `ROADMAP_BLOCKED`, and no next child.
+  `NOT_READY`, `ROADMAP_BLOCKED`, and no next child; broad `pkill` remains
+  forbidden.
 
 The owner-approved unlimited mode is `budgetMonthlyCents=0`; record per-run cost
 evidence and escalate anomalous growth. For every diagnostic transition, the
@@ -392,20 +385,22 @@ Every transition uses this exact order:
 1. finish the required local commit and/or allowed push and verify a clean HEAD;
 2. record the controller handoff to the exact next owner/phase;
 3. `POST evidence` to `/api/issues/{id}/comments` and require 2xx;
-4. `PATCH assignee/status` to the exact next owner and API state; do not change
-   `projectWorkspaceId` or `executionWorkspaceId`;
-5. perform `one read-only verification` of assignee, status, Project ID, the
-   unchanged Project/execution workspace IDs, controller owner/phase, and HEAD;
-6. `STOP` the current run.
+4. `PATCH assignee/status` to the exact next owner and API state with
+   `interrupt: true`; do not change `projectWorkspaceId` or
+   `executionWorkspaceId`;
+5. `STOP` immediately. The interrupting PATCH is the old run's final action; do
+   not poll `executionRunId` or perform a post-PATCH read from that process.
 
-A mention is not a handoff. On HTTP 409, reload once and recover this same child.
-Never write the Paperclip database directly.
+A mention is not a handoff. A failed PATCH may be repeated once with the same
+target. The watchdog completes a deterministic stranded handoff on its first
+eligible scan; it does not wait for Board. Never write the Paperclip database
+directly.
 
 ## Stop conditions
 
 - `LOCAL_BLOCKED` and `ROADMAP_BLOCKED` are reason codes; API status is
   `blocked`. Neither permits the next child.
-- A stale head, active/expired conflicting lease, dirty task worktree, wrong
+- A stale head, unexpected controller owner, dirty task worktree, wrong
   branch, residual exact ref, partial merge, or incomplete cleanup stops work.
 - Missing/mismatched Project or execution workspace identity stops work. A
   role-specific workspace mismatch is not a condition because all roles share

@@ -67,7 +67,6 @@ primary_repo_root: {primary}
 control_repo_root: {control}
 task_worktree_root: {worktrees}
 task_state_root: {states}
-slice_lease_seconds: 60
 android_repository_url: {android_remote}
 control_repository_url: {control_remote}
 """
@@ -314,6 +313,15 @@ def _recover_advanced_checkpoint(
     _git("add", checkpoint.name, cwd=worktree)
     _git("commit", "-m", "GLA-123 retain implementation checkpoint", cwd=worktree)
     new_head = _git("rev-parse", "HEAD", cwd=worktree).stdout.strip()
+    state_path = fixture["states"] / "GLA-123.json"
+    legacy_state = _state(fixture)
+    legacy_state["lease"] = {
+        "owner": "GlitcherryAndroidEngineer",
+        "run_id": engineer_run,
+        "expires_at": "2099-01-01T00:00:00Z",
+    }
+    state_path.write_text(json.dumps(legacy_state, indent=2, sort_keys=True) + "\n")
+    state_path.chmod(0o600)
     recovered = _run(
         fixture,
         "recover",
@@ -353,7 +361,7 @@ def _route_to_code_review(fixture: dict[str, Path]) -> tuple[Path, str]:
     return worktree, reviewer_run
 
 
-def test_adopt_handoff_and_claim_enforce_single_owner(tmp_path: Path) -> None:
+def test_adopt_handoff_and_claim_validate_expected_owner_without_lease(tmp_path: Path) -> None:
     fixture = _fixture(tmp_path)
     created = _create(fixture)
 
@@ -369,7 +377,7 @@ def test_adopt_handoff_and_claim_enforce_single_owner(tmp_path: Path) -> None:
 
     overlap = _claim(fixture, "GlitcherryAndroidEngineer", "run-android-overlap")
     assert overlap.returncode != 0
-    assert "active lease" in overlap.stderr.lower()
+    assert "expected owner" in overlap.stderr.lower()
 
     handoff = _handoff(
         fixture,
@@ -379,10 +387,18 @@ def test_adopt_handoff_and_claim_enforce_single_owner(tmp_path: Path) -> None:
         "spec_review",
     )
     assert handoff.returncode == 0, handoff.stderr
+    legacy_state = _state(fixture)
+    legacy_state["lease"] = {
+        "owner": "GlitcherryCTO",
+        "run_id": "obsolete-run",
+        "expires_at": "2000-01-01T00:00:00Z",
+    }
+    state_path.write_text(json.dumps(legacy_state, indent=2, sort_keys=True) + "\n")
+    state_path.chmod(0o600)
     claimed = _claim(fixture, "GlitcherryCodeReviewer", "run-review-1")
     assert claimed.returncode == 0, claimed.stderr
     state = _state(fixture)
-    assert state["lease"]["owner"] == "GlitcherryCodeReviewer"
+    assert state["lease"] is None
     assert state["phase"] == "spec_review"
 
 
@@ -424,7 +440,8 @@ def test_handoff_refuses_dirty_tree_and_preserves_changes(tmp_path: Path) -> Non
     assert result.returncode != 0
     assert "dirty" in result.stderr.lower()
     assert dirty.read_text() == "keep me\n"
-    assert _state(fixture)["lease"]["owner"] == "GlitcherryCTO"
+    assert _state(fixture)["lease"] is None
+    assert _state(fixture)["expected_owner"] == "GlitcherryCTO"
 
 
 def test_recovery_requires_exact_run_and_preserves_dirty_work(tmp_path: Path) -> None:
@@ -432,6 +449,15 @@ def test_recovery_requires_exact_run_and_preserves_dirty_work(tmp_path: Path) ->
     created = _create(fixture)
     dirty = Path(created["worktree_path"]) / "unfinished.txt"
     dirty.write_text("must survive recovery\n")
+    state_path = fixture["states"] / "GLA-123.json"
+    legacy_state = _state(fixture)
+    legacy_state["lease"] = {
+        "owner": "GlitcherryCTO",
+        "run_id": "run-cto-0",
+        "expires_at": "2099-01-01T00:00:00Z",
+    }
+    state_path.write_text(json.dumps(legacy_state, indent=2, sort_keys=True) + "\n")
+    state_path.chmod(0o600)
 
     wrong = _run(
         fixture,

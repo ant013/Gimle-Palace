@@ -9,7 +9,6 @@ team_workspace_root: /opt/example/glitcherry-paperclip-runs
 task_worktree_root: /opt/example/glitcherry-slice-worktrees
 task_state_root: /opt/example/glitcherry-slice-state
 slice_controller_path: /opt/example/Gimle-Palace/paperclips/projects/glitcherry-android/scripts/slice-worktree.py
-slice_lease_seconds: 2700
 operator_memory_dir: /opt/example/glitcherry-paperclip-memory
 overlay_root: paperclips/projects/glitcherry-android/overlays
 project_rules_file: AGENTS.md

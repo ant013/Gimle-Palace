@@ -199,7 +199,6 @@ CONTROL_ROOT="$(yq -r '.control_repo_root // ""' "$PATHS_FILE")"
 TASK_WORKTREE_ROOT="$(yq -r '.task_worktree_root // ""' "$PATHS_FILE")"
 TASK_STATE_ROOT="$(yq -r '.task_state_root // ""' "$PATHS_FILE")"
 SLICE_CONTROLLER="$(yq -r '.slice_controller_path // ""' "$PATHS_FILE")"
-LEASE_SECONDS="$(yq -r '.slice_lease_seconds // ""' "$PATHS_FILE")"
 ANDROID_REMOTE="$(yq -r '.android_repository_url // ""' "$PATHS_FILE")"
 CONTROL_REMOTE="$(yq -r '.control_repository_url // ""' "$PATHS_FILE")"
 
@@ -208,9 +207,6 @@ validate_absolute_directory "$TASK_WORKTREE_ROOT" "task worktree root"
 validate_absolute_directory "$TASK_STATE_ROOT" "task state root"
 validate_regular_file "$SLICE_CONTROLLER" "slice controller"
 [ -x "$SLICE_CONTROLLER" ] || die "slice controller must be executable"
-[[ "$LEASE_SECONDS" =~ ^[0-9]+$ ]] && \
-  [ "$LEASE_SECONDS" -ge 60 ] && [ "$LEASE_SECONDS" -le 7200 ] || \
-  die "slice_lease_seconds must be between 60 and 7200"
 
 COMPANY_ID="$(yq -r '.company_id // ""' "$BINDINGS_FILE")"
 validate_uuid "$COMPANY_ID" || die "bindings file has an invalid company identifier"

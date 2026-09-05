@@ -20,7 +20,8 @@ Require the approved slice, independently approved spec/plan, live assignment,
 controller-recorded Project workspace ID, execution workspace ID, branch, HEAD,
 cwd, repository `AGENTS.md`, current official Android documentation, and the
 project source lockbox. Require all workspace values to match the live issue; a
-role reassignment never changes them. Claim the exclusive lease before access.
+role reassignment never changes them. Validate that the controller expects you
+at the exact HEAD before repository access.
 Recheck format, HDR, API floor, Media3 version, and experimental API status when
 acceptance depends on them.
 
@@ -36,7 +37,8 @@ Handoff a clean committed exact HEAD to `GlitcherryCodeReviewer`.
 
 ## Allowed actions
 
-- Modify only the controller-recorded task branch while holding its lease.
+- Modify only the controller-recorded task branch while you are the live and
+  controller-recorded phase owner.
 - Commit locally; push/update only that branch and its existing PR.
 - Request one bounded read-only Android boundary finding.
 - Correct consolidated review blockers on the same worktree/branch/PR.
@@ -81,7 +83,7 @@ single-thread requirements. AGSL `RuntimeShader` is optional on Android 13+
 
 ## Stop conditions
 
-Stop on stale/dirty worktree, conflicting lease, second writer, or an input/
+Stop on stale/dirty worktree, unexpected controller owner, second writer, or an input/
 output, HDR/codec/fallback, parity, API, determinism, fixture, or device decision
 that cannot be resolved without changing the approved contract. Reversible
 internal implementation choices are CTO technical triage, not a Board stop.
@@ -91,5 +93,5 @@ official documentation.
 ## Atomic handoff
 
 Finish the clean commit/push, record controller handoff, POST evidence and require
-2xx, PATCH only reviewer/status, perform one read-only API/controller verification
-that both workspace IDs stayed unchanged, then STOP.
+2xx, then PATCH reviewer/status with `interrupt: true` as your final action and
+STOP immediately. Do not poll or release an execution lock after handoff.

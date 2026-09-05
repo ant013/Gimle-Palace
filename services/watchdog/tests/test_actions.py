@@ -393,6 +393,67 @@ def _co_finding() -> CommentOnlyHandoffFinding:
     )
 
 
+async def test_repair_comment_only_handoff_interrupts_current_run():
+    client = MagicMock(spec=PaperclipClient)
+    client.get_issue = AsyncMock(
+        return_value=Issue(
+            id="issue-42",
+            assignee_agent_id=_PE_ID,
+            execution_run_id="run-old",
+            active_run_id="run-old",
+            status="in_progress",
+            updated_at=_TS,
+            issue_number=42,
+        )
+    )
+    client.patch_issue = AsyncMock()
+
+    repaired = await act.repair_comment_only_handoff(
+        client, _co_finding(), frozenset({_PE_ID, _CR_ID})
+    )
+
+    assert repaired is True
+    client.patch_issue.assert_awaited_once_with(
+        "issue-42",
+        {
+            "assigneeAgentId": _CR_ID,
+            "status": "in_progress",
+            "interrupt": True,
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    ("current_assignee", "hired_ids"),
+    [
+        (_CR_ID, frozenset({_PE_ID, _CR_ID})),
+        (_PE_ID, frozenset({_PE_ID})),
+    ],
+)
+async def test_repair_comment_only_handoff_skips_changed_or_unknown_target(
+    current_assignee: str, hired_ids: frozenset[str]
+):
+    client = MagicMock(spec=PaperclipClient)
+    client.get_issue = AsyncMock(
+        return_value=Issue(
+            id="issue-42",
+            assignee_agent_id=current_assignee,
+            execution_run_id=None,
+            status="in_progress",
+            updated_at=_TS,
+            issue_number=42,
+        )
+    )
+    client.patch_issue = AsyncMock()
+
+    repaired = await act.repair_comment_only_handoff(
+        client, _co_finding(), hired_ids
+    )
+
+    assert repaired is False
+    client.patch_issue.assert_not_awaited()
+
+
 def _wa_finding() -> WrongAssigneeFinding:
     return WrongAssigneeFinding(
         type=FindingType.WRONG_ASSIGNEE,
