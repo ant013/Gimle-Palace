@@ -78,6 +78,19 @@ does not add tree-equality or feature-head-ancestry gates. Only then may CTO
 normalize the exact clean branch, let Paperclip archive its own worktree, and
 remove remaining exact refs.
 
+Before every first or correction handoff to Code Review, the implementer completes
+the review-evidence preflight on the same exact head: mark only completed tracked-plan
+items and record current evidence; if tracked plan bytes changed, update the
+Paperclip `plan` mirror from those exact bytes and verify its SHA-256/revision; and
+update the existing PR body with the exact head, current test totals, artifact
+paths/hashes, limitations, and required evidence headings. Record controller
+handoff only after all three are current. A stale checklist, plan mirror, or PR
+body with an otherwise reviewable product head is a process-preflight correction,
+not a Code Review rejection: return the same issue/workspace/PR to the producer
+without incrementing the rejection counter, then inspect only the metadata delta
+before continuing the pending technical verdict. A documentation-only evidence
+correction does not rerun Gradle, AVD, or device gates.
+
 QA runs one sprint smoke only after every slice is merged/cleaned, the Walker is
 stopped at `SPRINT_SMOKE_REQUIRED`, and one candidate SHA is fixed. A smoke
 failure blocks for the Human Engineering Lead; it never authorizes an invented
