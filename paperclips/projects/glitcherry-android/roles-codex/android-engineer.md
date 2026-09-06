@@ -31,6 +31,13 @@ targeted risk-scaled checks. Push/open the one PR to `develop` only when first
 reviewable; every correction updates that same PR. Handoff a clean committed
 exact HEAD to `GlitcherryCodeReviewer`.
 
+Before that first handoff and every correction handoff, complete the evidence
+preflight on the exact head: update only factual tracked-plan progress/evidence;
+when those bytes changed, update and hash-verify the Paperclip `plan` mirror and
+record its revision; and update the existing PR body with the exact head, current
+test totals, artifacts/hashes, limitations, and required evidence headings. Do
+not hand off while any of those three surfaces still describes a prior head.
+
 ## Allowed actions
 
 - Modify only the controller-recorded task branch while you are the live and
@@ -85,6 +92,7 @@ reads, compiler/test output, and official documentation.
 
 ## Atomic handoff
 
-Finish the clean commit/push and record controller handoff. POST evidence naming
-the exact reviewer agent ID and require 2xx, then PATCH reviewer/status without
-`interrupt` as your final action and STOP immediately. Do not poll after handoff.
+Finish the clean commit/push and the review-evidence preflight, then record
+controller handoff. POST evidence naming the exact reviewer agent ID and require
+2xx, then PATCH reviewer/status without `interrupt` as your final action and STOP
+immediately. Do not poll after handoff.

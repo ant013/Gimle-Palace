@@ -380,6 +380,13 @@ targeted risk-scaled checks. Push/open the one PR to `develop` only when first
 reviewable; every correction updates that same PR. Handoff a clean committed
 exact HEAD to `GlitcherryCodeReviewer`.
 
+Before that first handoff and every correction handoff, complete the evidence
+preflight on the exact head: update only factual tracked-plan progress/evidence;
+when those bytes changed, update and hash-verify the Paperclip `plan` mirror and
+record its revision; and update the existing PR body with the exact head, current
+test totals, artifacts/hashes, limitations, and required evidence headings. Do
+not hand off while any of those three surfaces still describes a prior head.
+
 ## Allowed actions
 
 - Modify only the controller-recorded task branch while you are the live and
@@ -424,8 +431,9 @@ deterministic rendering to Media. Never classify by the last screen touched.
 
 ## Source lockbox and stop conditions
 
-Official Android documentation is authoritative. Stop on a dirty/wrong
-worktree, stale head, unexpected controller owner, second writer, credential requirement,
+Official Android documentation is authoritative. Continue your own assigned
+dirty implementation work; require a clean commit before handoff. Stop on a wrong
+worktree/branch, different live Paperclip assignee, credential requirement,
 or a permission/storage/format/device/API-floor decision that would change the
 approved contract. Classify reversible internal implementation choices with CTO
 rather than escalating them to Board. Advisory MCP failure uses targeted local
@@ -433,10 +441,10 @@ reads, compiler/test output, and official documentation.
 
 ## Atomic handoff
 
-Finish the clean commit/push and record controller handoff. POST evidence naming
-the exact reviewer agent ID and require 2xx, then PATCH reviewer/status without
-`interrupt` as your final action and STOP immediately. Do not poll or release an
-execution lock after handoff.
+Finish the clean commit/push and the review-evidence preflight, then record
+controller handoff. POST evidence naming the exact reviewer agent ID and require
+2xx, then PATCH reviewer/status without `interrupt` as your final action and STOP
+immediately. Do not poll after handoff.
 
 
 ## Glitcherry Android runtime contract
@@ -477,17 +485,19 @@ and never accept an agent-home fallback.
   `workspace/control` layout is not used for normal product work.
 - One active slice has exactly one worktree below the configured
   `task_worktree_root` (`/opt/example/glitcherry-slice-worktrees`), one mode-600 record below
-  `/opt/example/glitcherry-slice-state`, one task branch, one PR, and one sequential phase
-  owner.
+  `/opt/example/glitcherry-slice-state`, one task branch, and one PR. Paperclip's live
+  assignee supplies sequential role routing.
 - Paperclip creates the isolated worktree once. CTO adopts its exact
   `executionWorkspaceId`, path, branch, and HEAD into the controller at
   `/opt/example/Gimle-Palace/paperclips/projects/glitcherry-android/scripts/slice-worktree.py`; no agent or controller creates an
-  alternative checkout. Verify the live assignee, controller expected owner,
-  exact HEAD, and unchanged workspace IDs before repository access. Controller
-  `claim` is an optional compatibility validation command; it creates no lease.
-- All roles use that same committed HEAD sequentially. A dirty tree, mismatched
-  branch/HEAD, unexpected controller owner, or second state is a stop. A stale
-  Paperclip execution run is automatically interrupted during handoff and is
+  alternative checkout. Verify the live assignee, exact worktree/branch, and
+  unchanged workspace IDs before repository access. Controller `claim` is an
+  optional reconciliation command: it creates no lease and adopts stale routing
+  owner/clean HEAD metadata with an audit record.
+- All roles use that same committed branch sequentially. A wrong worktree or
+  branch, dirty review boundary, or second active state is a stop. A stale
+  controller owner or clean committed HEAD is repaired automatically. A stale
+  Paperclip execution run is interrupted by the watchdog during handoff and is
   never a Board gate.
 - Both repositories' integration branch is `develop`. Origins are exactly
   `https://github.com/ant013/Glitcherry-Android.git` and `https://github.com/ant013/Glitcherry.git`.
@@ -516,6 +526,19 @@ merged PR and merge SHA; the controller requires that SHA on `origin/develop` bu
 does not add tree-equality or feature-head-ancestry gates. Only then may CTO
 normalize the exact clean branch, let Paperclip archive its own worktree, and
 remove remaining exact refs.
+
+Before every first or correction handoff to Code Review, the implementer completes
+the review-evidence preflight on the same exact head: mark only completed tracked-plan
+items and record current evidence; if tracked plan bytes changed, update the
+Paperclip `plan` mirror from those exact bytes and verify its SHA-256/revision; and
+update the existing PR body with the exact head, current test totals, artifact
+paths/hashes, limitations, and required evidence headings. Record controller
+handoff only after all three are current. A stale checklist, plan mirror, or PR
+body with an otherwise reviewable product head is a process-preflight correction,
+not a Code Review rejection: return the same issue/workspace/PR to the producer
+without incrementing the rejection counter, then inspect only the metadata delta
+before continuing the pending technical verdict. A documentation-only evidence
+correction does not rerun Gradle, AVD, or device gates.
 
 QA runs one sprint smoke only after every slice is merged/cleaned, the Walker is
 stopped at `SPRINT_SMOKE_REQUIRED`, and one candidate SHA is fixed. A smoke
@@ -567,8 +590,8 @@ slice correction.
 
 ### Recovery and safety
 
-Normal cross-role transfer uses Paperclip's supported interrupting assignment;
-no lease recovery or execution-lock polling exists in this workflow. If a stale
+Normal cross-role transfer uses a final plain Paperclip reassignment; no lease
+recovery or execution-lock polling exists in this workflow. If a stale
 run survives, the watchdog may finish only the controller-recorded handoff after
 matching company, issue, run, next owner, and both workspace IDs. Never use broad
 `pkill`, delete an unrecorded path, or start a second child.

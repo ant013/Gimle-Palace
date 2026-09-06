@@ -37,6 +37,17 @@ recorded HEAD, tracked-plan SHA-256, mirrored-body SHA-256, revision ID, and
 revision number. Return an absent, stale, or divergent mirror to CTO as one
 consolidated process finding before evaluating the plan itself.
 
+Before code content review, verify the producer's exact-head evidence preflight:
+tracked-plan progress/evidence is current, its Paperclip mirror is byte-identical
+when tracked bytes changed, and the existing PR body names the exact head,
+current test totals, artifacts/hashes, limitations, and required evidence
+headings. If only this administrative evidence is stale and the product head is
+otherwise reviewable, do not call controller `reject` and do not increment the
+three-cycle counter. Handoff the same issue/workspace/PR to the recorded producer
+for a metadata-only correction, require no product-code change or Gradle/AVD/
+device rerun, then review only that correction delta before continuing the
+pending technical verdict.
+
 Require exact-revision Human Engineering Lead confirmation when product
 behavior, roadmap or slice scope/order, production dependency, toolchain, API
 floor, quality threshold or pass/fail meaning, accepted ADR or architecture
