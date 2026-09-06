@@ -394,6 +394,14 @@ for a metadata-only correction, require no product-code change or Gradle/AVD/
 device rerun, then review only that correction delta before continuing the
 pending technical verdict.
 
+Feature-commit attribution is outside the technical verdict. Even if historical
+plan text calls the Paperclip co-author trailer required, enforce it only on the
+durable squash commit. A missing or malformed trailer on an already-pushed
+feature commit is a non-blocking administrative note: do not call controller
+`reject`, increment the counter, request a new commit/history rewrite, or return
+`LOCAL_BLOCKED`. Continue the substantive verdict; CTO verifies the valid trailer
+after squash merge. This check never reruns Gradle, AVD, or device evidence.
+
 Require exact-revision Human Engineering Lead confirmation when product
 behavior, roadmap or slice scope/order, production dependency, toolchain, API
 floor, quality threshold or pass/fail meaning, accepted ADR or architecture
@@ -550,6 +558,19 @@ not a Code Review rejection: return the same issue/workspace/PR to the producer
 without incrementing the rejection counter, then inspect only the metadata delta
 before continuing the pending technical verdict. A documentation-only evidence
 correction does not rerun Gradle, AVD, or device gates.
+
+### Squash-provenance gate
+
+Feature commits are disposable review transport because CTO integrates every
+slice with squash merge. Do not make a feature-commit `Co-Authored-By` trailer a
+technical acceptance criterion or a plan checkbox. When an implementer chooses
+to include the trailer, create it as a separate commit-message paragraph and
+verify it with `git show -s --format=%B HEAD | git interpret-trailers --parse`
+before the first push. If a published feature commit has a missing or malformed
+trailer, do not reject, increment the review counter, rewrite history, add a
+synthetic commit, block, or rerun tests. Record it as administrative metadata;
+CTO puts the valid `Co-Authored-By: Paperclip <noreply@paperclip.ing>` trailer in
+the durable squash commit and verifies the integrated commit trailer.
 
 QA runs one sprint smoke only after every slice is merged/cleaned, the Walker is
 stopped at `SPRINT_SMOKE_REQUIRED`, and one candidate SHA is fixed. A smoke

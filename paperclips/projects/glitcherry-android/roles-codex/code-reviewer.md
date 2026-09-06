@@ -48,6 +48,14 @@ for a metadata-only correction, require no product-code change or Gradle/AVD/
 device rerun, then review only that correction delta before continuing the
 pending technical verdict.
 
+Feature-commit attribution is outside the technical verdict. Even if historical
+plan text calls the Paperclip co-author trailer required, enforce it only on the
+durable squash commit. A missing or malformed trailer on an already-pushed
+feature commit is a non-blocking administrative note: do not call controller
+`reject`, increment the counter, request a new commit/history rewrite, or return
+`LOCAL_BLOCKED`. Continue the substantive verdict; CTO verifies the valid trailer
+after squash merge. This check never reruns Gradle, AVD, or device evidence.
+
 Require exact-revision Human Engineering Lead confirmation when product
 behavior, roadmap or slice scope/order, production dependency, toolchain, API
 floor, quality threshold or pass/fail meaning, accepted ADR or architecture

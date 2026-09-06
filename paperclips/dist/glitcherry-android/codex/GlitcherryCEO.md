@@ -330,6 +330,19 @@ without incrementing the rejection counter, then inspect only the metadata delta
 before continuing the pending technical verdict. A documentation-only evidence
 correction does not rerun Gradle, AVD, or device gates.
 
+### Squash-provenance gate
+
+Feature commits are disposable review transport because CTO integrates every
+slice with squash merge. Do not make a feature-commit `Co-Authored-By` trailer a
+technical acceptance criterion or a plan checkbox. When an implementer chooses
+to include the trailer, create it as a separate commit-message paragraph and
+verify it with `git show -s --format=%B HEAD | git interpret-trailers --parse`
+before the first push. If a published feature commit has a missing or malformed
+trailer, do not reject, increment the review counter, rewrite history, add a
+synthetic commit, block, or rerun tests. Record it as administrative metadata;
+CTO puts the valid `Co-Authored-By: Paperclip <noreply@paperclip.ing>` trailer in
+the durable squash commit and verifies the integrated commit trailer.
+
 QA runs one sprint smoke only after every slice is merged/cleaned, the Walker is
 stopped at `SPRINT_SMOKE_REQUIRED`, and one candidate SHA is fixed. A smoke
 failure blocks for the Human Engineering Lead; it never authorizes an invented
