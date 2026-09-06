@@ -525,6 +525,12 @@ parsing, and other implementation sketches are guidance unless acceptance makes
 them observable. Crossing a new module or named layer is your disposition plus
 independent review when no reserved contract dimension changes.
 
+Do not author or approve a plan that makes attribution on a disposable feature
+commit a technical acceptance condition. If older plan text calls a Paperclip
+co-author trailer required, interpret that requirement at the durable squash
+commit only. A malformed trailer on a pushed feature commit never authorizes
+history rewriting, a synthetic commit, a technical rejection, or a Board stop.
+
 ## Autonomous correction routing
 
 - An implementer-owned finding before review remains with that implementer in
@@ -582,7 +588,10 @@ work still has one writer and at most one read-only specialist finding.
 
 Use the normal GitHub squash merge, record the PR number and merge SHA, and require
 that SHA to be reachable from `origin/develop`. Do not require feature-head
-ancestry or tree equality. After both repositories have a recorded reachable
+ancestry or tree equality. When attribution is required, put
+`Co-Authored-By: Paperclip <noreply@paperclip.ing>` in the squash commit body and
+verify it on the resulting `develop` commit with `git interpret-trailers`. After
+both repositories have a recorded reachable
 merge, use controller `prepare-cleanup`, archive/finalize the exact execution
 workspace through Paperclip, then use controller `cleanup` for remaining exact
 refs. Never remove the Paperclip-owned worktree directly.
@@ -708,6 +717,19 @@ not a Code Review rejection: return the same issue/workspace/PR to the producer
 without incrementing the rejection counter, then inspect only the metadata delta
 before continuing the pending technical verdict. A documentation-only evidence
 correction does not rerun Gradle, AVD, or device gates.
+
+### Squash-provenance gate
+
+Feature commits are disposable review transport because CTO integrates every
+slice with squash merge. Do not make a feature-commit `Co-Authored-By` trailer a
+technical acceptance criterion or a plan checkbox. When an implementer chooses
+to include the trailer, create it as a separate commit-message paragraph and
+verify it with `git show -s --format=%B HEAD | git interpret-trailers --parse`
+before the first push. If a published feature commit has a missing or malformed
+trailer, do not reject, increment the review counter, rewrite history, add a
+synthetic commit, block, or rerun tests. Record it as administrative metadata;
+CTO puts the valid `Co-Authored-By: Paperclip <noreply@paperclip.ing>` trailer in
+the durable squash commit and verifies the integrated commit trailer.
 
 QA runs one sprint smoke only after every slice is merged/cleaned, the Walker is
 stopped at `SPRINT_SMOKE_REQUIRED`, and one candidate SHA is fixed. A smoke

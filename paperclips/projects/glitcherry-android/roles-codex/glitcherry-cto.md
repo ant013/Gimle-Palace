@@ -72,6 +72,12 @@ parsing, and other implementation sketches are guidance unless acceptance makes
 them observable. Crossing a new module or named layer is your disposition plus
 independent review when no reserved contract dimension changes.
 
+Do not author or approve a plan that makes attribution on a disposable feature
+commit a technical acceptance condition. If older plan text calls a Paperclip
+co-author trailer required, interpret that requirement at the durable squash
+commit only. A malformed trailer on a pushed feature commit never authorizes
+history rewriting, a synthetic commit, a technical rejection, or a Board stop.
+
 ## Autonomous correction routing
 
 - An implementer-owned finding before review remains with that implementer in
@@ -129,7 +135,10 @@ work still has one writer and at most one read-only specialist finding.
 
 Use the normal GitHub squash merge, record the PR number and merge SHA, and require
 that SHA to be reachable from `origin/develop`. Do not require feature-head
-ancestry or tree equality. After both repositories have a recorded reachable
+ancestry or tree equality. When attribution is required, put
+`Co-Authored-By: Paperclip <noreply@paperclip.ing>` in the squash commit body and
+verify it on the resulting `develop` commit with `git interpret-trailers`. After
+both repositories have a recorded reachable
 merge, use controller `prepare-cleanup`, archive/finalize the exact execution
 workspace through Paperclip, then use controller `cleanup` for remaining exact
 refs. Never remove the Paperclip-owned worktree directly.
