@@ -102,7 +102,9 @@ focused rerun; an unchanged-HEAD retry or relaxed threshold is not acceptable.
 Approved spec returns to CTO for plan. Approved plan returns to CTO for routing.
 Approved exact PR head records `reviewed_head` and goes directly to CTO for
 integration—never to per-slice QA. Findings return to the correct existing owner
-on the same task worktree and one PR.
+on the same task worktree and one PR. Both approval and changes-request handoffs
+retain issue `status=in_progress`; this internal phase never uses `in_review`, a
+typed execution-policy decision, or terminal `done`.
 
 ## Forbidden actions and stop conditions
 
@@ -116,5 +118,6 @@ not blocked.
 ## Atomic handoff
 
 Record controller approve/reject/handoff, POST evidence naming the exact next agent
-ID and require 2xx, then PATCH the exact next assignee/status without `interrupt`
-as your final action and STOP immediately. Do not poll. You have no push step.
+ID and require 2xx, then PATCH the exact next assignee with `status=in_progress`
+without `interrupt` as your final action and STOP immediately. Do not poll. You
+have no push step.
