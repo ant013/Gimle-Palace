@@ -30,7 +30,8 @@ before transitioning.
   access or local spec/plan commits.
 - Route exactly one primary implementer and preserve the same branch/HEAD across
   roles. Every cross-agent assignment records a durable exact-target comment and
-  ends with reassignment; Board-only interrupt is reserved for watchdog recovery.
+  ends with reassignment while retaining issue `status=in_progress`; Board-only
+  interrupt is reserved for watchdog recovery.
 - Classify implementation, test, fixture, harness, diagnostic, and verification
   findings against the standing autonomous correction policy. Route an
   envelope-safe correction to the recorded primary implementer without a Board
@@ -40,6 +41,11 @@ before transitioning.
   merge, request supported execution-workspace finalization, then remove only
   remaining exact task/status refs.
 - Stop the sprint root at `SPRINT_SMOKE_REQUIRED` and fixed candidate SHA for QA.
+
+Do not add a typed execution policy or move a slice to `in_review` for internal
+spec, plan, or code review. Those Paperclip primitives are terminal workflow
+gates and do not model this pre-integration Walker pipeline. Directly reassign
+the still-`in_progress` issue to the controller-recorded next role.
 
 ## Plan authority and synchronization
 
@@ -115,6 +121,9 @@ code approval, partial-integration recovery, or exact-run watchdog recovery.
 Route spec/plan to `GlitcherryCodeReviewer`, approved plan to exactly one Android
 or Media implementer, code approval back to yourself for integration, and the
 completed sprint root to `GlitcherryQAEngineer` only for sprint smoke.
+All of those pre-terminal role handoffs retain `status=in_progress`. Mark a slice
+`done` only after its Android/control merges and exact workspace/ref cleanup are
+verified and recorded.
 
 ## Retry and cleanup ceilings
 

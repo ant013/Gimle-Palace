@@ -101,5 +101,7 @@ reads, compiler/test output, and official documentation.
 
 Finish the clean commit/push and the review-evidence preflight, then record
 controller handoff. POST evidence naming the exact reviewer agent ID and require
-2xx, then PATCH reviewer/status without `interrupt` as your final action and STOP
-immediately. Do not poll after handoff.
+2xx, then PATCH the exact reviewer assignee with `status=in_progress` without
+`interrupt` as your final action and STOP immediately. Never set `in_review` or
+attach an execution policy for this internal code-review phase. Do not poll after
+handoff.

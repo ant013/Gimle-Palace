@@ -450,8 +450,10 @@ reads, compiler/test output, and official documentation.
 
 Finish the clean commit/push and the review-evidence preflight, then record
 controller handoff. POST evidence naming the exact reviewer agent ID and require
-2xx, then PATCH reviewer/status without `interrupt` as your final action and STOP
-immediately. Do not poll after handoff.
+2xx, then PATCH the exact reviewer assignee with `status=in_progress` without
+`interrupt` as your final action and STOP immediately. Never set `in_review` or
+attach an execution policy for this internal code-review phase. Do not poll after
+handoff.
 
 
 ## Glitcherry Android runtime contract
@@ -533,6 +535,18 @@ merged PR and merge SHA; the controller requires that SHA on `origin/develop` bu
 does not add tree-equality or feature-head-ancestry gates. Only then may CTO
 normalize the exact clean branch, let Paperclip archive its own worktree, and
 remove remaining exact refs.
+
+### Internal-review-status marker
+
+Spec review, plan review, implementation, code review, correction, and CTO
+integration are internal phases of one active slice issue. Every role-to-role
+handoff keeps the issue `status=in_progress` and changes only the exact assignee
+plus controller phase/HEAD evidence. Do not use `in_review`, attach an execution
+policy, create a pending interaction/approval, or schedule a monitor merely to
+wake an internal agent: Paperclip reserves those paths for real terminal review
+workflows. Code approval returns the still-active issue to CTO. CTO alone sets
+`done`, and only after Android/control integration and exact workspace/ref
+cleanup are verified.
 
 Before every first or correction handoff to Code Review, the implementer completes
 the review-evidence preflight on the same exact head: mark only completed tracked-plan

@@ -483,7 +483,8 @@ before transitioning.
   access or local spec/plan commits.
 - Route exactly one primary implementer and preserve the same branch/HEAD across
   roles. Every cross-agent assignment records a durable exact-target comment and
-  ends with reassignment; Board-only interrupt is reserved for watchdog recovery.
+  ends with reassignment while retaining issue `status=in_progress`; Board-only
+  interrupt is reserved for watchdog recovery.
 - Classify implementation, test, fixture, harness, diagnostic, and verification
   findings against the standing autonomous correction policy. Route an
   envelope-safe correction to the recorded primary implementer without a Board
@@ -493,6 +494,11 @@ before transitioning.
   merge, request supported execution-workspace finalization, then remove only
   remaining exact task/status refs.
 - Stop the sprint root at `SPRINT_SMOKE_REQUIRED` and fixed candidate SHA for QA.
+
+Do not add a typed execution policy or move a slice to `in_review` for internal
+spec, plan, or code review. Those Paperclip primitives are terminal workflow
+gates and do not model this pre-integration Walker pipeline. Directly reassign
+the still-`in_progress` issue to the controller-recorded next role.
 
 ## Plan authority and synchronization
 
@@ -568,6 +574,9 @@ code approval, partial-integration recovery, or exact-run watchdog recovery.
 Route spec/plan to `GlitcherryCodeReviewer`, approved plan to exactly one Android
 or Media implementer, code approval back to yourself for integration, and the
 completed sprint root to `GlitcherryQAEngineer` only for sprint smoke.
+All of those pre-terminal role handoffs retain `status=in_progress`. Mark a slice
+`done` only after its Android/control merges and exact workspace/ref cleanup are
+verified and recorded.
 
 ## Retry and cleanup ceilings
 
@@ -704,6 +713,18 @@ merged PR and merge SHA; the controller requires that SHA on `origin/develop` bu
 does not add tree-equality or feature-head-ancestry gates. Only then may CTO
 normalize the exact clean branch, let Paperclip archive its own worktree, and
 remove remaining exact refs.
+
+### Internal-review-status marker
+
+Spec review, plan review, implementation, code review, correction, and CTO
+integration are internal phases of one active slice issue. Every role-to-role
+handoff keeps the issue `status=in_progress` and changes only the exact assignee
+plus controller phase/HEAD evidence. Do not use `in_review`, attach an execution
+policy, create a pending interaction/approval, or schedule a monitor merely to
+wake an internal agent: Paperclip reserves those paths for real terminal review
+workflows. Code approval returns the still-active issue to CTO. CTO alone sets
+`done`, and only after Android/control integration and exact workspace/ref
+cleanup are verified.
 
 Before every first or correction handoff to Code Review, the implementer completes
 the review-evidence preflight on the same exact head: mark only completed tracked-plan

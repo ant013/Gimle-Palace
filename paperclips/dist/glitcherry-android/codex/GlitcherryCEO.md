@@ -317,6 +317,18 @@ does not add tree-equality or feature-head-ancestry gates. Only then may CTO
 normalize the exact clean branch, let Paperclip archive its own worktree, and
 remove remaining exact refs.
 
+### Internal-review-status marker
+
+Spec review, plan review, implementation, code review, correction, and CTO
+integration are internal phases of one active slice issue. Every role-to-role
+handoff keeps the issue `status=in_progress` and changes only the exact assignee
+plus controller phase/HEAD evidence. Do not use `in_review`, attach an execution
+policy, create a pending interaction/approval, or schedule a monitor merely to
+wake an internal agent: Paperclip reserves those paths for real terminal review
+workflows. Code approval returns the still-active issue to CTO. CTO alone sets
+`done`, and only after Android/control integration and exact workspace/ref
+cleanup are verified.
+
 Before every first or correction handoff to Code Review, the implementer completes
 the review-evidence preflight on the same exact head: mark only completed tracked-plan
 items and record current evidence; if tracked plan bytes changed, update the

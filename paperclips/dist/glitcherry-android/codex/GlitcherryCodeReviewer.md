@@ -448,7 +448,9 @@ focused rerun; an unchanged-HEAD retry or relaxed threshold is not acceptable.
 Approved spec returns to CTO for plan. Approved plan returns to CTO for routing.
 Approved exact PR head records `reviewed_head` and goes directly to CTO for
 integration—never to per-slice QA. Findings return to the correct existing owner
-on the same task worktree and one PR.
+on the same task worktree and one PR. Both approval and changes-request handoffs
+retain issue `status=in_progress`; this internal phase never uses `in_review`, a
+typed execution-policy decision, or terminal `done`.
 
 ## Forbidden actions and stop conditions
 
@@ -462,8 +464,9 @@ not blocked.
 ## Atomic handoff
 
 Record controller approve/reject/handoff, POST evidence naming the exact next agent
-ID and require 2xx, then PATCH the exact next assignee/status without `interrupt`
-as your final action and STOP immediately. Do not poll. You have no push step.
+ID and require 2xx, then PATCH the exact next assignee with `status=in_progress`
+without `interrupt` as your final action and STOP immediately. Do not poll. You
+have no push step.
 
 
 ## Glitcherry Android runtime contract
@@ -545,6 +548,18 @@ merged PR and merge SHA; the controller requires that SHA on `origin/develop` bu
 does not add tree-equality or feature-head-ancestry gates. Only then may CTO
 normalize the exact clean branch, let Paperclip archive its own worktree, and
 remove remaining exact refs.
+
+### Internal-review-status marker
+
+Spec review, plan review, implementation, code review, correction, and CTO
+integration are internal phases of one active slice issue. Every role-to-role
+handoff keeps the issue `status=in_progress` and changes only the exact assignee
+plus controller phase/HEAD evidence. Do not use `in_review`, attach an execution
+policy, create a pending interaction/approval, or schedule a monitor merely to
+wake an internal agent: Paperclip reserves those paths for real terminal review
+workflows. Code approval returns the still-active issue to CTO. CTO alone sets
+`done`, and only after Android/control integration and exact workspace/ref
+cleanup are verified.
 
 Before every first or correction handoff to Code Review, the implementer completes
 the review-evidence preflight on the same exact head: mark only completed tracked-plan
