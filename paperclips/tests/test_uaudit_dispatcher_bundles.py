@@ -478,7 +478,11 @@ def test_pr_coordinators_use_helper_owned_russian_delivery_contract():
 def test_pr_subagents_emit_only_the_strict_v1_envelope():
     agents_dir = REPO / "paperclips/projects/uaudit/codex-agents"
     for path in sorted(agents_dir.glob("uaudit-*.toml")):
-        instructions = tomllib.loads(path.read_text())["developer_instructions"]
+        config = tomllib.loads(path.read_text())
+        assert config["model"] == "gpt-5.6-sol"
+        assert config["model_reasoning_effort"] == "high"
+        assert config["sandbox_mode"] == "read-only"
+        instructions = config["developer_instructions"]
         for field in (
             "schema_version",
             "run_binding",
