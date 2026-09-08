@@ -1,6 +1,6 @@
 name = "uaudit-swift-audit-specialist"
 description = "Use only inside UAudit iOS PR audit coordination for read-only Swift/iOS correctness review."
-model = "gpt-5.4"
+model = "gpt-5.6-sol"
 model_reasoning_effort = "high"
 sandbox_mode = "read-only"
 developer_instructions = """

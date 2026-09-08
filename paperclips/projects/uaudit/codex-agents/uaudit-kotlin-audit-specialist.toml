@@ -1,6 +1,6 @@
 name = "uaudit-kotlin-audit-specialist"
 description = "Use only inside UAudit Android PR audit coordination for read-only Kotlin/Android correctness review."
-model = "gpt-5.4"
+model = "gpt-5.6-sol"
 model_reasoning_effort = "high"
 sandbox_mode = "read-only"
 developer_instructions = """
