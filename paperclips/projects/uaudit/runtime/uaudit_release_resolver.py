@@ -152,6 +152,12 @@ def resolve_release_history(
             )
 
     if release_head is None:
+        if master_head == cursor_sha:
+            return Resolution(
+                "no_change", None, master_head, (),
+                False,
+                "configured release is absent and cursor already equals master head",
+            )
         if cursor_is_ancestor_of_master:
             return Resolution("bridge", None, master_head, (Segment("master", "master", cursor_sha, master_head),), True,
                               "release branch is absent; audit the proven master bridge")

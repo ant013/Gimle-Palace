@@ -30,6 +30,19 @@ class ReleaseResolverTests(unittest.TestCase):
         self.assertEqual(split.kind, "split_recovery")
         self.assertEqual(len(split.segments), 2)
 
+    def test_absent_release_with_cursor_at_master_head_is_no_change(self) -> None:
+        result = resolve_release_history(
+            cursor_sha=sha("c"), release_branch="version/0.50", release_head=None,
+            master_anchor_sha=sha("a"), master_head=sha("c"),
+            cursor_is_ancestor_of_release=None, cursor_is_ancestor_of_master=True,
+            master_is_ancestor_of_release=None,
+        )
+        self.assertEqual(result.kind, "no_change")
+        self.assertEqual(result.selected_branch, None)
+        self.assertEqual(result.selected_head, sha("c"))
+        self.assertEqual(result.segments, ())
+        self.assertFalse(result.requires_full_audit)
+
     def test_absent_base_successor_at_cursor_is_no_change_even_if_master_is_behind(self) -> None:
         result = resolve_release_history(
             cursor_sha=sha("c"), release_branch="version/0.50", release_head=None,
