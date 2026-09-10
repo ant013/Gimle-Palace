@@ -107,7 +107,7 @@
             "custom"
           ],
           "roleId": "codex:uwi-platform-dispatcher",
-          "sha256": "6d4b074e82f76e20760ed1853730496e91b12e945ff5e350ab6d43df9d10af1e",
+          "sha256": "be93f4fd6283e0a66675eada6074bc4678426b52fd23e32bff9d29ce636a5b44",
           "source": "paperclips/projects/uaudit/roles-codex/uwi-platform-dispatcher.md",
           "workspaceCwd": ""
         },
@@ -123,7 +123,7 @@
             "custom"
           ],
           "roleId": "codex:uwa-platform-dispatcher",
-          "sha256": "e2f7de6bd6cf03068857d3a11810cfdc855f607112915c51d9f0148741bed6ac",
+          "sha256": "e467fa100190cec0ea692912f0710ff4d93f2f8f8e879bf134e4e36c381c7c28",
           "source": "paperclips/projects/uaudit/roles-codex/uwa-platform-dispatcher.md",
           "workspaceCwd": ""
         },
@@ -267,7 +267,7 @@
             "implementer"
           ],
           "roleId": "codex:uwi-infra-engineer",
-          "sha256": "37c4e4542abf2e6941e6afee38d52c69d9d2ad319d64c1ba5436df6f8d349ab6",
+          "sha256": "f93f0a35330cc790f46e795d863cb7e2af59c51ceb0fb4c740ebba18c662aa88",
           "source": "paperclips/projects/uaudit/overlays/codex/UWIInfraEngineer.md",
           "workspaceCwd": ""
         },
@@ -283,7 +283,7 @@
             "implementer"
           ],
           "roleId": "codex:uwa-infra-engineer",
-          "sha256": "879be24ed2e486bcd3731afcaa102a3ace3e9b55ead4499fd7fe0d6b73e7001c",
+          "sha256": "2e1689cdf64fe1a1ea2b41ed6d3b35b5ff7b0f10356d78fd3373cf1c07e8d780",
           "source": "paperclips/projects/uaudit/overlays/codex/UWAInfraEngineer.md",
           "workspaceCwd": ""
         },
