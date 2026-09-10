@@ -329,6 +329,16 @@ successful `workspace_finalize`. The next slice is forbidden until controller st
 absent, and all evidence is retained. If Android merged but control or cleanup
 failed, resume from the recorded SHA; never reimplement or remerge Android.
 
+Board recovery for a task worktree removed before `prepare-cleanup`: after
+verifying both merged PRs and no live writer, run `prepare-cleanup` with
+`--reconcile-missing-worktree --evidence "<sanitized operator evidence>"` and
+the usual CTO identity/run id. This explicit path requires `integrating`, both
+reachable merge records, the unchanged recorded approved HEAD, and absence of
+the exact task path, worktree registration, and local task branch. It records
+the recovery without recreating a worktree or rewriting Git. Then mark the
+child done, archive/finalize through Paperclip as above, and run `cleanup`.
+This is recovery, not a replacement for the normal worktree lifecycle.
+
 ## Sprint smoke gate — QA only here
 
 QA is activated once per sprint, only after every sprint slice is merged and

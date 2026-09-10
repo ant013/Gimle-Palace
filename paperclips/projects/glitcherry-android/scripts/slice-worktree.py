@@ -935,6 +935,35 @@ def _record_merge(args: argparse.Namespace) -> dict[str, Any]:
         return state
 
 
+def _reconcile_missing_worktree(
+    state: dict[str, Any], primary: Path, worktree: Path, run_id: str, evidence: str | None
+) -> str:
+    if not evidence or not evidence.strip():
+        raise ContractError("missing-worktree reconciliation requires operator evidence")
+    if state.get("phase") != "integrating":
+        raise ContractError("missing-worktree reconciliation requires integrating phase")
+    approved_head = state.get("reviewed_head")
+    if not approved_head or approved_head != state.get("head_sha"):
+        raise ContractError("recorded approved head must match the final task head")
+    _git(primary, "cat-file", "-e", f"{approved_head}^{{commit}}")
+    if worktree.exists() or worktree.is_symlink():
+        raise ContractError("missing-worktree reconciliation requires an absent task path")
+    registered = _git(primary, "worktree", "list", "--porcelain").stdout.splitlines()
+    if f"worktree {worktree}" in registered or f"branch refs/heads/{state['branch']}" in registered:
+        raise ContractError("task worktree is still registered; reconciliation refused")
+    result = _git(primary, "show-ref", "--verify", "--quiet", f"refs/heads/{state['branch']}", check=False)
+    if result.returncode != 1:
+        raise ContractError("task branch remains or its absence cannot be verified")
+    state["cleanup_reconciliation"] = {
+        "kind": "already_removed_worktree",
+        "run_id": run_id,
+        "evidence": evidence.strip(),
+        "approved_head_sha": approved_head,
+        "recorded_at": _iso(_now()),
+    }
+    return approved_head
+
+
 def _prepare_cleanup(args: argparse.Namespace) -> dict[str, Any]:
     values, primary, worktree_root, state_root, _, control_remote = _context(args)
     owner = _validate_owner(args.owner)
@@ -952,6 +981,17 @@ def _prepare_cleanup(args: argparse.Namespace) -> dict[str, Any]:
         _validate_repo(control, control_remote, "control")
         _commit_is_on_develop(control, state["control_merge_sha"])
         worktree = _worktree_path(state, worktree_root)
+        if args.reconcile_missing_worktree:
+            approved_head = _reconcile_missing_worktree(state, primary, worktree, run_id, args.evidence)
+            state.update(
+                approved_head_sha=approved_head,
+                phase="workspace_cleanup",
+                expected_owner=None,
+                lease=None,
+                updated_at=_iso(_now()),
+            )
+            _write_state(state_path, state)
+            return state
         approved_head = _verify_worktree(state, worktree_root)
         if approved_head != state["head_sha"] or approved_head != state.get("reviewed_head"):
             raise ContractError("task worktree HEAD changed after the recorded handoff")
@@ -1121,6 +1161,8 @@ def _parser() -> argparse.ArgumentParser:
 
     prepare_cleanup = sub.add_parser("prepare-cleanup")
     _add_identity(prepare_cleanup)
+    prepare_cleanup.add_argument("--reconcile-missing-worktree", action="store_true")
+    prepare_cleanup.add_argument("--evidence")
 
     cleanup = sub.add_parser("cleanup")
     _add_identity(cleanup)
