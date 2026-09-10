@@ -45,7 +45,7 @@ def test_daily_routine_config_uses_names_not_uuids_and_resolves_agents():
     assert {r["platform"] for r in config["routines"]} == {"android", "ios"}
     assert {r["app_id"] for r in config["routines"]} == {"unstoppable_wallet"}
     assert config["apps"] == [{"id": "unstoppable_wallet", "display_name": "Unstoppable Wallet", "enabled": True, "report_route": "UAudit"}]
-    assert {r["branch"] for r in config["routines"]} == {"version/0.51"}
+    assert {r["branch"] for r in config["routines"]} == {"version/0.52"}
     assert {r["routine_key"] for r in config["routines"]} == {
         "uaudit-daily-android",
         "uaudit-daily-ios",
@@ -191,6 +191,40 @@ def test_generated_dispatchers_pin_canonical_daily_cursors():
         assert "preserve it" in text
         assert legacy in text
         assert "never read below" in text
+
+
+def test_daily_roles_use_version_052_lock_identity():
+    expected = (
+        (
+            REPO / "paperclips/projects/uaudit/roles-codex/uwa-platform-dispatcher.md",
+            REPO / "paperclips/dist/uaudit/codex/UWACTO.md",
+            "daily-android-version-0.52.lock",
+            "daily-android-version-0.51.lock",
+        ),
+        (
+            REPO / "paperclips/projects/uaudit/roles-codex/uwi-platform-dispatcher.md",
+            REPO / "paperclips/dist/uaudit/codex/UWICTO.md",
+            "daily-ios-version-0.52.lock",
+            "daily-ios-version-0.51.lock",
+        ),
+        (
+            REPO / "paperclips/projects/uaudit/overlays/codex/UWAInfraEngineer.md",
+            REPO / "paperclips/dist/uaudit/codex/UWAInfraEngineer.md",
+            "daily-android-version-0.52.lock",
+            "daily-android-version-0.51.lock",
+        ),
+        (
+            REPO / "paperclips/projects/uaudit/overlays/codex/UWIInfraEngineer.md",
+            REPO / "paperclips/dist/uaudit/codex/UWIInfraEngineer.md",
+            "daily-ios-version-0.52.lock",
+            "daily-ios-version-0.51.lock",
+        ),
+    )
+    for source, rendered, current_lock, stale_lock in expected:
+        for path in (source, rendered):
+            text = path.read_text()
+            assert current_lock in text
+            assert stale_lock not in text
 
 
 def test_daily_dispatchers_resolve_direct_release_successors_before_intake():
@@ -550,24 +584,24 @@ def test_reconcile_plan_matches_legacy_records_and_renders_stable_keys():
     )
     plan = build_plan(config, agents, current, _paths())
     by_id = {item["routine_id"]: item for item in plan}
-    assert by_id["daily-android-version-0.51"]["dispatcher"] == "UWACTO"
+    assert by_id["daily-android-version-0.52"]["dispatcher"] == "UWACTO"
     assert (
-        by_id["daily-android-version-0.51"]["desired_assigneeAgentId"]
+        by_id["daily-android-version-0.52"]["desired_assigneeAgentId"]
         == agents["UWACTO"]
     )
-    assert by_id["daily-android-version-0.51"]["live_uuid"].endswith("11")
-    assert by_id["daily-android-version-0.51"]["needs_update"] is True
-    assert by_id["daily-ios-version-0.51"]["needs_update"] is True
+    assert by_id["daily-android-version-0.52"]["live_uuid"].endswith("11")
+    assert by_id["daily-android-version-0.52"]["needs_update"] is True
+    assert by_id["daily-ios-version-0.52"]["needs_update"] is True
     assert (
         "app_id: unstoppable_wallet"
-        in by_id["daily-android-version-0.51"]["desired_description"]
+        in by_id["daily-android-version-0.52"]["desired_description"]
     )
     assert (
         "routine_key: uaudit-daily-android"
-        in by_id["daily-android-version-0.51"]["desired_description"]
+        in by_id["daily-android-version-0.52"]["desired_description"]
     )
     assert (
-        by_id["daily-android-version-0.51"]["patch"]["baseRevisionId"] == "revision-11"
+        by_id["daily-android-version-0.52"]["patch"]["baseRevisionId"] == "revision-11"
     )
 
 
@@ -590,15 +624,15 @@ def test_reconcile_stable_key_survives_next_version_without_new_live_record():
         )
     next_config = copy.deepcopy(config)
     for routine in next_config["routines"]:
-        routine["id"] = routine["id"].replace("0.51", "0.52")
-        routine["branch"] = "version/0.52"
+        routine["id"] = routine["id"].replace("0.52", "0.53")
+        routine["branch"] = "version/0.53"
     plan = build_plan(next_config, agents, current, paths)
     assert {item["live_uuid"] for item in plan} == {
         "00000000-0000-0000-0000-000000000021",
         "00000000-0000-0000-0000-000000000022",
     }
     assert all(item["needs_update"] for item in plan)
-    assert all("branch: version/0.52" in item["desired_description"] for item in plan)
+    assert all("branch: version/0.53" in item["desired_description"] for item in plan)
 
 
 def test_reconcile_rejects_ambiguous_legacy_fallback():
@@ -706,10 +740,10 @@ def test_reconcile_partial_apply_reports_409_and_rerun_converges():
     )
     assert first_ok is False
     assert [item["routine_id"] for item in first_result["updated"]] == [
-        "daily-android-version-0.51"
+        "daily-android-version-0.52"
     ]
     assert [item["routine_id"] for item in first_result["failed"]] == [
-        "daily-ios-version-0.51"
+        "daily-ios-version-0.52"
     ]
 
     fail_ios["value"] = False
@@ -725,10 +759,10 @@ def test_reconcile_partial_apply_reports_409_and_rerun_converges():
     )
     assert second_ok is True
     assert [item["routine_id"] for item in second_result["updated"]] == [
-        "daily-ios-version-0.51"
+        "daily-ios-version-0.52"
     ]
     assert [item["routine_id"] for item in second_result["unchanged"]] == [
-        "daily-android-version-0.51"
+        "daily-android-version-0.52"
     ]
     final_plan = build_plan(config, agents, list(states.values()), paths)
     assert all(not item["needs_update"] for item in final_plan)
