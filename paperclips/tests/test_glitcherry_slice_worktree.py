@@ -7,6 +7,8 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
+
 
 REPO = Path(__file__).resolve().parents[2]
 CONTROLLER = (
@@ -1147,8 +1149,9 @@ def _merge_control_status(
     return reviewed_head, merge_sha
 
 
+@pytest.mark.parametrize("missing_worktree", [False, True])
 def test_cleanup_normalizes_for_paperclip_then_removes_exact_refs(
-    tmp_path: Path,
+    tmp_path: Path, missing_worktree: bool,
 ) -> None:
     fixture = _fixture(tmp_path)
     _create(fixture)
@@ -1199,6 +1202,24 @@ def test_cleanup_normalizes_for_paperclip_then_removes_exact_refs(
     assert control.returncode == 0, control.stderr
 
     approved_head = _state(fixture)["reviewed_head"]
+    recovery_args = []
+    if missing_worktree:
+        recovery_args = ["--reconcile-missing-worktree", "--evidence", "Board verified merged GLA-123"]
+        identity = ["--issue-key", "GLA-123", "--owner", "GlitcherryCTO", "--run-id", "board-recovery"]
+        present = _run(fixture, "prepare-cleanup", *identity, *recovery_args)
+        assert present.returncode != 0
+        assert _state(fixture)["phase"] == "integrating"
+        _git("worktree", "remove", str(worktree), cwd=fixture["primary"])
+        retained_branch = _run(fixture, "prepare-cleanup", *identity, *recovery_args)
+        assert retained_branch.returncode != 0
+        assert _state(fixture)["phase"] == "integrating"
+        _git("branch", "-D", branch, cwd=fixture["primary"])
+        normal = _run(fixture, "prepare-cleanup", *identity)
+        assert normal.returncode != 0
+        assert "unavailable" in normal.stderr
+        no_evidence = _run(fixture, "prepare-cleanup", *identity, "--reconcile-missing-worktree")
+        assert no_evidence.returncode != 0
+        assert _state(fixture)["phase"] == "integrating"
     prepared = _run(
         fixture,
         "prepare-cleanup",
@@ -1208,13 +1229,28 @@ def test_cleanup_normalizes_for_paperclip_then_removes_exact_refs(
         "GlitcherryCTO",
         "--run-id",
         "run-cto-merge",
+        *recovery_args,
     )
     assert prepared.returncode == 0, prepared.stderr
     state = _state(fixture)
     assert state["phase"] == "workspace_cleanup"
     assert state["approved_head_sha"] == approved_head
-    assert _git("rev-parse", "HEAD", cwd=worktree).stdout.strip() == android_merge
+    if missing_worktree:
+        assert not worktree.exists()
+        assert state["cleanup_reconciliation"]["evidence"] == "Board verified merged GLA-123"
+        assert state["cleanup_reconciliation"]["approved_head_sha"] == approved_head
+    else:
+        assert _git("rev-parse", "HEAD", cwd=worktree).stdout.strip() == android_merge
 
+    if not missing_worktree:
+        _assert_premature_cleanup_fails(fixture)
+        _git("worktree", "remove", str(worktree), cwd=fixture["primary"])
+        _git("branch", "-d", branch, cwd=fixture["primary"])
+
+    _assert_cleanup_removes_exact_refs(fixture, worktree, branch)
+
+
+def _assert_premature_cleanup_fails(fixture: dict[str, Path]) -> None:
     premature = _run(
         fixture,
         "cleanup",
@@ -1228,12 +1264,8 @@ def test_cleanup_normalizes_for_paperclip_then_removes_exact_refs(
     assert premature.returncode != 0
     assert "has not been archived" in premature.stderr
 
-    # Simulate Paperclip's supported execution-workspace archive. The normal
-    # non-force branch deletion now succeeds because prepare-cleanup moved the
-    # runtime-created branch to the verified merge commit.
-    _git("worktree", "remove", str(worktree), cwd=fixture["primary"])
-    _git("branch", "-d", branch, cwd=fixture["primary"])
 
+def _assert_cleanup_removes_exact_refs(fixture: dict[str, Path], worktree: Path, branch: str) -> None:
     cleaned = _run(
         fixture,
         "cleanup",
