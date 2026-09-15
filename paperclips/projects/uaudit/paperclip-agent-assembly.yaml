@@ -97,12 +97,14 @@ agents:
     role_source: paperclips/roles-codex/cx-cto.md
     profile: cto
     target: codex
+    model: gpt-6-astra
     platform: all
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
   - agent_name: UWICTO
     role_source: paperclips/projects/uaudit/roles-codex/uwi-platform-dispatcher.md
     profile: custom
     target: codex
+    model: gpt-6-astra
     reportsTo: AUCEO
     platform: ios
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
@@ -110,6 +112,7 @@ agents:
     role_source: paperclips/projects/uaudit/roles-codex/uwa-platform-dispatcher.md
     profile: custom
     target: codex
+    model: gpt-6-astra
     reportsTo: AUCEO
     platform: android
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
@@ -117,6 +120,7 @@ agents:
     role_source: paperclips/projects/uaudit/overlays/codex/UWISwiftAuditor.md
     profile: reviewer
     target: codex
+    model: gpt-6-astra
     reportsTo: UWICTO
     platform: ios
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
@@ -124,6 +128,7 @@ agents:
     role_source: paperclips/projects/uaudit/overlays/codex/UWAKotlinAuditor.md
     profile: reviewer
     target: codex
+    model: gpt-6-astra
     reportsTo: UWACTO
     platform: android
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
@@ -131,6 +136,7 @@ agents:
     role_source: paperclips/projects/uaudit/overlays/codex/UWICryptoAuditor.md
     profile: implementer
     target: codex
+    model: gpt-6-astra
     reportsTo: UWICTO
     platform: ios
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
@@ -138,6 +144,7 @@ agents:
     role_source: paperclips/projects/uaudit/overlays/codex/UWACryptoAuditor.md
     profile: implementer
     target: codex
+    model: gpt-6-astra
     reportsTo: UWACTO
     platform: android
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
@@ -145,6 +152,7 @@ agents:
     role_source: paperclips/projects/uaudit/overlays/codex/UWISecurityAuditor.md
     profile: reviewer
     target: codex
+    model: gpt-6-astra
     reportsTo: UWICTO
     platform: ios
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
@@ -152,6 +160,7 @@ agents:
     role_source: paperclips/projects/uaudit/overlays/codex/UWASecurityAuditor.md
     profile: reviewer
     target: codex
+    model: gpt-6-astra
     reportsTo: UWACTO
     platform: android
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
@@ -159,6 +168,7 @@ agents:
     role_source: paperclips/projects/uaudit/overlays/codex/UWIQAEngineer.md
     profile: qa
     target: codex
+    model: gpt-6-astra
     reportsTo: UWICTO
     platform: ios
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
@@ -166,6 +176,7 @@ agents:
     role_source: paperclips/projects/uaudit/overlays/codex/UWAQAEngineer.md
     profile: qa
     target: codex
+    model: gpt-6-astra
     reportsTo: UWACTO
     platform: android
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
@@ -173,6 +184,7 @@ agents:
     role_source: paperclips/projects/uaudit/overlays/codex/UWIInfraEngineer.md
     profile: implementer
     target: codex
+    model: gpt-6-astra
     reportsTo: UWICTO
     platform: ios
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
@@ -180,6 +192,7 @@ agents:
     role_source: paperclips/projects/uaudit/overlays/codex/UWAInfraEngineer.md
     profile: implementer
     target: codex
+    model: gpt-6-astra
     reportsTo: UWACTO
     platform: android
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
@@ -187,6 +200,7 @@ agents:
     role_source: paperclips/projects/uaudit/overlays/codex/UWIResearchAgent.md
     profile: research
     target: codex
+    model: gpt-6-astra
     reportsTo: UWICTO
     platform: ios
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
@@ -194,6 +208,7 @@ agents:
     role_source: paperclips/projects/uaudit/overlays/codex/UWAResearchAgent.md
     profile: research
     target: codex
+    model: gpt-6-astra
     reportsTo: UWACTO
     platform: android
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android

@@ -71,7 +71,7 @@
   "project": "uaudit",
   "schemaVersion": 1,
   "sourceManifest": "paperclips/projects/uaudit/paperclip-agent-assembly.yaml",
-  "sourceManifestSha256": "9ddbed961a290fff5eb5f33ce9162325183827f784500562ef17a0f31ecd3b7f",
+  "sourceManifestSha256": "3e4c3bff11d484e2732ba7820189782aff3cfd84d2fdb8bbb7889b6cca217e2e",
   "targets": {
     "codex": {
       "adapterType": "codex_local",
@@ -98,32 +98,32 @@
         {
           "agentId": "9f0f6fc5-e9ef-4664-ac54-15ffc64069bc",
           "agentName": "UWICTO",
-          "bytes": 7794,
+          "bytes": 7551,
           "family": "dispatcher",
-          "lines": 92,
+          "lines": 68,
           "output": "paperclips/dist/uaudit/codex/UWICTO.md",
           "platform": "ios",
           "profiles": [
             "custom"
           ],
           "roleId": "codex:uwi-platform-dispatcher",
-          "sha256": "be93f4fd6283e0a66675eada6074bc4678426b52fd23e32bff9d29ce636a5b44",
+          "sha256": "1ea3351c4192c41d5857004c9b87915c3b0140a4c3c3195a9234f41f1bca4c44",
           "source": "paperclips/projects/uaudit/roles-codex/uwi-platform-dispatcher.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "e63b7f27-cc4f-41f4-8883-b5b9677984d9",
           "agentName": "UWACTO",
-          "bytes": 7843,
+          "bytes": 7612,
           "family": "dispatcher",
-          "lines": 92,
+          "lines": 68,
           "output": "paperclips/dist/uaudit/codex/UWACTO.md",
           "platform": "android",
           "profiles": [
             "custom"
           ],
           "roleId": "codex:uwa-platform-dispatcher",
-          "sha256": "e467fa100190cec0ea692912f0710ff4d93f2f8f8e879bf134e4e36c381c7c28",
+          "sha256": "d2ec3035915e9613e6bc0bc0a13953921afc699293210c2d9c79fef49426f685",
           "source": "paperclips/projects/uaudit/roles-codex/uwa-platform-dispatcher.md",
           "workspaceCwd": ""
         },
@@ -258,7 +258,7 @@
         {
           "agentId": "339e9d3f-48c0-4348-a8da-5337e6f29491",
           "agentName": "UWIInfraEngineer",
-          "bytes": 25901,
+          "bytes": 25999,
           "family": "implementer",
           "lines": 439,
           "output": "paperclips/dist/uaudit/codex/UWIInfraEngineer.md",
@@ -267,14 +267,14 @@
             "implementer"
           ],
           "roleId": "codex:uwi-infra-engineer",
-          "sha256": "f93f0a35330cc790f46e795d863cb7e2af59c51ceb0fb4c740ebba18c662aa88",
+          "sha256": "39e8c3d47e2f972e6d4a5c709dafc21564220374269181ddd5380e4084175846",
           "source": "paperclips/projects/uaudit/overlays/codex/UWIInfraEngineer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "5f0709f8-0b05-43e7-8711-6df618b95f69",
           "agentName": "UWAInfraEngineer",
-          "bytes": 25295,
+          "bytes": 25778,
           "family": "implementer",
           "lines": 437,
           "output": "paperclips/dist/uaudit/codex/UWAInfraEngineer.md",
@@ -283,7 +283,7 @@
             "implementer"
           ],
           "roleId": "codex:uwa-infra-engineer",
-          "sha256": "2e1689cdf64fe1a1ea2b41ed6d3b35b5ff7b0f10356d78fd3373cf1c07e8d780",
+          "sha256": "03191aa4133140f9ed6bb6fa3c36226334327bec92c19749b24f965f1fa55085",
           "source": "paperclips/projects/uaudit/overlays/codex/UWAInfraEngineer.md",
           "workspaceCwd": ""
         },

@@ -15,6 +15,7 @@ import re
 import sys
 import tempfile
 import unicodedata
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Mapping, Sequence
@@ -26,6 +27,7 @@ SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 ISSUE_RE = re.compile(r"^[A-Z][A-Z0-9]{0,15}-[1-9][0-9]*$")
 ROUTINE_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
+RELEASE_BRANCH_RE = re.compile(r"^version/(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 WARNING_CODE_RE = re.compile(r"^[a-z][a-z0-9._-]{0,63}$")
 CONTROL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 CYRILLIC_RE = re.compile(r"[\u0400-\u04ff]")
@@ -131,6 +133,25 @@ INSTALL_SCHEMA = "uaudit-helper-install/v1"
 INSTALL_MANIFEST = "uaudit_delivery_contract.manifest.json"
 STATUS_SCHEMA = "uaudit-daily-slot-status/v1"
 STATUS_OUTCOMES = ("no_change", "blocked", "deferred")
+BRANCH_STATUS_SCHEMA = "uaudit-branch-transition-status/v1"
+CURSOR_V2_SCHEMA = "uaudit-daily-cursor/v2"
+RELEASE_SELECTION_SCHEMA = "uaudit-release-selection/v2"
+
+
+_RELEASE_CAPABILITY_TOKEN = object()
+
+
+@dataclass(frozen=True)
+class _VerifiedReleaseCapability:
+    selection_sha256: str
+    routine_key: str
+    platform: str
+    from_branch: str
+    selected_branch: str
+    cursor_sha: str
+    selected_head: str
+    resolution_kind: str
+    _token: object
 OPERATIONAL_WARNING_SCHEMA = "uaudit-operational-warnings/v1"
 OPERATIONAL_WARNING_FILE = "operational-warnings.json"
 OPERATIONAL_WARNING_SNAPSHOT = "status/operational-warnings.aggregate.json"
@@ -338,6 +359,13 @@ def _validate_kind(value: Any) -> str:
     return value
 
 
+def _release_branch(value: Any, where: str) -> str:
+    branch = _bounded_string(value, where, maximum=200)
+    if not RELEASE_BRANCH_RE.fullmatch(branch):
+        _fail(f"{where} must be a canonical version/X.Y branch")
+    return branch
+
+
 def _validate_source_ref(value: Any, audit_kind: str, where: str = "source_ref") -> dict[str, Any]:
     ref = _expect_object(value, where)
     if audit_kind == "pr":
@@ -352,18 +380,85 @@ def _validate_source_ref(value: Any, audit_kind: str, where: str = "source_ref")
         base_sha = _sha(ref["base_sha"], f"{where}.base_sha", git=True)
         head_sha = _sha(ref["head_sha"], f"{where}.head_sha", git=True)
         return {"repo": repo, "pr_url": pr_url, "base_sha": base_sha, "head_sha": head_sha}
-    _exact_keys(ref, ("routine_id", "branch", "from_sha", "to_sha"), where=where)
+    branch_aware = audit_kind == "daily_delta" and set(ref) == {
+        "routine_id", "from_branch", "branch", "from_sha", "to_sha",
+    }
+    if branch_aware:
+        _exact_keys(ref, ("routine_id", "from_branch", "branch", "from_sha", "to_sha"), where=where)
+    else:
+        _exact_keys(ref, ("routine_id", "branch", "from_sha", "to_sha"), where=where)
     routine = _bounded_string(ref["routine_id"], f"{where}.routine_id", maximum=128)
     if not ROUTINE_RE.fullmatch(routine):
         _fail(f"{where}.routine_id has invalid format")
-    branch = _bounded_string(ref["branch"], f"{where}.branch", maximum=200)
-    if branch.strip() != branch or branch.startswith("-") or ".." in branch:
-        _fail(f"{where}.branch is not safe")
+    branch = _release_branch(ref["branch"], f"{where}.branch")
     from_sha = _sha(ref["from_sha"], f"{where}.from_sha", git=True)
     to_sha = _sha(ref["to_sha"], f"{where}.to_sha", git=True)
     if from_sha == to_sha:
         _fail(f"{where} delta range must be non-empty")
-    return {"routine_id": routine, "branch": branch, "from_sha": from_sha, "to_sha": to_sha}
+    normalized = {"routine_id": routine, "branch": branch, "from_sha": from_sha, "to_sha": to_sha}
+    if branch_aware:
+        normalized = {
+            "routine_id": routine,
+            "from_branch": _release_branch(ref["from_branch"], f"{where}.from_branch"),
+            "branch": branch,
+            "from_sha": from_sha,
+            "to_sha": to_sha,
+        }
+    return normalized
+
+
+def _validate_release_profile(path: Path, *, source_ref: Mapping[str, Any], platform: str) -> dict[str, Any]:
+    profile = _expect_object(_load_json(path, maximum=256 * 1024), "release profile")
+    _exact_keys(
+        profile,
+        (
+            "schema_version", "routine_key", "platform", "release_major", "from_branch",
+            "selected_branch", "cursor_sha", "selected_head", "master_head", "resolution_kind",
+            "segment", "release_heads", "missing_versions", "proof",
+        ),
+        where="release profile",
+    )
+    if profile["schema_version"] != RELEASE_SELECTION_SCHEMA:
+        _fail("release profile schema is invalid")
+    if profile["routine_key"] != source_ref["routine_id"] or profile["platform"] != platform:
+        _fail("release profile routine or platform mismatch")
+    if profile["from_branch"] != source_ref["from_branch"] or profile["selected_branch"] != source_ref["branch"]:
+        _fail("release profile branch mismatch")
+    if profile["cursor_sha"] != source_ref["from_sha"] or profile["selected_head"] != source_ref["to_sha"]:
+        _fail("release profile SHA mismatch")
+    if profile["resolution_kind"] not in {"daily", "transition"}:
+        _fail("release profile is not a state-advancing audit selection")
+    if not isinstance(profile["release_major"], int) or isinstance(profile["release_major"], bool) or profile["release_major"] < 0:
+        _fail("release profile major is invalid")
+    _release_branch(profile["from_branch"], "release profile.from_branch")
+    _release_branch(profile["selected_branch"], "release profile.selected_branch")
+    _sha(profile["cursor_sha"], "release profile.cursor_sha", git=True)
+    _sha(profile["selected_head"], "release profile.selected_head", git=True)
+    _sha(profile["master_head"], "release profile.master_head", git=True)
+    segment = _expect_object(profile["segment"], "release profile.segment")
+    _exact_keys(segment, ("branch", "from_sha", "to_sha"), where="release profile.segment")
+    if segment != {
+        "branch": source_ref["branch"], "from_sha": source_ref["from_sha"], "to_sha": source_ref["to_sha"],
+    }:
+        _fail("release profile segment mismatch")
+    heads = _expect_object(profile["release_heads"], "release profile.release_heads")
+    if heads.get(source_ref["branch"]) != source_ref["to_sha"]:
+        _fail("release profile selected head is not bound to release_heads")
+    missing = profile["missing_versions"]
+    if not isinstance(missing, list) or len(missing) > 128 or any(not isinstance(item, str) or not RELEASE_BRANCH_RE.fullmatch(item) for item in missing):
+        _fail("release profile missing_versions is invalid")
+    proof = _expect_object(profile["proof"], "release profile.proof")
+    _exact_keys(
+        proof,
+        ("active_branch_present", "cursor_is_ancestor_of_selected", "cursor_is_ancestor_of_master"),
+        where="release profile.proof",
+    )
+    if proof["cursor_is_ancestor_of_selected"] is not True:
+        _fail("release profile lacks selected ancestry proof")
+    expected_active = profile["resolution_kind"] == "daily"
+    if proof["active_branch_present"] is not expected_active:
+        _fail("release profile active-branch proof conflicts with outcome")
+    return profile
 
 
 def _validate_run_binding(value: Any, where: str = "run_binding") -> dict[str, Any]:
@@ -477,6 +572,15 @@ def bind_context(args: argparse.Namespace) -> dict[str, Any]:
         _fail("delta bind-context requires --lock-dir")
     if intake["audit_kind"] == "pr" and args.lock_dir is not None:
         _fail("PR bind-context forbids --lock-dir")
+    if intake["audit_kind"] == "daily_delta" and "from_branch" in intake["source_ref"]:
+        expected_routine = f"uaudit-daily-{intake['platform']}"
+        if intake["source_ref"]["routine_id"] != expected_routine:
+            _fail("branch-aware daily source_ref must use the stable platform routine id")
+        if args.lock_dir.resolve().name != f"{expected_routine}.lock":
+            _fail("branch-aware daily intake requires the neutral platform lock")
+        _validate_release_profile(
+            run_dir / "profile.json", source_ref=intake["source_ref"], platform=intake["platform"],
+        )
     digests = {name: _sha256_path(run_dir / name) for name in INPUT_NAMES[intake["audit_kind"]]}
     context_path = run_dir / "run-context.json"
     pending_lock_metadata: tuple[Path, dict[str, Any]] | None = None
@@ -1926,38 +2030,135 @@ def _validate_approval(comments_path: Path, approvers_path: Path, summary_sha: s
     return sorted(approved)[0]
 
 
-def _load_cursor(path: Path) -> dict[str, Any]:
-    cursor = _expect_object(_load_json(path, maximum=64 * 1024), "daily cursor")
-    _exact_keys(
-        cursor,
-        ("last_successfully_audited_sha",),
-        (
-            "last_successful_issue", "last_successful_at", "last_delivery_summary_sha256",
-            "last_telegram_message_id",
-        ),
-        where="daily cursor",
+def _verified_release_capability(
+    *,
+    selection_sha256: str,
+    routine_key: str,
+    platform: str,
+    from_branch: str,
+    selected_branch: str,
+    cursor_sha: str,
+    selected_head: str,
+    resolution_kind: str,
+) -> _VerifiedReleaseCapability:
+    selection_sha256 = _sha(selection_sha256, "verified selection sha256")
+    routine_key = _bounded_string(routine_key, "verified routine_key", maximum=128)
+    if routine_key != f"uaudit-daily-{platform}" or platform not in {"ios", "android"}:
+        _fail("verified selection routine or platform is invalid")
+    if resolution_kind not in {"daily", "transition", "branch_transition", "migration"}:
+        _fail("verified selection outcome cannot mutate daily state")
+    return _VerifiedReleaseCapability(
+        selection_sha256=selection_sha256,
+        routine_key=routine_key,
+        platform=platform,
+        from_branch=_release_branch(from_branch, "verified from_branch"),
+        selected_branch=_release_branch(selected_branch, "verified selected_branch"),
+        cursor_sha=_sha(cursor_sha, "verified cursor_sha", git=True),
+        selected_head=_sha(selected_head, "verified selected_head", git=True),
+        resolution_kind=resolution_kind,
+        _token=_RELEASE_CAPABILITY_TOKEN,
     )
+
+
+def _require_release_capability(value: Any) -> _VerifiedReleaseCapability:
+    if not isinstance(value, _VerifiedReleaseCapability) or value._token is not _RELEASE_CAPABILITY_TOKEN:
+        _fail("branch-aware cursor mutation requires an in-memory verified release capability")
+    return value
+
+
+def _validate_cursor_metadata(cursor: Mapping[str, Any]) -> None:
     _sha(cursor["last_successfully_audited_sha"], "cursor.last_successfully_audited_sha", git=True)
-    if "last_successful_issue" in cursor and cursor["last_successful_issue"] is not None:
+    if cursor.get("last_successful_issue") is not None:
         _validate_issue(cursor["last_successful_issue"], "cursor.last_successful_issue")
-    if "last_successful_at" in cursor and cursor["last_successful_at"] is not None:
+    if cursor.get("last_successful_at") is not None:
         _iso_utc(cursor["last_successful_at"], "cursor.last_successful_at")
-    if "last_delivery_summary_sha256" in cursor and cursor["last_delivery_summary_sha256"] is not None:
+    if cursor.get("last_delivery_summary_sha256") is not None:
         _sha(cursor["last_delivery_summary_sha256"], "cursor.last_delivery_summary_sha256")
-    if "last_telegram_message_id" in cursor and cursor["last_telegram_message_id"] is not None:
+    if cursor.get("last_telegram_message_id") is not None:
         if not _is_int(cursor["last_telegram_message_id"]) or cursor["last_telegram_message_id"] <= 0:
             _fail("cursor last_telegram_message_id is invalid")
-    return cursor
+
+
+def _load_cursor(path: Path) -> tuple[dict[str, Any], str]:
+    cursor = _expect_object(_load_json(path, maximum=64 * 1024), "daily cursor")
+    metadata = (
+        "last_successful_issue", "last_successful_at", "last_delivery_summary_sha256",
+        "last_telegram_message_id",
+    )
+    if cursor.get("schema_version") == CURSOR_V2_SCHEMA:
+        _exact_keys(
+            cursor,
+            ("schema_version", "active_release_branch", "last_successfully_audited_sha", *metadata),
+            where="daily cursor",
+        )
+        cursor["active_release_branch"] = _release_branch(
+            cursor["active_release_branch"], "cursor.active_release_branch",
+        )
+        version = "v2"
+    else:
+        _exact_keys(
+            cursor, ("last_successfully_audited_sha",), metadata, where="daily cursor",
+        )
+        version = "v1"
+    _validate_cursor_metadata(cursor)
+    return cursor, version
+
+
+def initialize_daily_cursor(args: argparse.Namespace) -> dict[str, Any]:
+    """Create a missing canonical cursor v2 without an overwrite path."""
+
+    platform = _validate_platform(args.platform)
+    routine_key = _bounded_string(args.routine_key, "routine_key", maximum=128)
+    if routine_key != f"uaudit-daily-{platform}":
+        _fail("cursor initialization routine does not match platform")
+    branch = _release_branch(args.active_branch, "active_release_branch")
+    head = _sha(args.head, "head", git=True)
+    cursor_path = args.cursor.resolve()
+    if cursor_path.name != f"{platform}-version-audit.json" or cursor_path.parent.name != "state":
+        _fail("cursor initialization path does not match canonical platform state file")
+    if not cursor_path.parent.is_dir():
+        _fail("cursor state directory does not exist")
+    value = {
+        "schema_version": CURSOR_V2_SCHEMA,
+        "active_release_branch": branch,
+        "last_successfully_audited_sha": head,
+        "last_successful_issue": None,
+        "last_successful_at": None,
+        "last_delivery_summary_sha256": None,
+        "last_telegram_message_id": None,
+    }
+    raw = _canonical_bytes(value)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(cursor_path, flags, 0o600)
+    except FileExistsError as exc:
+        raise ContractError("cursor initialization refuses to overwrite an existing path") from exc
+    except OSError as exc:
+        raise ContractError("cannot exclusively create daily cursor") from exc
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(raw)
+            stream.flush()
+            os.fsync(stream.fileno())
+    except Exception:
+        _safe_unlink(cursor_path)
+        raise
+    return {"status": "initialized", "active_release_branch": branch, "head": head}
 
 
 def _cursor_matches(cursor: Mapping[str, Any], binding: Mapping[str, Any], receipt: Mapping[str, Any]) -> bool:
-    return (
+    matches = (
         cursor.get("last_successfully_audited_sha") == binding["source_ref"]["to_sha"]
         and cursor.get("last_successful_issue") == binding["issue_identifier"]
         and cursor.get("last_delivery_summary_sha256") == receipt["summary_sha256"]
         and cursor.get("last_telegram_message_id") == receipt["message_id"]
         and isinstance(cursor.get("last_successful_at"), str)
     )
+    if "from_branch" in binding["source_ref"]:
+        matches = matches and cursor.get("schema_version") == CURSOR_V2_SCHEMA and (
+            cursor.get("active_release_branch") == binding["source_ref"]["branch"]
+        )
+    return matches
 
 
 def _cursor_marker_value(receipt: Mapping[str, Any], cursor_path: Path) -> dict[str, Any]:
@@ -1969,7 +2170,12 @@ def _cursor_marker_value(receipt: Mapping[str, Any], cursor_path: Path) -> dict[
     }
 
 
-def reconcile_daily(args: argparse.Namespace) -> dict[str, Any]:
+def _reconcile_daily(
+    args: argparse.Namespace,
+    capability: _VerifiedReleaseCapability | None,
+    *,
+    allow_cursor_mutation: bool,
+) -> dict[str, Any]:
     run_dir = args.run_dir.resolve()
     summary, _, summary_sha = _validate_summary(run_dir)
     if summary["audit_kind"] != "daily_delta":
@@ -1977,13 +2183,42 @@ def reconcile_daily(args: argparse.Namespace) -> dict[str, Any]:
     receipt = _validate_receipt(run_dir, summary, summary_sha)
     _validate_telegram_marker(run_dir, receipt)
     binding, _, binding_sha = _load_context(run_dir)
+    branch_aware = "from_branch" in binding["source_ref"]
+    if branch_aware:
+        if capability is None:
+            _fail("branch-aware run requires release-tool finalize-daily")
+        capability = _require_release_capability(capability)
+        profile_path = run_dir / "profile.json"
+        profile = _validate_release_profile(
+            profile_path, source_ref=binding["source_ref"], platform=binding["platform"],
+        )
+        expected_capability = {
+            "selection_sha256": _sha256_path(profile_path),
+            "routine_key": binding["source_ref"]["routine_id"],
+            "platform": binding["platform"],
+            "from_branch": binding["source_ref"]["from_branch"],
+            "selected_branch": binding["source_ref"]["branch"],
+            "cursor_sha": binding["source_ref"]["from_sha"],
+            "selected_head": binding["source_ref"]["to_sha"],
+            "resolution_kind": profile["resolution_kind"],
+        }
+        for field, expected in expected_capability.items():
+            if getattr(capability, field) != expected:
+                _fail(f"verified release capability mismatch: {field}")
+    elif capability is not None:
+        _fail("verified release capability is allowed only for branch-aware runs")
     cursor_path = args.cursor.resolve()
     expected_cursor_name = f"{binding['platform']}-version-audit.json"
     if cursor_path.name != expected_cursor_name:
         _fail(f"daily cursor must be state/{expected_cursor_name}")
     expected_lock_parent = cursor_path.parent / "locks"
     lock_dir = args.lock_dir.resolve()
-    if lock_dir.parent != expected_lock_parent or lock_dir.suffix != ".lock":
+    if branch_aware:
+        expected_lock = expected_lock_parent / f"{binding['source_ref']['routine_id']}.lock"
+        lock_path_valid = lock_dir == expected_lock
+    else:
+        lock_path_valid = lock_dir.parent == expected_lock_parent and lock_dir.suffix == ".lock"
+    if not lock_path_valid:
         _fail("routine lock path does not match cursor state root and routine")
     if not lock_dir.is_dir():
         _fail("matching routine lock is not held")
@@ -2000,7 +2235,11 @@ def reconcile_daily(args: argparse.Namespace) -> dict[str, Any]:
         pass
     elif args.approval_comments is not None or args.approvers is not None:
         _fail("approval arguments are allowed only for partial audits")
-    cursor = _load_cursor(cursor_path)
+    cursor, cursor_version = _load_cursor(cursor_path)
+    if branch_aware and cursor_version != "v2":
+        _fail("branch-aware reconciliation requires cursor v2")
+    if not branch_aware and cursor_version != "v1":
+        _fail("legacy daily run cannot overwrite cursor v2")
     cursor_marker_path = run_dir / "status" / "cursor.done"
     if cursor_marker_path.exists():
         if not _cursor_matches(cursor, binding, receipt):
@@ -2015,7 +2254,12 @@ def reconcile_daily(args: argparse.Namespace) -> dict[str, Any]:
     from_sha = binding["source_ref"]["from_sha"]
     to_sha = binding["source_ref"]["to_sha"]
     current = cursor["last_successfully_audited_sha"]
-    if current == from_sha:
+    from_matches = current == from_sha
+    if branch_aware:
+        from_matches = from_matches and cursor["active_release_branch"] == binding["source_ref"]["from_branch"]
+    if from_matches:
+        if not allow_cursor_mutation:
+            return {"status": "fencing_required"}
         updated = {
             "last_successfully_audited_sha": to_sha,
             "last_successful_issue": binding["issue_identifier"],
@@ -2023,13 +2267,23 @@ def reconcile_daily(args: argparse.Namespace) -> dict[str, Any]:
             "last_delivery_summary_sha256": summary_sha,
             "last_telegram_message_id": receipt["message_id"],
         }
+        if branch_aware:
+            updated = {
+                "schema_version": CURSOR_V2_SCHEMA,
+                "active_release_branch": binding["source_ref"]["branch"],
+                **updated,
+            }
         _atomic_json(cursor_path, updated)
         status = "applied"
-    elif current == to_sha:
+    elif current == to_sha and (
+        not branch_aware or cursor.get("active_release_branch") == binding["source_ref"]["branch"]
+    ):
         if not _cursor_matches(cursor, binding, receipt):
             _fail("cursor TO metadata belongs to a different generation")
         status = "confirmed"
     else:
+        if branch_aware:
+            _fail("cursor compare-and-set failed; expected branch and SHA do not match")
         _fail("cursor compare-and-set failed; cursor is neither FROM nor matching TO")
     marker = _cursor_marker_value(receipt, cursor_path)
     _atomic_json(cursor_marker_path, marker)
@@ -2037,6 +2291,195 @@ def reconcile_daily(args: argparse.Namespace) -> dict[str, Any]:
     if approval_comment_id is not None:
         result["approval_comment_id"] = approval_comment_id
     return result
+
+
+def reconcile_daily(args: argparse.Namespace) -> dict[str, Any]:
+    return _reconcile_daily(args, None, allow_cursor_mutation=True)
+
+
+def reconcile_daily_verified(
+    args: argparse.Namespace,
+    capability: _VerifiedReleaseCapability,
+) -> dict[str, Any]:
+    """Apply branch-aware daily CAS only after resolver fencing in-process."""
+
+    return _reconcile_daily(
+        args,
+        _require_release_capability(capability),
+        allow_cursor_mutation=True,
+    )
+
+
+def recover_daily_without_fence(
+    args: argparse.Namespace,
+    capability: _VerifiedReleaseCapability,
+) -> dict[str, Any]:
+    """Repair terminal markers only when the receipt-bound cursor is already applied."""
+
+    return _reconcile_daily(
+        args,
+        _require_release_capability(capability),
+        allow_cursor_mutation=False,
+    )
+
+
+def _maintenance_lock(
+    lock_dir: Path,
+    capability: _VerifiedReleaseCapability,
+    cursor_path: Path,
+) -> None:
+    expected = capability
+    if (
+        lock_dir.resolve()
+        != (cursor_path.parent / "locks" / f"{expected.routine_key}.lock").resolve()
+        or not lock_dir.is_dir()
+    ):
+        _fail("matching neutral maintenance lock is not held")
+    metadata = _expect_object(_load_json(lock_dir / "metadata.json"), "maintenance lock metadata")
+    required = {
+        "schema_version": "uaudit-maintenance-lock/v1",
+        "routine_key": expected.routine_key,
+        "platform": expected.platform,
+        "purpose": "cursor-v2-migration",
+    }
+    _exact_keys(metadata, required.keys(), where="maintenance lock metadata")
+    if metadata != required:
+        _fail("maintenance lock metadata mismatch")
+
+
+def _migration_receipt(
+    path: Path,
+    *,
+    capability: _VerifiedReleaseCapability,
+    backup_sha256: str,
+    cursor_sha256: str,
+    migrated_at: str,
+) -> dict[str, Any]:
+    expected_identity = {
+        "schema_version": "uaudit-cursor-migration/v1",
+        "routine_key": capability.routine_key,
+        "platform": capability.platform,
+        "active_release_branch": capability.selected_branch,
+        "release_head": capability.selected_head,
+        "selection_sha256": capability.selection_sha256,
+        "legacy_cursor_sha256": backup_sha256,
+        "cursor_sha256": cursor_sha256,
+    }
+    if path.exists():
+        existing = _expect_object(_load_json(path), "cursor migration receipt")
+        _exact_keys(existing, (*expected_identity.keys(), "migrated_at"), where="cursor migration receipt")
+        for field, expected in expected_identity.items():
+            if existing[field] != expected:
+                _fail(f"cursor migration receipt mismatch: {field}")
+        _iso_utc(existing["migrated_at"], "cursor migration receipt.migrated_at")
+        return existing
+    receipt = {**expected_identity, "migrated_at": _iso_utc(migrated_at, "migrated_at")}
+    _create_or_match(path, receipt, "cursor migration receipt")
+    return receipt
+
+
+def migrate_cursor_verified(
+    args: argparse.Namespace,
+    capability: _VerifiedReleaseCapability,
+    *,
+    allow_cursor_mutation: bool = True,
+) -> dict[str, Any]:
+    """Migrate one quiesced v1 cursor after the resolver verifies its remote head."""
+
+    capability = _require_release_capability(capability)
+    if capability.resolution_kind != "migration" or (
+        capability.from_branch != capability.selected_branch
+        or capability.cursor_sha != capability.selected_head
+    ):
+        _fail("cursor migration capability is invalid")
+    cursor_path = args.cursor.resolve()
+    expected_name = f"{capability.platform}-version-audit.json"
+    if cursor_path.name != expected_name:
+        _fail(f"daily cursor must be state/{expected_name}")
+    lock_dir = args.lock_dir.resolve()
+    _maintenance_lock(lock_dir, capability, cursor_path)
+    migrated_at = _iso_utc(args.migrated_at, "migrated_at")
+    cursor, version = _load_cursor(cursor_path)
+    backup_path = cursor_path.with_name(f"{cursor_path.name}.v1.backup")
+    receipt_path = cursor_path.parent / "migrations" / f"{capability.platform}-cursor-v2.json"
+
+    if version == "v1":
+        if receipt_path.exists():
+            _fail("cursor migration receipt exists before cursor v2 state")
+        if cursor["last_successfully_audited_sha"] != capability.selected_head:
+            _fail("cursor SHA does not equal the authoritative release head")
+        if not allow_cursor_mutation:
+            return {"status": "fencing_required"}
+        legacy_raw = _read_bytes(cursor_path, maximum=64 * 1024)
+        if backup_path.exists():
+            if _read_bytes(backup_path, maximum=64 * 1024) != legacy_raw:
+                _fail("cursor v1 backup conflicts with the current legacy cursor")
+        else:
+            _atomic_write(backup_path, legacy_raw)
+        backup_path.chmod(0o444)
+        if backup_path.stat().st_mode & 0o222:
+            _fail("cursor v1 backup must be read-only before cursor migration")
+        updated = {
+            "schema_version": CURSOR_V2_SCHEMA,
+            "active_release_branch": capability.selected_branch,
+            "last_successfully_audited_sha": cursor["last_successfully_audited_sha"],
+            "last_successful_issue": cursor.get("last_successful_issue"),
+            "last_successful_at": cursor.get("last_successful_at"),
+            "last_delivery_summary_sha256": cursor.get("last_delivery_summary_sha256"),
+            "last_telegram_message_id": cursor.get("last_telegram_message_id"),
+        }
+        _atomic_json(cursor_path, updated)
+        status = "migrated"
+    else:
+        if (
+            cursor["active_release_branch"] != capability.selected_branch
+            or cursor["last_successfully_audited_sha"] != capability.selected_head
+        ):
+            _fail("existing cursor v2 conflicts with verified migration state")
+        if not backup_path.is_file() or backup_path.is_symlink():
+            _fail("matching read-only cursor v1 backup is required to resume migration")
+        if backup_path.stat().st_mode & 0o222:
+            _fail("cursor v1 backup must be read-only")
+        legacy, backup_version = _load_cursor(backup_path)
+        if backup_version != "v1":
+            _fail("cursor migration backup must contain cursor v1")
+        expected_cursor = {
+            "schema_version": CURSOR_V2_SCHEMA,
+            "active_release_branch": capability.selected_branch,
+            "last_successfully_audited_sha": legacy["last_successfully_audited_sha"],
+            "last_successful_issue": legacy.get("last_successful_issue"),
+            "last_successful_at": legacy.get("last_successful_at"),
+            "last_delivery_summary_sha256": legacy.get("last_delivery_summary_sha256"),
+            "last_telegram_message_id": legacy.get("last_telegram_message_id"),
+        }
+        if legacy["last_successfully_audited_sha"] != capability.selected_head:
+            _fail("cursor v1 backup does not match verified migration state")
+        if cursor != expected_cursor:
+            _fail("cursor v2 metadata does not match the read-only cursor v1 backup")
+        status = "already_migrated"
+
+    backup_sha = _sha256_path(backup_path)
+    cursor_sha = _sha256_path(cursor_path)
+    _migration_receipt(
+        receipt_path, capability=capability, backup_sha256=backup_sha,
+        cursor_sha256=cursor_sha, migrated_at=migrated_at,
+    )
+    return {
+        "status": status,
+        "active_release_branch": capability.selected_branch,
+        "release_head": capability.selected_head,
+        "backup": str(backup_path),
+        "receipt": str(receipt_path),
+    }
+
+
+def recover_cursor_migration_without_fence(
+    args: argparse.Namespace,
+    capability: _VerifiedReleaseCapability,
+) -> dict[str, Any]:
+    """Finish receipt publication only after the exact cursor v2 state exists."""
+
+    return migrate_cursor_verified(args, capability, allow_cursor_mutation=False)
 
 
 def _verify_own_install(manifest_path: Path | None = None) -> str:
@@ -2118,7 +2561,7 @@ def _status_summary(run_dir: Path) -> tuple[dict[str, Any], str]:
         ("schema_version", "identity", "issue_identifier", "telegram_text", "attempt_id", "created_at"),
         where="daily status summary",
     )
-    if summary["schema_version"] != STATUS_SCHEMA:
+    if summary["schema_version"] not in {STATUS_SCHEMA, BRANCH_STATUS_SCHEMA}:
         _fail("unsupported daily status summary schema")
     return summary, _sha256_path(run_dir / "status-summary.json")
 
@@ -2170,14 +2613,145 @@ def prepare_daily_status(args: argparse.Namespace) -> dict[str, Any]:
     return {"status": "ready", "run_dir": str(run_dir), "summary_sha256": _sha256_path(run_dir / "status-summary.json")}
 
 
+def _branch_transition_selection(path: Path, descriptor: Mapping[str, Any]) -> tuple[dict[str, Any], bytes, str]:
+    raw = _read_bytes(path, maximum=256 * 1024)
+    try:
+        selection = _expect_object(json.loads(raw.decode("utf-8")), "branch transition selection")
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ContractError("branch transition selection is malformed") from exc
+    _exact_keys(
+        selection,
+        (
+            "schema_version", "routine_key", "platform", "release_major", "from_branch",
+            "selected_branch", "cursor_sha", "selected_head", "master_head", "resolution_kind",
+            "segment", "release_heads", "missing_versions", "proof",
+        ),
+        where="branch transition selection",
+    )
+    if selection["schema_version"] != RELEASE_SELECTION_SCHEMA or selection["resolution_kind"] != "branch_transition":
+        _fail("selection is not a branch transition")
+    if selection["routine_key"] != descriptor["routine_key"] or selection["platform"] != descriptor["platform"]:
+        _fail("branch transition selection routine mismatch")
+    from_branch = _release_branch(selection["from_branch"], "branch transition from_branch")
+    selected_branch = _release_branch(selection["selected_branch"], "branch transition selected_branch")
+    if from_branch == selected_branch:
+        _fail("branch transition must change the active branch")
+    cursor_sha = _sha(selection["cursor_sha"], "branch transition cursor_sha", git=True)
+    selected_head = _sha(selection["selected_head"], "branch transition selected_head", git=True)
+    if cursor_sha != selected_head or selection["segment"] is not None:
+        _fail("branch transition must preserve the audited SHA without an audit segment")
+    heads = _expect_object(selection["release_heads"], "branch transition release_heads")
+    if heads.get(selected_branch) != selected_head:
+        _fail("branch transition selected head is not bound to release_heads")
+    proof = _expect_object(selection["proof"], "branch transition proof")
+    if proof.get("active_branch_present") is not False or proof.get("cursor_is_ancestor_of_selected") is not True:
+        _fail("branch transition proof is invalid")
+    canonical = _canonical_bytes(selection)
+    if raw != canonical:
+        _fail("branch transition selection is not canonical")
+    return selection, raw, _sha256_bytes(raw)
+
+
+def prepare_branch_transition_status(args: argparse.Namespace) -> dict[str, Any]:
+    descriptor, descriptor_sha = _status_descriptor(args.descriptor.resolve())
+    proof = _status_slot_proof(args.slot_proof.resolve(), descriptor, descriptor_sha)
+    issue = _validate_issue(args.issue_identifier, "branch transition issue_identifier")
+    selection, selection_raw, selection_sha = _branch_transition_selection(
+        args.selection.resolve(), descriptor,
+    )
+    state_root = args.state_root.resolve()
+    cursor_path = args.cursor.resolve()
+    if cursor_path.parent != state_root or cursor_path.name != f"{descriptor['platform']}-version-audit.json":
+        _fail("branch transition cursor path is outside the platform state root")
+    cursor, version = _load_cursor(cursor_path)
+    if version != "v2" or (
+        cursor["active_release_branch"] != selection["from_branch"]
+        or cursor["last_successfully_audited_sha"] != selection["selected_head"]
+    ):
+        _fail("branch transition cursor does not match the selection")
+    cursor_sha = _sha256_path(cursor_path)
+    identity = {
+        "app_id": descriptor["app_id"],
+        "routine_key": descriptor["routine_key"],
+        "platform": descriptor["platform"],
+        "scheduled_utc_slot": proof["scheduled_utc_slot"],
+        "outcome": "branch_transition",
+        "from_branch": selection["from_branch"],
+        "selected_branch": selection["selected_branch"],
+        "selected_head": selection["selected_head"],
+        "selection_sha256": selection_sha,
+        "expected_cursor_sha256": cursor_sha,
+        "descriptor_sha256": descriptor_sha,
+    }
+    run_dir = _status_dir(state_root, identity)
+    if run_dir.exists():
+        summary, summary_sha = _status_summary(run_dir)
+        if summary["schema_version"] != BRANCH_STATUS_SCHEMA or summary["identity"] != identity or summary["issue_identifier"] != issue:
+            _fail("branch transition slot conflicts with existing receipt identity")
+        if _sha256_path(run_dir / "profile.json") != selection_sha:
+            _fail("branch transition stored selection digest mismatch")
+        return {"status": "already_prepared", "run_dir": str(run_dir), "summary_sha256": summary_sha}
+    run_dir.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        run_dir.mkdir()
+    except FileExistsError:
+        return prepare_branch_transition_status(args)
+    _atomic_write(run_dir / "profile.json", selection_raw)
+    reason = _bounded_string(args.reason, "branch transition reason", maximum=280)
+    text = _bounded_string(
+        f"UAudit {descriptor['platform']} branch transition: {selection['from_branch']} -> "
+        f"{selection['selected_branch']} at {selection['selected_head'][:12]}. {reason}",
+        "branch transition telegram text", maximum=899,
+    )
+    _atomic_write(run_dir / "telegram-summary.txt", (text + "\n").encode("utf-8"))
+    attempt_id = _bounded_string(args.attempt_id, "branch transition attempt_id", maximum=128)
+    summary = {
+        "schema_version": BRANCH_STATUS_SCHEMA,
+        "identity": identity,
+        "issue_identifier": issue,
+        "telegram_text": {"file": "telegram-summary.txt", "sha256": _sha256_path(run_dir / "telegram-summary.txt")},
+        "attempt_id": attempt_id,
+        "created_at": _iso_utc(args.created_at, "branch transition created_at"),
+    }
+    _atomic_json(run_dir / "status-summary.json", summary)
+    _atomic_json(
+        run_dir / "status" / "send_started.json",
+        {"schema_version": BRANCH_STATUS_SCHEMA, "attempt_id": attempt_id},
+    )
+    return {"status": "ready", "run_dir": str(run_dir), "summary_sha256": _sha256_path(run_dir / "status-summary.json")}
+
+
 def record_daily_status(args: argparse.Namespace) -> dict[str, Any]:
     run_dir = args.run_dir.resolve()
     summary, summary_sha = _status_summary(run_dir)
     receipt_path = run_dir / "delivery-result.json"
     if receipt_path.exists():
         receipt = _expect_object(_load_json(receipt_path), "daily status receipt")
-        if receipt.get("summary_sha256") != summary_sha:
+        _exact_keys(
+            receipt,
+            ("schema_version", "summary_sha256", "attempt_id", "message_id", "delivered_at"),
+            where="daily status receipt",
+        )
+        if (
+            receipt["schema_version"] != summary["schema_version"]
+            or receipt["summary_sha256"] != summary_sha
+            or receipt["attempt_id"] != summary["attempt_id"]
+        ):
             _fail("daily status receipt summary digest mismatch")
+        if not _is_int(receipt["message_id"]) or receipt["message_id"] <= 0:
+            _fail("daily status receipt message_id is invalid")
+        _iso_utc(receipt["delivered_at"], "daily status receipt.delivered_at")
+        marker_path = run_dir / "status" / "telegram.done"
+        expected_marker = {
+            "schema_version": summary["schema_version"],
+            "delivery_result_sha256": _sha256_path(receipt_path),
+            "summary_sha256": summary_sha,
+        }
+        if marker_path.exists():
+            if _load_json(marker_path) != expected_marker:
+                _fail("daily status telegram marker conflicts with receipt")
+        else:
+            _atomic_json(marker_path, expected_marker)
         return {"status": "already_recorded", "message_id": receipt["message_id"]}
     data = _plugin_data(_load_json(args.response.resolve()))
     if data.get("ok") is not True or data.get("mode") != "message" or data.get("routeName") != "UAudit":
@@ -2188,12 +2762,169 @@ def record_daily_status(args: argparse.Namespace) -> dict[str, Any]:
     if not _is_int(message_id) or message_id <= 0:
         _fail("daily status plugin response messageId is invalid")
     receipt = {
-        "schema_version": STATUS_SCHEMA, "summary_sha256": summary_sha, "attempt_id": summary["attempt_id"],
+        "schema_version": summary["schema_version"], "summary_sha256": summary_sha, "attempt_id": summary["attempt_id"],
         "message_id": message_id, "delivered_at": _iso_utc(args.delivered_at, "daily status delivered_at"),
     }
     _atomic_json(receipt_path, receipt)
-    _atomic_json(run_dir / "status" / "telegram.done", {"schema_version": STATUS_SCHEMA, "delivery_result_sha256": _sha256_path(receipt_path), "summary_sha256": summary_sha})
+    _atomic_json(run_dir / "status" / "telegram.done", {"schema_version": summary["schema_version"], "delivery_result_sha256": _sha256_path(receipt_path), "summary_sha256": summary_sha})
     return {"status": "recorded", "message_id": message_id, "summary_sha256": summary_sha}
+
+
+def _reconcile_daily_status_verified(
+    args: argparse.Namespace,
+    capability: _VerifiedReleaseCapability,
+    *,
+    allow_branch_mutation: bool,
+) -> dict[str, Any]:
+    """Apply a same-head branch transition after resolver fencing in-process."""
+
+    capability = _require_release_capability(capability)
+    if capability.resolution_kind != "branch_transition" or capability.cursor_sha != capability.selected_head:
+        _fail("verified capability is not a same-head branch transition")
+    run_dir = args.run_dir.resolve()
+    summary, summary_sha = _status_summary(run_dir)
+    if summary["schema_version"] != BRANCH_STATUS_SCHEMA:
+        _fail("branch transition reconciliation requires branch status schema")
+    identity = _expect_object(summary["identity"], "branch transition status identity")
+    _exact_keys(
+        identity,
+        (
+            "app_id", "routine_key", "platform", "scheduled_utc_slot", "outcome",
+            "from_branch", "selected_branch", "selected_head", "selection_sha256",
+            "expected_cursor_sha256", "descriptor_sha256",
+        ),
+        where="branch transition status identity",
+    )
+    expected_capability = {
+        "routine_key": identity["routine_key"],
+        "platform": identity["platform"],
+        "from_branch": identity["from_branch"],
+        "selected_branch": identity["selected_branch"],
+        "cursor_sha": identity["selected_head"],
+        "selected_head": identity["selected_head"],
+        "selection_sha256": identity["selection_sha256"],
+    }
+    for field, expected in expected_capability.items():
+        if getattr(capability, field) != expected:
+            _fail(f"verified branch transition capability mismatch: {field}")
+    if identity["outcome"] != "branch_transition" or _sha256_path(run_dir / "profile.json") != capability.selection_sha256:
+        _fail("branch transition status selection binding mismatch")
+    receipt_path = run_dir / "delivery-result.json"
+    receipt = _expect_object(_load_json(receipt_path), "branch transition status receipt")
+    _exact_keys(
+        receipt, ("schema_version", "summary_sha256", "attempt_id", "message_id", "delivered_at"),
+        where="branch transition status receipt",
+    )
+    if receipt["schema_version"] != BRANCH_STATUS_SCHEMA or receipt["summary_sha256"] != summary_sha:
+        _fail("branch transition status receipt mismatch")
+    marker = _expect_object(_load_json(run_dir / "status" / "telegram.done"), "branch transition telegram marker")
+    expected_telegram_marker = {
+        "schema_version": BRANCH_STATUS_SCHEMA,
+        "delivery_result_sha256": _sha256_path(receipt_path),
+        "summary_sha256": summary_sha,
+    }
+    if marker != expected_telegram_marker:
+        _fail("branch transition telegram marker mismatch")
+    cursor_path = args.cursor.resolve()
+    if cursor_path.name != f"{capability.platform}-version-audit.json":
+        _fail("branch transition cursor path is invalid")
+    lock_dir = args.lock_dir.resolve()
+    if (
+        lock_dir != cursor_path.parent / "locks" / f"{capability.routine_key}.lock"
+        or not lock_dir.is_dir()
+    ):
+        _fail("matching neutral branch transition lock is not held")
+    lock_metadata = _expect_object(_load_json(lock_dir / "metadata.json"), "branch transition lock metadata")
+    expected_lock = {
+        "schema_version": SCHEMA_VERSION,
+        "issue_identifier": summary["issue_identifier"],
+        "routine_id": capability.routine_key,
+        "from_sha": capability.cursor_sha,
+        "to_sha": capability.selected_head,
+        "run_binding_sha256": None,
+    }
+    if lock_metadata != expected_lock:
+        _fail("branch transition lock metadata mismatch")
+    cursor, version = _load_cursor(cursor_path)
+    if version != "v2":
+        _fail("branch transition requires cursor v2")
+    cursor_marker_path = run_dir / "status" / "cursor.done"
+    if cursor_marker_path.exists():
+        if (
+            cursor["active_release_branch"] != capability.selected_branch
+            or cursor["last_successfully_audited_sha"] != capability.selected_head
+        ):
+            _fail("branch transition cursor marker conflicts with cursor")
+        expected_marker = {
+            "schema_version": BRANCH_STATUS_SCHEMA,
+            "summary_sha256": summary_sha,
+            "message_id": receipt["message_id"],
+            "cursor_sha256": _sha256_path(cursor_path),
+        }
+        if _load_json(cursor_marker_path) != expected_marker:
+            _fail("branch transition cursor marker is stale")
+        return {"status": "already_applied", "selected_branch": capability.selected_branch}
+    if (
+        cursor["active_release_branch"] == capability.selected_branch
+        and cursor["last_successfully_audited_sha"] == capability.selected_head
+    ):
+        prior_cursor = {**cursor, "active_release_branch": capability.from_branch}
+        if _sha256_bytes(_canonical_bytes(prior_cursor)) != identity["expected_cursor_sha256"]:
+            _fail("branch transition cursor changed beyond the selected branch")
+        _atomic_json(
+            cursor_marker_path,
+            {
+                "schema_version": BRANCH_STATUS_SCHEMA,
+                "summary_sha256": summary_sha,
+                "message_id": receipt["message_id"],
+                "cursor_sha256": _sha256_path(cursor_path),
+            },
+        )
+        return {"status": "already_applied", "selected_branch": capability.selected_branch}
+    if _sha256_path(cursor_path) != identity["expected_cursor_sha256"]:
+        _fail("branch transition cursor digest changed after status preparation")
+    if (
+        cursor["active_release_branch"] != capability.from_branch
+        or cursor["last_successfully_audited_sha"] != capability.selected_head
+    ):
+        _fail("branch transition cursor branch or SHA compare-and-set failed")
+    if not allow_branch_mutation:
+        return {"status": "fencing_required"}
+    _atomic_json(cursor_path, {**cursor, "active_release_branch": capability.selected_branch})
+    _atomic_json(
+        cursor_marker_path,
+        {
+            "schema_version": BRANCH_STATUS_SCHEMA,
+            "summary_sha256": summary_sha,
+            "message_id": receipt["message_id"],
+            "cursor_sha256": _sha256_path(cursor_path),
+        },
+    )
+    return {"status": "applied", "selected_branch": capability.selected_branch}
+
+
+def reconcile_daily_status_verified(
+    args: argparse.Namespace,
+    capability: _VerifiedReleaseCapability,
+) -> dict[str, Any]:
+    return _reconcile_daily_status_verified(
+        args,
+        capability,
+        allow_branch_mutation=True,
+    )
+
+
+def recover_daily_status_without_fence(
+    args: argparse.Namespace,
+    capability: _VerifiedReleaseCapability,
+) -> dict[str, Any]:
+    """Repair a branch-transition marker only after the exact branch CAS exists."""
+
+    return _reconcile_daily_status_verified(
+        args,
+        capability,
+        allow_branch_mutation=False,
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -2251,6 +2982,17 @@ def build_parser() -> argparse.ArgumentParser:
     reconcile.add_argument("--approvers", type=_path)
     reconcile.set_defaults(func=reconcile_daily)
 
+    initialize = subparsers.add_parser(
+        "initialize-daily-cursor",
+        help="exclusively create a missing canonical daily cursor v2",
+    )
+    initialize.add_argument("--cursor", type=_path, required=True)
+    initialize.add_argument("--routine-key", required=True)
+    initialize.add_argument("--platform", choices=("android", "ios"), required=True)
+    initialize.add_argument("--active-branch", required=True)
+    initialize.add_argument("--head", required=True)
+    initialize.set_defaults(func=initialize_daily_cursor)
+
     install = subparsers.add_parser("verify-install", help="verify deployed helper against adjacent install manifest")
     install.add_argument("--manifest", type=_path, required=True)
     install.set_defaults(func=verify_install)
@@ -2266,6 +3008,21 @@ def build_parser() -> argparse.ArgumentParser:
     status_prepare.add_argument("--attempt-id", required=True)
     status_prepare.add_argument("--created-at", required=True)
     status_prepare.set_defaults(func=prepare_daily_status)
+
+    branch_status_prepare = subparsers.add_parser(
+        "prepare-branch-transition-status",
+        help="prepare a receipt-bound same-head release branch transition",
+    )
+    branch_status_prepare.add_argument("--state-root", type=_path, required=True)
+    branch_status_prepare.add_argument("--descriptor", type=_path, required=True)
+    branch_status_prepare.add_argument("--slot-proof", type=_path, required=True)
+    branch_status_prepare.add_argument("--issue-identifier", required=True)
+    branch_status_prepare.add_argument("--selection", type=_path, required=True)
+    branch_status_prepare.add_argument("--cursor", type=_path, required=True)
+    branch_status_prepare.add_argument("--reason", required=True)
+    branch_status_prepare.add_argument("--attempt-id", required=True)
+    branch_status_prepare.add_argument("--created-at", required=True)
+    branch_status_prepare.set_defaults(func=prepare_branch_transition_status)
 
     status_record = subparsers.add_parser("record-daily-status", help="record an already sent daily status receipt")
     status_record.add_argument("--run-dir", type=_path, required=True)

@@ -133,6 +133,16 @@ def test_imac_agents_deploy_help_works():
     assert "usage" in combined, f"no usage shown: {out.stdout!r} {out.stderr!r}"
 
 
+def test_imac_agents_deploy_runtime_only_flag_is_uaudit_only():
+    out = subprocess.run(
+        ["bash", str(WRAPPER), "gimle", "--uaudit-runtime-only"],
+        capture_output=True,
+        text=True,
+    )
+    assert out.returncode != 0
+    assert "valid only for project uaudit" in (out.stdout + out.stderr)
+
+
 # ---------------------------------------------------------------------------
 # Behavioral failure-mode tests (QA H2 CRIT: must catch real regressions).
 # ---------------------------------------------------------------------------

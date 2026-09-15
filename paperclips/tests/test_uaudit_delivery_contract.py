@@ -5,6 +5,7 @@ import json
 import shutil
 import subprocess
 import sys
+from argparse import Namespace
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,16 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[2]
 SOURCE_HELPER = REPO / "paperclips/projects/uaudit/runtime/uaudit_delivery_contract.py"
+sys.path.insert(0, str(SOURCE_HELPER.parent))
+import uaudit_delivery_contract as delivery_contract  # noqa: E402
+from uaudit_delivery_contract import (  # noqa: E402
+    ContractError,
+    _verified_release_capability,
+    migrate_cursor_verified,
+    reconcile_daily_status_verified,
+    reconcile_daily_verified,
+)
+
 CREATED_AT = "2026-07-16T10:00:00Z"
 DELIVERED_AT = "2026-07-16T10:01:00Z"
 RECONCILED_AT = "2026-07-16T10:02:00Z"
@@ -194,6 +205,7 @@ def prepare_run(
     limitations: dict[str, list[dict]] | None = None,
     diff_patch: bytes | None = None,
     validate: bool = True,
+    branch_aware: bool = False,
 ) -> dict:
     helper = install_helper(root)
     run = root / "run"
@@ -207,6 +219,15 @@ def prepare_run(
             ref["routine_id"] = "daily-android-version-0.49"
     if kind != "pr" and routine_id is not None:
         ref["routine_id"] = routine_id
+    if branch_aware:
+        assert kind == "daily_delta"
+        ref = {
+            "routine_id": f"uaudit-daily-{platform}",
+            "from_branch": "version/0.52",
+            "branch": "version/0.53",
+            "from_sha": BASE_SHA,
+            "to_sha": HEAD_SHA,
+        }
     intake = {
         "schema_version": 1,
         "issue_identifier": "UNS-123",
@@ -222,7 +243,29 @@ def prepare_run(
         lock = None
         call(helper, "bind-context", "--run-dir", run, "--intake", run / "intake.json")
     else:
-        write_json(run / "profile.json", {"branch": ref["branch"]})
+        if branch_aware:
+            write_json(run / "profile.json", {
+                "schema_version": "uaudit-release-selection/v2",
+                "routine_key": ref["routine_id"],
+                "platform": platform,
+                "release_major": 0,
+                "from_branch": ref["from_branch"],
+                "selected_branch": ref["branch"],
+                "cursor_sha": ref["from_sha"],
+                "selected_head": ref["to_sha"],
+                "master_head": "f" * 40,
+                "resolution_kind": "transition",
+                "segment": {"branch": ref["branch"], "from_sha": ref["from_sha"], "to_sha": ref["to_sha"]},
+                "release_heads": {ref["branch"]: ref["to_sha"]},
+                "missing_versions": [],
+                "proof": {
+                    "active_branch_present": False,
+                    "cursor_is_ancestor_of_selected": True,
+                    "cursor_is_ancestor_of_master": True,
+                },
+            })
+        else:
+            write_json(run / "profile.json", {"branch": ref["branch"]})
         (run / "commits.tsv").write_text(f"{HEAD_SHA}\tИзменение\n")
         (run / "files.tsv").write_text("Sources/Wallet/Auth.swift\n")
         (run / "diff.patch").write_bytes(
@@ -968,6 +1011,286 @@ def test_reconcile_daily_accepts_metadata_bound_versioned_lock_for_stable_routin
     assert read_json(cursor)["last_successfully_audited_sha"] == HEAD_SHA
 
 
+def test_branch_aware_daily_requires_verified_capability_and_cas_branch(tmp_path: Path):
+    fixture = prepare_run(tmp_path, kind="daily_delta", branch_aware=True)
+    aggregate(fixture)
+    record(fixture, "message")
+    cursor = tmp_path / "state" / "ios-version-audit.json"
+    original = {
+        "schema_version": "uaudit-daily-cursor/v2",
+        "active_release_branch": "version/0.52",
+        "last_successfully_audited_sha": BASE_SHA,
+        "last_successful_issue": None,
+        "last_successful_at": None,
+        "last_delivery_summary_sha256": None,
+        "last_telegram_message_id": None,
+    }
+    write_json(cursor, original)
+    public = call(
+        fixture["helper"], "reconcile-daily", "--run-dir", fixture["run"],
+        "--cursor", cursor, "--lock-dir", fixture["lock"],
+        "--reconciled-at", RECONCILED_AT, ok=False,
+    )
+    assert "release-tool finalize-daily" in public["error"]
+    assert read_json(cursor) == original
+
+    verified = _verified_release_capability(
+        selection_sha256=sha256_path(fixture["run"] / "profile.json"),
+        routine_key="uaudit-daily-ios",
+        platform="ios",
+        from_branch="version/0.52",
+        selected_branch="version/0.53",
+        cursor_sha=BASE_SHA,
+        selected_head=HEAD_SHA,
+        resolution_kind="transition",
+    )
+    result = reconcile_daily_verified(
+        Namespace(
+            run_dir=fixture["run"], cursor=cursor, lock_dir=fixture["lock"],
+            reconciled_at=RECONCILED_AT, approval_comments=None, approvers=None,
+        ),
+        verified,
+    )
+    assert result["status"] == "applied"
+    updated = read_json(cursor)
+    assert updated["schema_version"] == "uaudit-daily-cursor/v2"
+    assert updated["active_release_branch"] == "version/0.53"
+    assert updated["last_successfully_audited_sha"] == HEAD_SHA
+
+
+def test_branch_aware_daily_rejects_legacy_versioned_lock_at_bind(tmp_path: Path):
+    with pytest.raises(AssertionError, match="neutral platform lock"):
+        prepare_run(
+            tmp_path,
+            kind="daily_delta",
+            branch_aware=True,
+            lock_routine_id="daily-ios-version-0.52",
+        )
+    assert not (tmp_path / "run" / "run-context.json").exists()
+
+
+def test_branch_aware_daily_rejects_stale_active_branch_with_zero_mutation(tmp_path: Path):
+    fixture = prepare_run(tmp_path, kind="daily_delta", branch_aware=True)
+    aggregate(fixture)
+    record(fixture, "message")
+    cursor = tmp_path / "state" / "ios-version-audit.json"
+    stale = {
+        "schema_version": "uaudit-daily-cursor/v2",
+        "active_release_branch": "version/0.51",
+        "last_successfully_audited_sha": BASE_SHA,
+        "last_successful_issue": None,
+        "last_successful_at": None,
+        "last_delivery_summary_sha256": None,
+        "last_telegram_message_id": None,
+    }
+    write_json(cursor, stale)
+    verified = _verified_release_capability(
+        selection_sha256=sha256_path(fixture["run"] / "profile.json"),
+        routine_key="uaudit-daily-ios", platform="ios",
+        from_branch="version/0.52", selected_branch="version/0.53",
+        cursor_sha=BASE_SHA, selected_head=HEAD_SHA, resolution_kind="transition",
+    )
+    with pytest.raises(ContractError, match="branch and SHA"):
+        reconcile_daily_verified(
+            Namespace(
+                run_dir=fixture["run"], cursor=cursor, lock_dir=fixture["lock"],
+                reconciled_at=RECONCILED_AT, approval_comments=None, approvers=None,
+            ),
+            verified,
+        )
+    assert read_json(cursor) == stale
+
+
+def test_cursor_v1_migration_preserves_metadata_and_is_idempotent(tmp_path: Path):
+    state = tmp_path / "state"
+    cursor = state / "ios-version-audit.json"
+    legacy = {
+        "last_successfully_audited_sha": BASE_SHA,
+        "last_successful_issue": "UNS-122",
+        "last_successful_at": CREATED_AT,
+        "last_delivery_summary_sha256": "a" * 64,
+        "last_telegram_message_id": 44,
+    }
+    write_json(cursor, legacy)
+    lock = state / "locks" / "uaudit-daily-ios.lock"
+    lock.mkdir(parents=True)
+    write_json(lock / "metadata.json", {
+        "schema_version": "uaudit-maintenance-lock/v1",
+        "routine_key": "uaudit-daily-ios",
+        "platform": "ios",
+        "purpose": "cursor-v2-migration",
+    })
+    capability = _verified_release_capability(
+        selection_sha256="b" * 64, routine_key="uaudit-daily-ios", platform="ios",
+        from_branch="version/0.52", selected_branch="version/0.52",
+        cursor_sha=BASE_SHA, selected_head=BASE_SHA, resolution_kind="migration",
+    )
+    args = Namespace(cursor=cursor, lock_dir=lock, migrated_at=RECONCILED_AT)
+    first = migrate_cursor_verified(args, capability)
+    assert first["status"] == "migrated"
+    updated = read_json(cursor)
+    assert updated == {
+        "schema_version": "uaudit-daily-cursor/v2",
+        "active_release_branch": "version/0.52",
+        **legacy,
+    }
+    backup = Path(first["backup"])
+    assert read_json(backup) == legacy
+    assert backup.stat().st_mode & 0o222 == 0
+    assert Path(first["receipt"]).is_file()
+    second = migrate_cursor_verified(args, capability)
+    assert second["status"] == "already_migrated"
+    assert read_json(cursor) == updated
+
+
+def test_cursor_migration_head_mismatch_has_zero_mutation(tmp_path: Path):
+    state = tmp_path / "state"
+    cursor = state / "android-version-audit.json"
+    write_json(cursor, {"last_successfully_audited_sha": BASE_SHA})
+    before = cursor.read_bytes()
+    lock = state / "locks" / "uaudit-daily-android.lock"
+    lock.mkdir(parents=True)
+    write_json(lock / "metadata.json", {
+        "schema_version": "uaudit-maintenance-lock/v1",
+        "routine_key": "uaudit-daily-android",
+        "platform": "android",
+        "purpose": "cursor-v2-migration",
+    })
+    capability = _verified_release_capability(
+        selection_sha256="b" * 64, routine_key="uaudit-daily-android", platform="android",
+        from_branch="version/0.52", selected_branch="version/0.52",
+        cursor_sha=HEAD_SHA, selected_head=HEAD_SHA, resolution_kind="migration",
+    )
+    with pytest.raises(ContractError, match="authoritative release head"):
+        migrate_cursor_verified(
+            Namespace(cursor=cursor, lock_dir=lock, migrated_at=RECONCILED_AT), capability,
+        )
+    assert cursor.read_bytes() == before
+    assert not (state / "migrations").exists()
+
+
+def test_cursor_migration_rejects_lock_from_another_state_root(tmp_path: Path):
+    cursor = tmp_path / "state" / "ios-version-audit.json"
+    write_json(cursor, {"last_successfully_audited_sha": BASE_SHA})
+    before = cursor.read_bytes()
+    lock = tmp_path / "other-state" / "locks" / "uaudit-daily-ios.lock"
+    lock.mkdir(parents=True)
+    write_json(lock / "metadata.json", {
+        "schema_version": "uaudit-maintenance-lock/v1",
+        "routine_key": "uaudit-daily-ios", "platform": "ios",
+        "purpose": "cursor-v2-migration",
+    })
+    capability = _verified_release_capability(
+        selection_sha256="b" * 64, routine_key="uaudit-daily-ios", platform="ios",
+        from_branch="version/0.52", selected_branch="version/0.52",
+        cursor_sha=BASE_SHA, selected_head=BASE_SHA, resolution_kind="migration",
+    )
+    with pytest.raises(ContractError, match="neutral maintenance lock"):
+        migrate_cursor_verified(
+            Namespace(cursor=cursor, lock_dir=lock, migrated_at=RECONCILED_AT), capability,
+        )
+    assert cursor.read_bytes() == before
+    assert not cursor.with_name(f"{cursor.name}.v1.backup").exists()
+
+
+def test_cursor_migration_preflights_timestamp_and_receipt_before_writes(tmp_path: Path):
+    state = tmp_path / "state"
+    cursor = state / "android-version-audit.json"
+    write_json(cursor, {"last_successfully_audited_sha": BASE_SHA})
+    before = cursor.read_bytes()
+    lock = state / "locks" / "uaudit-daily-android.lock"
+    lock.mkdir(parents=True)
+    write_json(lock / "metadata.json", {
+        "schema_version": "uaudit-maintenance-lock/v1",
+        "routine_key": "uaudit-daily-android", "platform": "android",
+        "purpose": "cursor-v2-migration",
+    })
+    capability = _verified_release_capability(
+        selection_sha256="b" * 64, routine_key="uaudit-daily-android", platform="android",
+        from_branch="version/0.52", selected_branch="version/0.52",
+        cursor_sha=BASE_SHA, selected_head=BASE_SHA, resolution_kind="migration",
+    )
+    with pytest.raises(ContractError, match="migrated_at"):
+        migrate_cursor_verified(Namespace(cursor=cursor, lock_dir=lock, migrated_at="bad"), capability)
+    assert cursor.read_bytes() == before
+    assert not cursor.with_name(f"{cursor.name}.v1.backup").exists()
+
+    receipt = state / "migrations" / "android-cursor-v2.json"
+    write_json(receipt, {"conflict": True})
+    with pytest.raises(ContractError, match="receipt exists before cursor v2"):
+        migrate_cursor_verified(
+            Namespace(cursor=cursor, lock_dir=lock, migrated_at=RECONCILED_AT), capability,
+        )
+    assert cursor.read_bytes() == before
+    assert not cursor.with_name(f"{cursor.name}.v1.backup").exists()
+    assert read_json(receipt) == {"conflict": True}
+
+
+def test_cursor_migration_repairs_exact_writable_backup_before_cursor_replace(tmp_path: Path):
+    state = tmp_path / "state"
+    cursor = state / "ios-version-audit.json"
+    legacy = {"last_successfully_audited_sha": BASE_SHA}
+    write_json(cursor, legacy)
+    backup = cursor.with_name(f"{cursor.name}.v1.backup")
+    write_json(backup, legacy)
+    backup.chmod(0o644)
+    lock = state / "locks" / "uaudit-daily-ios.lock"
+    lock.mkdir(parents=True)
+    write_json(lock / "metadata.json", {
+        "schema_version": "uaudit-maintenance-lock/v1",
+        "routine_key": "uaudit-daily-ios", "platform": "ios",
+        "purpose": "cursor-v2-migration",
+    })
+    capability = _verified_release_capability(
+        selection_sha256="b" * 64, routine_key="uaudit-daily-ios", platform="ios",
+        from_branch="version/0.52", selected_branch="version/0.52",
+        cursor_sha=BASE_SHA, selected_head=BASE_SHA, resolution_kind="migration",
+    )
+    args = Namespace(cursor=cursor, lock_dir=lock, migrated_at=RECONCILED_AT)
+    assert migrate_cursor_verified(args, capability)["status"] == "migrated"
+    assert backup.stat().st_mode & 0o222 == 0
+    assert migrate_cursor_verified(args, capability)["status"] == "already_migrated"
+
+
+def test_cursor_migration_recovery_rejects_delivery_metadata_drift(tmp_path: Path):
+    state = tmp_path / "state"
+    cursor = state / "ios-version-audit.json"
+    legacy = {
+        "last_successfully_audited_sha": BASE_SHA,
+        "last_successful_issue": "UNS-122",
+        "last_successful_at": CREATED_AT,
+        "last_delivery_summary_sha256": "a" * 64,
+        "last_telegram_message_id": 44,
+    }
+    write_json(cursor, legacy)
+    lock = state / "locks" / "uaudit-daily-ios.lock"
+    lock.mkdir(parents=True)
+    write_json(lock / "metadata.json", {
+        "schema_version": "uaudit-maintenance-lock/v1",
+        "routine_key": "uaudit-daily-ios", "platform": "ios",
+        "purpose": "cursor-v2-migration",
+    })
+    capability = _verified_release_capability(
+        selection_sha256="b" * 64, routine_key="uaudit-daily-ios", platform="ios",
+        from_branch="version/0.52", selected_branch="version/0.52",
+        cursor_sha=BASE_SHA, selected_head=BASE_SHA, resolution_kind="migration",
+    )
+    args = Namespace(cursor=cursor, lock_dir=lock, migrated_at=RECONCILED_AT)
+    first = migrate_cursor_verified(args, capability)
+    receipt = Path(first["receipt"])
+    receipt.unlink()
+    drifted = read_json(cursor)
+    drifted["last_successful_issue"] = "UNS-999"
+    drifted["last_telegram_message_id"] = 999
+    write_json(cursor, drifted)
+
+    with pytest.raises(ContractError, match="metadata does not match"):
+        delivery_contract.recover_cursor_migration_without_fence(args, capability)
+
+    assert read_json(cursor) == drifted
+    assert not receipt.exists()
+
+
 @pytest.mark.parametrize("state", ["blocked", "missing_marker"])
 def test_blocked_or_missing_required_stage_never_publishes_summary(tmp_path: Path, state: str):
     statuses = {"security": "blocked"} if state == "blocked" else None
@@ -1244,7 +1567,6 @@ def test_daily_no_change_status_is_idempotent_and_never_creates_a_cursor(tmp_pat
     assert prepared["status"] == "ready"
     assert "no_change" in (run / "telegram-summary.txt").read_text()
     assert not (tmp_path / "state/ios-version-audit.json").exists()
-
     _, duplicate = prepare_daily_status(tmp_path)
     assert duplicate["status"] == "already_prepared"
     response = tmp_path / "response.json"
@@ -1253,9 +1575,142 @@ def test_daily_no_change_status_is_idempotent_and_never_creates_a_cursor(tmp_pat
     })
     result = call(helper, "record-daily-status", "--run-dir", run, "--response", response, "--delivered-at", DELIVERED_AT)
     assert result["message_id"] == 77
+    (run / "status" / "telegram.done").unlink()
     resumed = call(helper, "record-daily-status", "--run-dir", run, "--response", response, "--delivered-at", DELIVERED_AT)
     assert resumed["status"] == "already_recorded"
+    assert (run / "status" / "telegram.done").is_file()
     assert not (tmp_path / "state/ios-version-audit.json").exists()
+
+
+def test_initialize_daily_cursor_creates_v2_once_and_never_overwrites(tmp_path: Path):
+    helper = install_helper(tmp_path)
+    cursor = tmp_path / "state" / "ios-version-audit.json"
+    cursor.parent.mkdir(parents=True)
+    initialized = call(
+        helper,
+        "initialize-daily-cursor",
+        "--cursor",
+        cursor,
+        "--routine-key",
+        "uaudit-daily-ios",
+        "--platform",
+        "ios",
+        "--active-branch",
+        "version/0.52",
+        "--head",
+        HEAD_SHA,
+    )
+    assert initialized["status"] == "initialized"
+    expected = {
+        "schema_version": "uaudit-daily-cursor/v2",
+        "active_release_branch": "version/0.52",
+        "last_successfully_audited_sha": HEAD_SHA,
+        "last_successful_issue": None,
+        "last_successful_at": None,
+        "last_delivery_summary_sha256": None,
+        "last_telegram_message_id": None,
+    }
+    assert read_json(cursor) == expected
+    before = cursor.read_bytes()
+    failure = call(
+        helper,
+        "initialize-daily-cursor",
+        "--cursor",
+        cursor,
+        "--routine-key",
+        "uaudit-daily-ios",
+        "--platform",
+        "ios",
+        "--active-branch",
+        "version/0.53",
+        "--head",
+        "f" * 40,
+        ok=False,
+    )
+    assert "refuses to overwrite" in failure["error"]
+    assert cursor.read_bytes() == before
+
+
+def test_branch_transition_status_recovers_cursor_before_marker_crash(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    helper = install_helper(tmp_path)
+    descriptor = tmp_path / "descriptor.json"
+    write_json(descriptor, {
+        "schema_version": "uaudit-daily-slot-status/v1", "app_id": "unstoppable_wallet",
+        "routine_key": "uaudit-daily-ios", "platform": "ios", "config_sha256": "a" * 64,
+    })
+    proof = tmp_path / "slot-proof.json"
+    write_json(proof, {
+        "schema_version": "uaudit-daily-slot-status/v1", "routine_key": "uaudit-daily-ios",
+        "platform": "ios", "scheduled_utc_slot": CREATED_AT,
+        "descriptor_sha256": sha256_path(descriptor), "source": "paperclip_scheduled",
+    })
+    selection = tmp_path / "selection.json"
+    write_json(selection, {
+        "schema_version": "uaudit-release-selection/v2", "routine_key": "uaudit-daily-ios",
+        "platform": "ios", "release_major": 0, "from_branch": "version/0.52",
+        "selected_branch": "version/0.53", "cursor_sha": HEAD_SHA,
+        "selected_head": HEAD_SHA, "master_head": "f" * 40,
+        "resolution_kind": "branch_transition", "segment": None,
+        "release_heads": {"version/0.53": HEAD_SHA}, "missing_versions": [],
+        "proof": {"active_branch_present": False, "cursor_is_ancestor_of_selected": True,
+                  "cursor_is_ancestor_of_master": True},
+    })
+    cursor = tmp_path / "state" / "ios-version-audit.json"
+    original = {
+        "schema_version": "uaudit-daily-cursor/v2", "active_release_branch": "version/0.52",
+        "last_successfully_audited_sha": HEAD_SHA, "last_successful_issue": "UNS-122",
+        "last_successful_at": CREATED_AT, "last_delivery_summary_sha256": "b" * 64,
+        "last_telegram_message_id": 45,
+    }
+    write_json(cursor, original)
+    prepared = call(
+        helper, "prepare-branch-transition-status", "--state-root", tmp_path / "state",
+        "--descriptor", descriptor, "--slot-proof", proof, "--issue-identifier", "UNS-123",
+        "--selection", selection, "--cursor", cursor, "--reason", "Release branch advanced.",
+        "--attempt-id", "attempt-1", "--created-at", CREATED_AT,
+    )
+    run = Path(prepared["run_dir"])
+    response = tmp_path / "response.json"
+    write_json(response, {
+        "ok": True, "mode": "message", "routeName": "UAudit",
+        "issueIdentifier": "UNS-123", "messageId": 77,
+    })
+    call(helper, "record-daily-status", "--run-dir", run, "--response", response, "--delivered-at", DELIVERED_AT)
+    lock = tmp_path / "state" / "locks" / "uaudit-daily-ios.lock"
+    lock.mkdir(parents=True)
+    write_json(lock / "metadata.json", {
+        "schema_version": 1, "issue_identifier": "UNS-123", "routine_id": "uaudit-daily-ios",
+        "from_sha": HEAD_SHA, "to_sha": HEAD_SHA, "run_binding_sha256": None,
+    })
+    capability = _verified_release_capability(
+        selection_sha256=sha256_path(selection), routine_key="uaudit-daily-ios", platform="ios",
+        from_branch="version/0.52", selected_branch="version/0.53",
+        cursor_sha=HEAD_SHA, selected_head=HEAD_SHA, resolution_kind="branch_transition",
+    )
+    original_atomic_json = delivery_contract._atomic_json
+    crashed = {"value": False}
+
+    def crash_before_cursor_marker(path: Path, value: object):
+        if path == run / "status" / "cursor.done" and not crashed["value"]:
+            crashed["value"] = True
+            raise RuntimeError("injected cursor marker crash")
+        return original_atomic_json(path, value)
+
+    monkeypatch.setattr(delivery_contract, "_atomic_json", crash_before_cursor_marker)
+    with pytest.raises(RuntimeError, match="injected cursor marker crash"):
+        reconcile_daily_status_verified(
+            Namespace(run_dir=run, cursor=cursor, lock_dir=lock), capability,
+        )
+    assert read_json(cursor) == {**original, "active_release_branch": "version/0.53"}
+    assert not (run / "status" / "cursor.done").exists()
+    monkeypatch.setattr(delivery_contract, "_atomic_json", original_atomic_json)
+    resumed = reconcile_daily_status_verified(
+        Namespace(run_dir=run, cursor=cursor, lock_dir=lock), capability,
+    )
+    assert resumed["status"] == "already_applied"
 
 
 def test_daily_status_rejects_slot_proof_for_a_different_descriptor(tmp_path: Path):

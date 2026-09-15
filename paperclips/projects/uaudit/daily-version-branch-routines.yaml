@@ -1,4 +1,4 @@
-schemaVersion: 2
+schemaVersion: 3
 project: uaudit
 marker: UAudit daily version-branch delta audit
 
@@ -9,12 +9,14 @@ apps:
     report_route: UAudit
 
 routines:
-  - id: daily-android-version-0.52
+  - id: daily-android-version-audit
     app_id: unstoppable_wallet
     routine_key: uaudit-daily-android
     title: UAudit daily Android version delta audit
     platform: android
-    branch: version/0.52
+    release_policy:
+      major: 0
+      transition: when-active-branch-missing
     schedule:
       enabled: true
       cron: "45 10 * * *"
@@ -42,12 +44,14 @@ routines:
     initialization_allowed: false
     codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
 
-  - id: daily-ios-version-0.52
+  - id: daily-ios-version-audit
     app_id: unstoppable_wallet
     routine_key: uaudit-daily-ios
     title: UAudit daily iOS version delta audit
     platform: ios
-    branch: version/0.52
+    release_policy:
+      major: 0
+      transition: when-active-branch-missing
     schedule:
       enabled: true
       cron: "0 11 * * *"

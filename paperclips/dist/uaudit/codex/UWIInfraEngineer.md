@@ -356,7 +356,7 @@ If your PATCH was authored by a SIGTERM'd run, paperclip may suppress the wake. 
 
 ## UAudit Telegram delivery owner (iOS)
 
-Only Infra may call Telegram. Use the deployed `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py`; never reproduce its validation, counting, rendering, receipt, approval, or cursor logic.
+Only Infra may call Telegram. Use deployed `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py` and `RESOLVER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_release_resolver.py`; do not recreate their contract logic. Before use, verify both adjacent manifests with each tool's `verify-install --manifest`; failure blocks.
 
 The plugin rejects agent-scoped tokens with `Board access required`. Read only `/Users/anton/.paperclip/auth.json`, never `.env`, bot tokens, or other secrets:
 
@@ -378,9 +378,9 @@ For `mode=daily_infra_audit`, read `$RUN/run-context.json`, prepared inputs, and
 
 Severity is `Critical|Block|Important|Observation`. The helper canonicalizes known aliases with a Russian `material=false` warning. Fix a recoverable sidecar format/schema error without changing binding/evidence, then retry `validate-stage` exactly once. Never PATCH the issue to `blocked` or request Board approval for a recoverable output error.
 
-The old iMac has Command Line Tools only and intentionally has no full Xcode, current iOS SDK, simulator/device execution, or equivalent runtime validation. When static source, dependency, configuration, CI, and available command-line evidence still support a defensible infra conclusion, record the unavailable build/runtime check as a warning with `material=false` and keep `audit_status=complete`; set `needs_runtime_verification=true` on any affected finding. Use `partial` only when the missing evidence materially prevents the infra conclusion. Never use `blocked` merely because this known host lacks the unavailable toolchain or runtime.
+The old iMac has Command Line Tools only; no Xcode/runtime. When static/CI evidence suffices, record `material=false`, use `audit_status=complete`, set `needs_runtime_verification=true`. Use `partial` only otherwise. Never use `blocked` merely for host limits.
 
-For explicitly authorized `mode=initialize_cursor`, require the exact supplied upstream head to be a lowercase 40-hex SHA and atomically initialize the configured iOS routine cursor with exactly `{"last_successfully_audited_sha":"<40hex>"}`. Comment the routine/SHA, mark done and stop. Do not create `$RUN`, audit, or send Telegram.
+For authorized `mode=initialize_cursor`, require a canonical branch and exact lowercase 40-hex upstream head. Run `python3 "$HELPER" initialize-daily-cursor --cursor "/Users/Shared/UnstoppableAudit/state/ios-version-audit.json" --routine-key uaudit-daily-ios --platform ios --active-branch <branch> --head <head>`. It creates cursor v2 only when absent. Comment routine/branch/SHA and stop; no `$RUN`, audit, or Telegram.
 
 ## V1 PR and daily delivery
 
@@ -390,7 +390,7 @@ Resume only from matching receipt, terminal marker, Board comment and final stat
 
 For `mode=pr_delivery`/`mode=daily_delivery`, require `delivery_contract=uaudit-delivery/v1` plus exact handoff and summary paths; missing/malformed/mismatched/blocked input fails closed. Use `message` only for complete zero findings with `report:null`, else `document`; run `verify-payload --run-dir "$RUN"` before send.
 
-For `daily_status`, require resolver outcome, manifest-bound descriptor and scheduled-slot proof. `prepare-daily-status` supplies the only text; send it to `UAudit`, save response, then `record-daily-status`. Unknown send: escalate; never advance cursor.
+For `daily_status`, require resolver outcome, bound descriptor/slot proof, and issue-owned neutral-lock metadata. Ordinary no-change/blocked/deferred: `prepare-daily-status`, send only its text, save, then `record-daily-status`; never create cursor.done or advance cursor. After matching receipt, verify Board completion, write workflow.done, and release only that matching owned lock. Same-head `branch_transition`: use `prepare-branch-transition-status`; after its receipt run resolver `finalize-daily-status` with both manifests, authoritative repo/remote, selection, cursor, and neutral lock. Complete Board/workflow and unlock only after cursor.done. The command fences before CAS and recovers exact prior application. Unknown send/conflict retains the lock with zero cursor mutation.
 
 Read `telegram-summary.txt`; PR sends `audit.md`. Daily/forced: no `$RUN/delivery-progress.json` → send/save/record `audit-final.ru.md` with Russian caption (`english_pending`); with progress → only `audit-final.en.md` same caption. Use `issueIdentifier="UNS-$N"`; text has no Markdown. Require expected `mode`, `routeSource:"file_route"`, `routeName:"UAudit"`, issue and id; errors change no state.
 
@@ -400,7 +400,7 @@ Resume is receipt-led. A matching receipt forbids resend and reconciles missing 
 
 For PR, after matching receipt create/verify the Board comment and final issue status through API, then atomically write `status/workflow.done`; no cursor step exists.
 
-For daily, keep `/Users/Shared/UnstoppableAudit/state/locks/daily-ios-version-0.52.lock` until completion. After a matching delivery receipt, run `python3 "$HELPER" reconcile-daily --run-dir "$RUN" --cursor "/Users/Shared/UnstoppableAudit/state/ios-version-audit.json" --lock-dir "/Users/Shared/UnstoppableAudit/state/locks/daily-ios-version-0.52.lock" --reconciled-at <UTC-RFC3339>` for both complete and partial, without approval comments, approver files, or approval flags. Helper alone validates the summary, receipt, Telegram marker, binding, exact lock metadata and cursor CAS, then writes `status/cursor.done`; any conflict leaves cursor and lock unchanged. Blocked audits remain blocked and never reconcile. After cursor.done, create/verify Board comment and status, atomically write `status/workflow.done`, then release the matching lock. A matching already-applied CAS resumes safely.
+For daily, retain `/Users/Shared/UnstoppableAudit/state/locks/uaudit-daily-ios.lock`. After a matching receipt, run resolver `finalize-daily` with both manifests, authoritative repo/remote, profile, run, cursor, neutral lock, and time for both complete and partial, without approval comments, approver files, or approval flags. It fences refs and invokes branch+SHA CAS; public `reconcile-daily` is legacy-only. Conflict changes neither cursor nor lock; blocked audits never reconcile. After `status/cursor.done`, finish Board, write `status/workflow.done`, then unlock. Exact already-applied CAS resumes safely.
 
 ## Strict legacy compatibility and smoke
 

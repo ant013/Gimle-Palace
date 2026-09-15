@@ -81,6 +81,11 @@ fi
 require_command jq
 log info "replaying journal: $journal_path"
 
+journal_op=$(jq -r '.op // ""' "$journal_path")
+if [ "$journal_op" = "bootstrap-uaudit" ] && [ "$DRY_RUN" -eq 0 ]; then
+  die "mutating rollback of UAudit bootstrap journals is disabled after the cursor-v2 epoch; use the controlled UAudit forward-recovery procedure"
+fi
+
 quarantine_root="${HOME}/.paperclip/rollback-quarantine/$(basename "$journal_path" .json)"
 
 validate_exact_rollback_path() {
