@@ -22,6 +22,7 @@ CANARY=0
 CONFIG_FILE=""
 REUSE_BINDINGS=""
 PRUNE=0
+UAUDIT_RUNTIME_ONLY=0
 project_key=""
 
 while [ $# -gt 0 ]; do
@@ -30,6 +31,7 @@ while [ $# -gt 0 ]; do
     --config) CONFIG_FILE="$2"; shift 2 ;;
     --reuse-bindings) REUSE_BINDINGS="$2"; shift 2 ;;
     --prune) PRUNE=1; shift ;;
+    --uaudit-runtime-only) UAUDIT_RUNTIME_ONLY=1; shift ;;
     -h|--help)
       cat <<EOF
 Usage:
@@ -38,6 +40,7 @@ Usage:
   $(basename "$0") <project-key> --reuse-bindings FILE    # migrate from legacy UUIDs
   $(basename "$0") <project-key> --canary                 # 2-stage canary deploy
   $(basename "$0") <project-key> --prune                  # remove agents in bindings but not in manifest
+  $(basename "$0") uaudit --uaudit-runtime-only           # install compatibility tools only
 
 Per UAA spec §9.2 — 13 steps (idempotent, journal-snapshotted).
 EOF
@@ -50,11 +53,15 @@ done
 [ -n "$project_key" ] || die "project-key required (try --help)"
 validate_project_key "$project_key"
 
+if [ "$UAUDIT_RUNTIME_ONLY" -eq 1 ]; then
+  [ "$project_key" = "uaudit" ] || die "--uaudit-runtime-only is valid only for project uaudit"
+  [ "$CANARY" -eq 0 ] && [ "$PRUNE" -eq 0 ] && [ -z "$CONFIG_FILE" ] && [ -z "$REUSE_BINDINGS" ] || \
+    die "--uaudit-runtime-only cannot be combined with bootstrap mutation flags"
+fi
+
 require_command yq
 require_command jq
 require_command python3
-require_env PAPERCLIP_API_URL
-require_env PAPERCLIP_API_KEY
 
 install_uaudit_delivery_helper() {
   local team_root="$1"
@@ -218,7 +225,10 @@ PY
     # bytes still have to match its adjacent read-only manifest above; any other
     # generation remains operator-approved only through the explicit variable.
     trusted_previous="${UAUDIT_HELPER_TRUSTED_PREVIOUS_SHA256:-}"
-    if [ -z "$trusted_previous" ] && [ "$manifest_sha" = "d3fe36b8c820f5092cde81ec9a69771a17fffa4d7e7ebfce1be65e68f5ba08b7" ]; then
+    if [ -z "$trusted_previous" ] && { \
+      [ "$manifest_sha" = "d3fe36b8c820f5092cde81ec9a69771a17fffa4d7e7ebfce1be65e68f5ba08b7" ] || \
+      [ "$manifest_sha" = "4f12525b9ffd5f75bb43b7545da6475ba55a0582b6000d8752aadc9e117c3799" ]; \
+    }; then
       trusted_previous="$manifest_sha"
     fi
     [[ "$trusted_previous" =~ ^[0-9a-f]{64}$ ]] && \
@@ -289,34 +299,101 @@ install_uaudit_release_resolver() {
   local destination="${tools_dir}/uaudit_release_resolver.py"
   local manifest="${tools_dir}/uaudit_release_resolver.manifest.json"
   local pending="${tools_dir}/uaudit_release_resolver.pending.json"
-  local source_sha destination_sha manifest_sha="" trusted_previous tmp manifest_tmp pending_tmp
+  local source_sha destination_sha manifest_sha="" manifest_schema manifest_file
+  local pending_previous trusted_previous tmp manifest_tmp pending_tmp
 
   [ -f "$source" ] || die "UAudit release resolver source missing: $source"
   mkdir -p "$tools_dir"
-  # See install_uaudit_delivery_helper: routine execution must not wait for a
-  # manifest/transaction recovery before it can run on the iMac.
-  rm -f "$destination"
-  cp "$source" "$destination"
-  chmod 555 "$destination"
-  rm -f "$manifest" "$pending"
-  log ok "UAudit release resolver installed directly: $destination"
-  return 0
-  [ ! -e "$pending" ] || die "UAudit resolver pending transaction requires operator recovery"
+  chmod 755 "$tools_dir"
   source_sha=$(shasum -a 256 "$source" | awk '{print $1}')
-  if [ -e "$destination" ] || [ -e "$manifest" ]; then
+
+  if [ -e "$pending" ] || [ -L "$pending" ]; then
+    [ -f "$pending" ] && [ ! -L "$pending" ] || \
+      die "UAudit resolver pending transaction is not a regular file"
+    python3 - "$pending" <<'PY' || die "UAudit resolver pending transaction must be read-only"
+import pathlib
+import sys
+
+raise SystemExit(1 if pathlib.Path(sys.argv[1]).stat().st_mode & 0o222 else 0)
+PY
+    jq -e '
+      type == "object" and
+      keys == ["previous_sha256", "schema_version", "target_sha256"] and
+      .schema_version == "uaudit-release-resolver-pending/v1" and
+      (.target_sha256 | type == "string" and test("^[0-9a-f]{64}$")) and
+      (.previous_sha256 == null or (.previous_sha256 | type == "string" and test("^[0-9a-f]{64}$")))
+    ' "$pending" >/dev/null || die "UAudit resolver pending transaction is malformed"
+    [ "$(jq -r '.target_sha256' "$pending")" = "$source_sha" ] || \
+      die "UAudit resolver pending transaction targets a different source generation"
+    pending_previous=$(jq -r '.previous_sha256 // ""' "$pending")
+    if [ -f "$destination" ] && [ ! -L "$destination" ]; then
+      destination_sha=$(shasum -a 256 "$destination" | awk '{print $1}')
+      if [ "$destination_sha" = "$source_sha" ]; then
+        manifest_tmp=$(mktemp "${tools_dir}/.uaudit_release_resolver.manifest.json.XXXXXX")
+        jq -n --arg schema_version "uaudit-release-resolver-install/v1" \
+          --arg file "uaudit_release_resolver.py" --arg sha256 "$source_sha" \
+          '{schema_version:$schema_version,file:$file,sha256:$sha256}' > "$manifest_tmp"
+        chmod 444 "$destination" "$manifest_tmp"
+        mv -f "$manifest_tmp" "$manifest"
+        rm -f "$pending"
+        python3 "$destination" verify-install --manifest "$manifest" || \
+          die "recovered UAudit resolver rejected its install manifest"
+        log ok "recovered split UAudit resolver install: $destination"
+        return 0
+      fi
+      [ -n "$pending_previous" ] && [ "$destination_sha" = "$pending_previous" ] || \
+        die "UAudit resolver pending transaction does not match installed bytes"
+    else
+      [ -z "$pending_previous" ] || \
+        die "UAudit resolver disappeared during a prepared upgrade"
+    fi
+  fi
+
+  if [ -f "$destination" ] && [ ! -L "$destination" ] && \
+     [ ! -e "$manifest" ] && [ ! -L "$manifest" ]; then
+    destination_sha=$(shasum -a 256 "$destination" | awk '{print $1}')
+    [ "$destination_sha" = "c90e195892edd860ac962b2601716457018c0440dfda426ff6af42ae204375b9" ] || \
+      die "manifest-less UAudit resolver generation is not the trusted legacy digest"
+    python3 - "$destination" <<'PY' || die "manifest-less UAudit resolver must be read-only"
+import pathlib
+import sys
+
+raise SystemExit(1 if pathlib.Path(sys.argv[1]).stat().st_mode & 0o222 else 0)
+PY
+    manifest_sha="$destination_sha"
+    log ok "adopted manifest-less UAudit resolver for one-shot generation upgrade"
+  elif [ -e "$destination" ] || [ -L "$destination" ] || [ -e "$manifest" ] || [ -L "$manifest" ]; then
     [ -f "$destination" ] && [ ! -L "$destination" ] && [ -f "$manifest" ] && [ ! -L "$manifest" ] || \
       die "UAudit resolver install is incomplete"
+    jq -e 'type == "object" and keys == ["file", "schema_version", "sha256"]' \
+      "$manifest" >/dev/null || die "UAudit resolver install manifest is invalid or has unknown fields"
+    manifest_schema=$(jq -r '.schema_version // ""' "$manifest")
+    manifest_file=$(jq -r '.file // ""' "$manifest")
     manifest_sha=$(jq -r '.sha256 // ""' "$manifest")
-    [ "$(jq -r '.schema_version // ""' "$manifest")" = "uaudit-release-resolver-install/v1" ] && \
-      [ "$(jq -r '.file // ""' "$manifest")" = "uaudit_release_resolver.py" ] && \
-      [[ "$manifest_sha" =~ ^[0-9a-f]{64}$ ]] || die "UAudit resolver install manifest is invalid"
+    [ "$manifest_schema" = "uaudit-release-resolver-install/v1" ] || \
+      die "UAudit resolver install manifest has unsupported schema"
+    [ "$manifest_file" = "uaudit_release_resolver.py" ] || \
+      die "UAudit resolver install manifest names an unexpected file"
+    [[ "$manifest_sha" =~ ^[0-9a-f]{64}$ ]] || die "UAudit resolver install manifest has invalid sha256"
     destination_sha=$(shasum -a 256 "$destination" | awk '{print $1}')
     [ "$destination_sha" = "$manifest_sha" ] || die "UAudit resolver digest mismatch"
+    python3 - "$destination" "$manifest" <<'PY' || \
+      die "UAudit resolver and install manifest must be read-only"
+import pathlib
+import sys
+
+paths = (pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]))
+raise SystemExit(1 if any(path.stat().st_mode & 0o222 for path in paths) else 0)
+PY
     if [ "$manifest_sha" = "$source_sha" ]; then
-      python3 "$destination" --manifest "$manifest" || die "UAudit resolver rejected install manifest"
+      python3 "$destination" verify-install --manifest "$manifest" || die "UAudit resolver rejected install manifest"
+      log ok "UAudit release resolver already installed: $destination"
       return 0
     fi
     trusted_previous="${UAUDIT_RESOLVER_TRUSTED_PREVIOUS_SHA256:-}"
+    if [ -z "$trusted_previous" ] && [ "$manifest_sha" = "c90e195892edd860ac962b2601716457018c0440dfda426ff6af42ae204375b9" ]; then
+      trusted_previous="$manifest_sha"
+    fi
     [[ "$trusted_previous" =~ ^[0-9a-f]{64}$ ]] && [ "$trusted_previous" = "$manifest_sha" ] || \
       die "UAudit resolver generation differs from source and is not explicitly trusted for upgrade"
   fi
@@ -335,7 +412,7 @@ install_uaudit_release_resolver() {
   mv -f "$tmp" "$destination"
   mv -f "$manifest_tmp" "$manifest"
   rm -f "$pending"
-  python3 "$destination" --manifest "$manifest" || die "UAudit resolver post-install verification failed"
+  python3 "$destination" verify-install --manifest "$manifest" || die "UAudit resolver post-install verification failed"
   log ok "UAudit release resolver installed read-only: $destination"
 }
 
@@ -357,6 +434,31 @@ ensure_uaudit_telegram_plugin_binding() {
   [ "$(printf '%s' "$plugin" | jq -r '.pluginKey // ""')" = "paperclip-plugin-telegram" ] || die "UAudit plugin_id does not identify the Telegram plugin"
   [ "$(printf '%s' "$plugin" | jq -r '.status // ""')" = "ready" ] || die "UAudit Telegram plugin is not ready"
 }
+
+if [ "$UAUDIT_RUNTIME_ONLY" -eq 1 ]; then
+  host_dir="${HOME}/.paperclip/projects/${project_key}"
+  paths_file="${host_dir}/paths.yaml"
+  [ -f "$paths_file" ] && [ ! -L "$paths_file" ] || \
+    die "--uaudit-runtime-only requires existing regular paths.yaml: $paths_file"
+  team_root=$(yq -r '.team_workspace_root // ""' "$paths_file")
+  project_root=$(yq -r '.project_root // ""' "$paths_file")
+  [ -n "$team_root" ] && [ "$team_root" != "null" ] || \
+    die "team_workspace_root required to install UAudit runtime tools"
+  [ -n "$project_root" ] && [ "$project_root" != "null" ] || \
+    die "project_root required to validate UAudit schema epoch"
+  target_schema=$(yq -r '.schemaVersion // ""' \
+    "${REPO_ROOT}/paperclips/projects/uaudit/daily-version-branch-routines.yaml")
+  python3 "${SCRIPT_DIR}/uaudit_schema_epoch.py" --target-schema "$target_schema" \
+    --project-root "$project_root" --mode runtime-only || \
+    die "UAudit runtime-only schema epoch preflight failed"
+  install_uaudit_delivery_helper "$team_root"
+  install_uaudit_release_resolver "$team_root"
+  log ok "UAudit compatibility runtime installed; no journal/API/agent/workspace mutation performed"
+  exit 0
+fi
+
+require_env PAPERCLIP_API_URL
+require_env PAPERCLIP_API_KEY
 
 manifest="${REPO_ROOT}/paperclips/projects/${project_key}/paperclip-agent-assembly.yaml"
 [ -f "$manifest" ] || die "manifest not found: $manifest"
@@ -438,6 +540,14 @@ if [ "$project_key" = "uaudit" ]; then
     die "team_workspace_root required to install UAudit delivery helper"
   install_uaudit_delivery_helper "$team_root"
   install_uaudit_release_resolver "$team_root"
+  project_root=$(yq -r '.project_root // ""' "$paths_file")
+  [ -n "$project_root" ] && [ "$project_root" != "null" ] || \
+    die "project_root required to validate UAudit schema epoch"
+  target_schema=$(yq -r '.schemaVersion // ""' \
+    "${REPO_ROOT}/paperclips/projects/uaudit/daily-version-branch-routines.yaml")
+  python3 "${SCRIPT_DIR}/uaudit_schema_epoch.py" --target-schema "$target_schema" \
+    --project-root "$project_root" --mode full || \
+    die "UAudit project-wide schema epoch preflight failed"
   ensure_uaudit_telegram_plugin_binding "$plugins_file"
 fi
 

@@ -16,6 +16,16 @@ from pathlib import Path
 import compare_deployed_agents
 
 
+UAUDIT_DEPLOY_COMMAND = "paperclips/scripts/imac-agents-deploy.sh uaudit"
+
+
+def reject_direct_uaudit_deploy(project: str, mode: str) -> None:
+    if project == "uaudit":
+        raise ValueError(
+            f"direct UAudit {mode} is disabled; use {UAUDIT_DEPLOY_COMMAND}"
+        )
+
+
 def load_resolved(repo_root: Path, project: str) -> dict:
     path = compare_deployed_agents.resolved_assembly_path(repo_root, project)
     if not path.is_file():
@@ -145,6 +155,7 @@ def dry_run(repo_root: Path, project: str, target: str, agent: str | None) -> in
 
 
 def live_local(repo_root: Path, project: str, target: str, agent: str, backup_dir: Path) -> int:
+    reject_direct_uaudit_deploy(project, "live-local deploy")
     resolved = load_resolved(repo_root, project)
     if target == "all":
         raise ValueError("--live-local requires a concrete --target")
@@ -229,6 +240,7 @@ def live_api(
     api_base: str,
     api_key: str,
 ) -> int:
+    reject_direct_uaudit_deploy(project, "live-api deploy")
     resolved = load_resolved(repo_root, project)
     if target == "all":
         raise ValueError("--api requires a concrete --target")
@@ -267,6 +279,7 @@ def rollback(backup: Path, backup_dir: Path) -> int:
     project = str(metadata.get("project", ""))
     target = str(metadata.get("target", ""))
     agent = str(metadata.get("agent", ""))
+    reject_direct_uaudit_deploy(project, "rollback")
     destination = Path(str(metadata.get("destination", "")))
     if not destination.is_absolute() or destination.name != "AGENTS.md":
         raise ValueError(f"rollback destination invalid for {backup_file}: {destination}")
@@ -297,6 +310,12 @@ def main() -> int:
     selected_modes = sum(bool(mode) for mode in [args.dry_run, args.live_local, args.api, args.rollback])
     if selected_modes != 1:
         print("ERROR: choose exactly one of --dry-run, --live-local, --api, or --rollback", file=sys.stderr)
+        return 2
+    if args.project == "uaudit" and (args.live_local or args.api):
+        print(
+            f"ERROR: direct UAudit deploy is disabled; use {UAUDIT_DEPLOY_COMMAND}",
+            file=sys.stderr,
+        )
         return 2
     if (args.live_local or args.api) and not args.agent:
         print("ERROR: --live-local/--api require --agent", file=sys.stderr)

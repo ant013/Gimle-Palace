@@ -25,6 +25,7 @@ from reconcile_uaudit_routines import (  # noqa: E402
 from resolve_template_sources import resolve  # noqa: E402
 
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+RELEASE_BRANCH_RE = re.compile(r"^version/(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 MARKER = "UAudit forced full-range audit"
 
 
@@ -32,6 +33,23 @@ def sha(value: str, name: str) -> str:
     if not SHA_RE.fullmatch(value):
         raise ValueError(f"{name} must be a lowercase 40-hex SHA")
     return value
+
+
+def release_branch(value: str) -> tuple[str, int]:
+    match = RELEASE_BRANCH_RE.fullmatch(value)
+    if match is None:
+        raise ValueError("branch must be canonical version/X.Y")
+    return value, int(match.group(1))
+
+
+def release_major(routine: dict[str, Any]) -> int:
+    policy = routine.get("release_policy")
+    if not isinstance(policy, dict):
+        raise ValueError(f"routine {routine.get('id')!r} missing release_policy")
+    major = policy.get("major")
+    if not isinstance(major, int) or isinstance(major, bool) or major < 0:
+        raise ValueError(f"routine {routine.get('id')!r} release_policy.major is invalid")
+    return major
 
 
 def git(repo: Path, *args: str) -> str:
@@ -53,10 +71,26 @@ def selected(config: dict[str, Any], app_id: str, platform: str) -> list[dict[st
     return choices
 
 
-def build_payloads(config: dict[str, Any], paths: dict[str, Any], agents: dict[str, str], app_id: str, platform: str, from_sha: str, to_sha: str) -> list[dict[str, Any]]:
+def build_payloads(
+    config: dict[str, Any],
+    paths: dict[str, Any],
+    agents: dict[str, str],
+    app_id: str,
+    platform: str,
+    branch: str,
+    from_sha: str,
+    to_sha: str,
+) -> list[dict[str, Any]]:
+    branch, branch_major = release_branch(branch)
     from_sha, to_sha = sha(from_sha, "from_sha"), sha(to_sha, "to_sha")
     payloads: list[dict[str, Any]] = []
     for routine in selected(config, app_id, platform):
+        configured_major = release_major(routine)
+        if branch_major != configured_major:
+            raise ValueError(
+                f"branch major {branch_major} does not match "
+                f"{routine['platform']} release_policy.major {configured_major}"
+            )
         repo = Path(resolve(routine["repo_local_path_template"], {"paths": paths}))
         if not repo.is_dir():
             raise ValueError(f"declared checkout does not exist: {repo}")
@@ -72,7 +106,7 @@ def build_payloads(config: dict[str, Any], paths: dict[str, Any], agents: dict[s
             f"app_id: {routine['app_id']}",
             f"platform: {routine['platform']}",
             f"routine_id: {routine['id']}",
-            f"branch: {routine['branch']}",
+            f"branch: {branch}",
             f"repo: {repo}",
             f"from_sha: {from_sha}",
             f"to_sha: {to_sha}",
@@ -93,6 +127,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app-id", default="unstoppable_wallet")
     parser.add_argument("--platform", choices=("android", "ios", "all"), default="all")
+    parser.add_argument("--branch", required=True, help="Canonical release branch, for example version/0.52")
     parser.add_argument("--from-sha", required=True)
     parser.add_argument("--to-sha", required=True)
     parser.add_argument("--confirm-unbounded", action="store_true")
@@ -108,7 +143,16 @@ def main() -> int:
         if not args.confirm_unbounded:
             raise ValueError("--confirm-unbounded is required")
         config, paths = load_config(args.config), load_paths("uaudit", args.paths)
-        payloads = build_payloads(config, paths, resolve_agent_ids("uaudit", args.bindings), args.app_id, args.platform, args.from_sha, args.to_sha)
+        payloads = build_payloads(
+            config,
+            paths,
+            resolve_agent_ids("uaudit", args.bindings),
+            args.app_id,
+            args.platform,
+            args.branch,
+            args.from_sha,
+            args.to_sha,
+        )
         result: dict[str, Any] = {"mode": "apply" if args.apply else "dry-run", "issues": payloads}
         if args.apply:
             if not args.company_id:

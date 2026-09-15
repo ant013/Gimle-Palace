@@ -805,6 +805,17 @@ def test_project_deploy_dry_run_uses_resolved_assembly(tmp_path: Path, capsys) -
     assert "WOULD DEPLOY cx-cto -> da97dbd9-6627-48d0-b421-66af0750eacf" in captured.out
 
 
+def test_project_deploy_uaudit_dry_run_remains_allowed(tmp_path: Path, capsys) -> None:
+    repo = make_repo(tmp_path)
+
+    result = deploy_project_agents.dry_run(repo, "uaudit", "codex", "AUCEO")
+
+    captured = capsys.readouterr()
+    assert result == 0
+    assert "DRY-RUN project=uaudit" in captured.out
+    assert "WOULD DEPLOY AUCEO" in captured.out
+
+
 def test_project_deploy_dry_run_unknown_agent_fails(tmp_path: Path, capsys) -> None:
     repo = make_repo(tmp_path)
 
@@ -845,40 +856,40 @@ def _point_resolved_agent_workspace(repo: Path, project: str, agent: str, worksp
 
 def test_project_deploy_live_local_writes_backup_and_bundle(tmp_path: Path, capsys) -> None:
     repo = make_repo(tmp_path)
-    workspace = tmp_path / "runs" / "AUCEO" / "workspace"
+    workspace = tmp_path / "runs" / "cx-cto" / "workspace"
     workspace.mkdir(parents=True)
     live_agents = workspace / "AGENTS.md"
     live_agents.write_text("old live instructions\n")
-    _point_resolved_agent_workspace(repo, "uaudit", "AUCEO", workspace)
+    _point_resolved_agent_workspace(repo, "gimle", "cx-cto", workspace)
 
     result = deploy_project_agents.live_local(
         repo,
-        "uaudit",
+        "gimle",
         "codex",
-        "AUCEO",
+        "cx-cto",
         tmp_path / "backups",
     )
 
     captured = capsys.readouterr()
-    source = repo / "paperclips" / "dist" / "uaudit" / "codex" / "AUCEO.md"
-    backups = sorted((tmp_path / "backups" / "uaudit" / "codex").glob("AUCEO.AGENTS.*.bak.md"))
+    source = repo / "paperclips" / "dist" / "codex" / "cx-cto.md"
+    backups = sorted((tmp_path / "backups" / "gimle" / "codex").glob("cx-cto.AGENTS.*.bak.md"))
     assert result == 0
     assert live_agents.read_text() == source.read_text()
     assert backups[0].read_text() == "old live instructions\n"
     assert backups[0].with_suffix(".json").is_file()
-    assert "LIVE-LOCAL DEPLOYED AUCEO" in captured.out
+    assert "LIVE-LOCAL DEPLOYED cx-cto" in captured.out
 
 
 def test_project_deploy_rollback_restores_backup(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
-    workspace = tmp_path / "runs" / "AUCEO" / "workspace"
+    workspace = tmp_path / "runs" / "cx-cto" / "workspace"
     workspace.mkdir(parents=True)
     live_agents = workspace / "AGENTS.md"
     live_agents.write_text("old live instructions\n")
     backup_dir = tmp_path / "backups"
-    _point_resolved_agent_workspace(repo, "uaudit", "AUCEO", workspace)
-    deploy_project_agents.live_local(repo, "uaudit", "codex", "AUCEO", backup_dir)
-    backup = next((backup_dir / "uaudit" / "codex").glob("AUCEO.AGENTS.*.bak.md"))
+    _point_resolved_agent_workspace(repo, "gimle", "cx-cto", workspace)
+    deploy_project_agents.live_local(repo, "gimle", "codex", "cx-cto", backup_dir)
+    backup = next((backup_dir / "gimle" / "codex").glob("cx-cto.AGENTS.*.bak.md"))
     live_agents.write_text("bad deploy\n")
 
     result = deploy_project_agents.rollback(backup, backup_dir)
@@ -889,14 +900,70 @@ def test_project_deploy_rollback_restores_backup(tmp_path: Path) -> None:
 
 def test_project_deploy_live_local_missing_workspace_fails(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
-    _point_resolved_agent_workspace(repo, "uaudit", "AUCEO", tmp_path / "missing-workspace")
+    _point_resolved_agent_workspace(repo, "gimle", "cx-cto", tmp_path / "missing-workspace")
 
     try:
-        deploy_project_agents.live_local(repo, "uaudit", "codex", "AUCEO", tmp_path / "backups")
+        deploy_project_agents.live_local(repo, "gimle", "codex", "cx-cto", tmp_path / "backups")
     except FileNotFoundError as exc:
         assert "workspaceCwd missing" in str(exc)
     else:
         raise AssertionError("expected missing workspace failure")
+
+
+@pytest.mark.parametrize(
+    ("mode", "invoke"),
+    (
+        (
+            "live-local deploy",
+            lambda repo, backup_dir: deploy_project_agents.live_local(
+                repo, "uaudit", "codex", "AUCEO", backup_dir
+            ),
+        ),
+        (
+            "live-api deploy",
+            lambda repo, _backup_dir: deploy_project_agents.live_api(
+                repo,
+                "uaudit",
+                "codex",
+                "AUCEO",
+                "https://paperclip.invalid",
+                "secret",
+            ),
+        ),
+    ),
+)
+def test_project_deploy_uaudit_direct_live_modes_fail_closed(
+    tmp_path: Path, mode: str, invoke
+) -> None:
+    repo = make_repo(tmp_path)
+
+    with pytest.raises(ValueError, match=rf"direct UAudit {mode} is disabled.*imac-agents-deploy\.sh uaudit"):
+        invoke(repo, tmp_path / "backups")
+
+
+def test_project_deploy_uaudit_direct_rollback_fails_closed(tmp_path: Path) -> None:
+    backup_dir = tmp_path / "backups"
+    backup = backup_dir / "uaudit" / "codex" / "AUCEO.AGENTS.20260915T000000Z.bak.md"
+    backup.parent.mkdir(parents=True)
+    backup.write_text("old instructions\n")
+    destination = tmp_path / "runs" / "AUCEO" / "workspace" / "AGENTS.md"
+    destination.parent.mkdir(parents=True)
+    destination.write_text("current instructions\n")
+    backup.with_suffix(".json").write_text(
+        json.dumps(
+            {
+                "project": "uaudit",
+                "target": "codex",
+                "agent": "AUCEO",
+                "destination": str(destination),
+            }
+        )
+    )
+
+    with pytest.raises(ValueError, match=r"direct UAudit rollback is disabled.*imac-agents-deploy\.sh uaudit"):
+        deploy_project_agents.rollback(backup, backup_dir)
+
+    assert destination.read_text() == "current instructions\n"
 
 
 def test_compare_deployed_extracts_api_content_envelope() -> None:

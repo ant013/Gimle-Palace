@@ -144,26 +144,31 @@ that SSH session. Do not run UAudit against the caller's local filesystem.
 UAudit prompt deploy uses the same wrapper:
 
 ```bash
-# Pre-release smoke from develop
-bash paperclips/scripts/imac-agents-deploy.sh uaudit --from-develop
+# Phase 1: deploy only the v1/v2-compatible tools from develop
+bash paperclips/scripts/imac-agents-deploy.sh uaudit --from-develop --uaudit-runtime-only
 
-# Production deploy after release-cut to main
+# Phase 2: project-wide schema-v3 deploy after both cursor migrations
 bash paperclips/scripts/imac-agents-deploy.sh uaudit
-
-# Rollback to a previous known-good SHA
-bash paperclips/scripts/imac-agents-deploy.sh uaudit --target-sha <previous-good-sha>
 ```
 
-For the CTO dispatcher split, deploy order is:
+UAudit schema-v3 rollout is a two-platform barrier, not two independent deploys:
 
-1. Deploy UAudit prompts.
-2. Verify generated `UWACTO`/`UWICTO` bundles match authoritative Paperclip-managed instructions.
-3. Run one synthetic no-op daily issue assigned to the platform CTO.
-4. Only after smoke passes, reconcile Paperclip routine assignees with:
+1. Run the runtime-only command above; it installs both manifest-bound tools and performs no journal, API, agent, or workspace mutation.
+2. Stop both scheduled routines, drain nonterminal runs, and verify that no legacy or neutral platform lock is held.
+3. Acquire both neutral maintenance locks in order: Android, then iOS.
+4. Use the deployed resolver `migrate-cursor` command for Android and iOS with each explicit current branch and authoritative remote. Each migration requires cursor SHA to equal the advertised/fetched branch head and writes a read-only v1 backup plus receipt.
+5. Run `uaudit_schema_epoch.py --target-schema 3 --project-root <uaudit-project-root> --mode full`; mixed v1/v2 or any non-v2 pair blocks.
+6. Run the full wrapper deploy. Its trusted-checkout preflight repeats the epoch check before invoking the target bootstrap.
+7. Dry-run and then apply stable routine reconciliation:
 
 ```bash
 python3 paperclips/scripts/reconcile_uaudit_routines.py --project-key uaudit
 python3 paperclips/scripts/reconcile_uaudit_routines.py --project-key uaudit --apply
 ```
 
-The reconciliation config is `paperclips/projects/uaudit/daily-version-branch-routines.yaml`. It refers to agents by name and routines by stable `routine_key`; the script resolves existing Paperclip UUIDs, renders host-local repo/cursor paths, and applies description/assignee drift with `baseRevisionId`. Missing or ambiguous routines fail by default and are not created implicitly. A partial apply exits non-zero with `updated`, `failed`, and `not_attempted` records; re-run after a fresh read to converge.
+8. While both maintenance locks remain held and both routines remain stopped, smoke Android and iOS. Enable routines only after both pass; if the second enable fails, disable the first again and post-read verify both stopped.
+9. Release both maintenance locks only after the two-platform smoke/enable result is confirmed.
+
+After cursor v2 is established, an ordinary `--target-sha` to schema-v2 runtime is forbidden and the wrapper blocks it. Recovery below that epoch requires stopped routines, both maintenance locks, and an explicit restoration from the read-only v1 backups; it is not a normal agent deploy rollback.
+
+The reconciliation config is `paperclips/projects/uaudit/daily-version-branch-routines.yaml`. It refers to agents by name and routines by stable `routine_key`, with a same-major release policy instead of a concrete minor branch. The script resolves existing Paperclip UUIDs, renders host-local repo/cursor paths, epoch-checks before apply, and updates description/assignee drift with `baseRevisionId`. Missing or ambiguous routines fail by default and are not created implicitly. A partial apply exits non-zero with `updated`, `failed`, and `not_attempted` records; re-run after a fresh read to converge.

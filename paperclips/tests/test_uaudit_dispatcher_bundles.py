@@ -7,6 +7,7 @@ import sys
 import tomllib
 from pathlib import Path
 
+import pytest
 import yaml
 
 REPO = Path(__file__).resolve().parents[2]
@@ -45,7 +46,15 @@ def test_daily_routine_config_uses_names_not_uuids_and_resolves_agents():
     assert {r["platform"] for r in config["routines"]} == {"android", "ios"}
     assert {r["app_id"] for r in config["routines"]} == {"unstoppable_wallet"}
     assert config["apps"] == [{"id": "unstoppable_wallet", "display_name": "Unstoppable Wallet", "enabled": True, "report_route": "UAudit"}]
-    assert {r["branch"] for r in config["routines"]} == {"version/0.52"}
+    assert config["schemaVersion"] == 3
+    assert all("branch" not in routine for routine in config["routines"])
+    assert {tuple(r["release_policy"].items()) for r in config["routines"]} == {
+        (("major", 0), ("transition", "when-active-branch-missing"))
+    }
+    assert {r["id"] for r in config["routines"]} == {
+        "daily-android-version-audit",
+        "daily-ios-version-audit",
+    }
     assert {r["routine_key"] for r in config["routines"]} == {
         "uaudit-daily-android",
         "uaudit-daily-ios",
@@ -122,12 +131,14 @@ def test_generated_dispatcher_bundles_start_staged_daily_chain():
         assert "uaudit_release_resolver.py" in text
         assert 'IMAC="${IMAC_HOST:-imac-ssh.ant013.work}"' in text
         assert 'ssh "$IMAC"' in text
-        assert "verify-install --manifest" not in text
+        assert text.count("verify-install --manifest") >= 2
         assert "bind-context --run-dir" in text
         assert "aggregate --run-dir" in text
         assert "delivery-handoff.json" in text
         assert "verify-payload --run-dir" in text
         assert "code.findings.json" in text
+        assert "UNS-<issueNumber>-audit" in text
+        assert "lock metadata" in text
         assert "complete+0" in text
         assert "Russian" in text
         for chain_name in chain_names:
@@ -193,31 +204,31 @@ def test_generated_dispatchers_pin_canonical_daily_cursors():
         assert "never read below" in text
 
 
-def test_daily_roles_use_version_052_lock_identity():
+def test_daily_roles_use_version_neutral_lock_identity():
     expected = (
         (
             REPO / "paperclips/projects/uaudit/roles-codex/uwa-platform-dispatcher.md",
             REPO / "paperclips/dist/uaudit/codex/UWACTO.md",
+            "uaudit-daily-android.lock",
             "daily-android-version-0.52.lock",
-            "daily-android-version-0.51.lock",
         ),
         (
             REPO / "paperclips/projects/uaudit/roles-codex/uwi-platform-dispatcher.md",
             REPO / "paperclips/dist/uaudit/codex/UWICTO.md",
+            "uaudit-daily-ios.lock",
             "daily-ios-version-0.52.lock",
-            "daily-ios-version-0.51.lock",
         ),
         (
             REPO / "paperclips/projects/uaudit/overlays/codex/UWAInfraEngineer.md",
             REPO / "paperclips/dist/uaudit/codex/UWAInfraEngineer.md",
+            "uaudit-daily-android.lock",
             "daily-android-version-0.52.lock",
-            "daily-android-version-0.51.lock",
         ),
         (
             REPO / "paperclips/projects/uaudit/overlays/codex/UWIInfraEngineer.md",
             REPO / "paperclips/dist/uaudit/codex/UWIInfraEngineer.md",
+            "uaudit-daily-ios.lock",
             "daily-ios-version-0.52.lock",
-            "daily-ios-version-0.51.lock",
         ),
     )
     for source, rendered, current_lock, stale_lock in expected:
@@ -227,7 +238,7 @@ def test_daily_roles_use_version_052_lock_identity():
             assert stale_lock not in text
 
 
-def test_daily_dispatchers_resolve_direct_release_successors_before_intake():
+def test_daily_dispatchers_delegate_release_transition_to_manifest_bound_resolver():
     expected = {
         "android": "https://github.com/horizontalsystems/unstoppable-wallet-android",
         "ios": "https://github.com/horizontalsystems/unstoppable-wallet-ios",
@@ -242,12 +253,14 @@ def test_daily_dispatchers_resolve_direct_release_successors_before_intake():
         rendered = (REPO / f"paperclips/dist/uaudit/codex/{dispatcher}.md").read_text()
         for text in (source, rendered):
             assert repo_url in text
-            assert "fetch --no-tags" in text
-            assert "`$BASE`" in text
-            assert "strict next `version/X.(Y+1)`" in text
+            assert "fetch --no-tags" not in text
+            assert "`$BASE`" not in text
+            assert "strict next `version/X.(Y+1)`" not in text
             assert "resolver" in text.lower()
             assert "daily_status" in text
-            assert "FROM ⊑ master ⊑ next" not in text
+            assert "profile.json" in text
+            assert "lowest same-major successor" in text
+            assert "If the active branch exists" in text
             assert "origin/*" in text
 
 
@@ -256,8 +269,10 @@ def test_uaudit_bootstrap_deploy_preserves_verified_helper_install():
     assert "partial-approvers.json" not in text
     assert "approver_actor_ids" not in text
     assert "install_uaudit_delivery_helper \"$team_root\"" in text
-    assert 'cp "$source" "$destination"' in text
+    assert 'cp "$source" "$helper_tmp"' in text
+    assert 'cp "$source" "$tmp"' in text
     assert "UAudit delivery helper installed directly" not in text
+    assert "UAudit release resolver installed directly" not in text
     assert "adopted manifest-less UAudit delivery helper" in text
     assert 'verify-install --manifest "$install_manifest"' in text
 
@@ -294,18 +309,21 @@ def test_infra_bundles_use_staged_daily_delivery_not_subagent_fanout():
         assert "audit-final.ru.md" in text
         assert "audit-final.en.md" in text
         assert "delivery_contract=uaudit-delivery/v1" in text
-        assert "verify-install --manifest" not in text
+        assert "verify-install --manifest" in text
         assert "verify-payload --run-dir" in text
         assert "record-delivery --run-dir" in text
         assert "--english-response" in text
-        assert "reconcile-daily --run-dir" in text
+        assert "finalize-daily" in text
         assert 'routeSource:"file_route"' in text
         assert 'routeName:"UAudit"' in text
         assert "telegram-summary.txt" in text
         assert "status/telegram.done" in text
         assert "status/cursor.done" in text
         assert "status/workflow.done" in text
-        assert '{"last_successfully_audited_sha":"<40hex>"}' in text
+        assert "never create cursor.done" in text
+        assert "release only that matching owned lock" in text
+        assert "initialize-daily-cursor" in text
+        assert "cursor v2" in text
         assert "Missing lock is allowed only" in text
         assert "for both complete and partial" in text
         assert "without approval comments, approver files, or approval flags" in text
@@ -554,7 +572,7 @@ def _legacy_live_routine(config, routine, assignee, *, suffix="1"):
         (
             config["marker"],
             f"platform: {routine['platform']}",
-            f"branch: {routine['branch']}",
+            "branch: version/0.52",
             f"repo: {fields['repo']}",
             f"cursor: {fields['cursor']}",
         )
@@ -584,28 +602,31 @@ def test_reconcile_plan_matches_legacy_records_and_renders_stable_keys():
     )
     plan = build_plan(config, agents, current, _paths())
     by_id = {item["routine_id"]: item for item in plan}
-    assert by_id["daily-android-version-0.52"]["dispatcher"] == "UWACTO"
+    assert by_id["daily-android-version-audit"]["dispatcher"] == "UWACTO"
     assert (
-        by_id["daily-android-version-0.52"]["desired_assigneeAgentId"]
+        by_id["daily-android-version-audit"]["desired_assigneeAgentId"]
         == agents["UWACTO"]
     )
-    assert by_id["daily-android-version-0.52"]["live_uuid"].endswith("11")
-    assert by_id["daily-android-version-0.52"]["needs_update"] is True
-    assert by_id["daily-ios-version-0.52"]["needs_update"] is True
+    assert by_id["daily-android-version-audit"]["live_uuid"].endswith("11")
+    assert by_id["daily-android-version-audit"]["needs_update"] is True
+    assert by_id["daily-ios-version-audit"]["needs_update"] is True
     assert (
         "app_id: unstoppable_wallet"
-        in by_id["daily-android-version-0.52"]["desired_description"]
+        in by_id["daily-android-version-audit"]["desired_description"]
     )
     assert (
         "routine_key: uaudit-daily-android"
-        in by_id["daily-android-version-0.52"]["desired_description"]
+        in by_id["daily-android-version-audit"]["desired_description"]
     )
     assert (
-        by_id["daily-android-version-0.52"]["patch"]["baseRevisionId"] == "revision-11"
+        by_id["daily-android-version-audit"]["patch"]["baseRevisionId"] == "revision-11"
     )
+    assert "release_major: 0" in by_id["daily-android-version-audit"]["desired_description"]
+    assert "transition: when-active-branch-missing" in by_id["daily-android-version-audit"]["desired_description"]
+    assert "branch:" not in by_id["daily-android-version-audit"]["desired_description"]
 
 
-def test_reconcile_stable_key_survives_next_version_without_new_live_record():
+def test_reconcile_stable_key_is_version_neutral_without_new_live_record():
     config = load_config(CONFIG)
     agents = resolve_agent_ids(
         "uaudit", REPO / "paperclips/projects/uaudit/bindings.local-example.yaml"
@@ -622,17 +643,14 @@ def test_reconcile_stable_key_survives_next_version_without_new_live_record():
                 "latestRevisionId": f"revision-{index}",
             }
         )
-    next_config = copy.deepcopy(config)
-    for routine in next_config["routines"]:
-        routine["id"] = routine["id"].replace("0.52", "0.53")
-        routine["branch"] = "version/0.53"
-    plan = build_plan(next_config, agents, current, paths)
+    plan = build_plan(copy.deepcopy(config), agents, current, paths)
     assert {item["live_uuid"] for item in plan} == {
         "00000000-0000-0000-0000-000000000021",
         "00000000-0000-0000-0000-000000000022",
     }
-    assert all(item["needs_update"] for item in plan)
-    assert all("branch: version/0.53" in item["desired_description"] for item in plan)
+    assert all(not item["needs_update"] for item in plan)
+    assert all("release_major: 0" in item["desired_description"] for item in plan)
+    assert all("branch:" not in item["desired_description"] for item in plan)
 
 
 def test_reconcile_rejects_ambiguous_legacy_fallback():
@@ -688,6 +706,32 @@ def test_config_rejects_duplicate_stable_keys(tmp_path):
         raise AssertionError("duplicate routine keys must fail")
 
 
+def test_config_rejects_legacy_branch_and_non_exact_release_policy(tmp_path):
+    data = yaml.safe_load(CONFIG.read_text())
+    data["routines"][0]["branch"] = "version/0.52"
+    legacy_path = tmp_path / "legacy-branch.yaml"
+    legacy_path.write_text(yaml.safe_dump(data, sort_keys=False))
+    with pytest.raises(ValueError, match="branch is forbidden"):
+        load_config(legacy_path)
+
+    data = yaml.safe_load(CONFIG.read_text())
+    data["routines"][0]["release_policy"]["minor"] = 52
+    policy_path = tmp_path / "extra-policy-field.yaml"
+    policy_path.write_text(yaml.safe_dump(data, sort_keys=False))
+    with pytest.raises(ValueError, match="must contain exactly"):
+        load_config(policy_path)
+
+
+@pytest.mark.parametrize("major", [True, -1, "0"])
+def test_config_rejects_invalid_release_major(tmp_path, major):
+    data = yaml.safe_load(CONFIG.read_text())
+    data["routines"][0]["release_policy"]["major"] = major
+    path = tmp_path / "invalid-major.yaml"
+    path.write_text(yaml.safe_dump(data, sort_keys=False))
+    with pytest.raises(ValueError, match="non-negative integer"):
+        load_config(path)
+
+
 def test_explicit_missing_paths_source_does_not_fall_back(tmp_path):
     missing = tmp_path / "missing-paths.yaml"
     try:
@@ -740,10 +784,10 @@ def test_reconcile_partial_apply_reports_409_and_rerun_converges():
     )
     assert first_ok is False
     assert [item["routine_id"] for item in first_result["updated"]] == [
-        "daily-android-version-0.52"
+        "daily-android-version-audit"
     ]
     assert [item["routine_id"] for item in first_result["failed"]] == [
-        "daily-ios-version-0.52"
+        "daily-ios-version-audit"
     ]
 
     fail_ios["value"] = False
@@ -759,10 +803,10 @@ def test_reconcile_partial_apply_reports_409_and_rerun_converges():
     )
     assert second_ok is True
     assert [item["routine_id"] for item in second_result["updated"]] == [
-        "daily-ios-version-0.52"
+        "daily-ios-version-audit"
     ]
     assert [item["routine_id"] for item in second_result["unchanged"]] == [
-        "daily-android-version-0.52"
+        "daily-android-version-audit"
     ]
     final_plan = build_plan(config, agents, list(states.values()), paths)
     assert all(not item["needs_update"] for item in final_plan)

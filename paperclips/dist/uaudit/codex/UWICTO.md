@@ -8,40 +8,16 @@ Route `https://github.com/horizontalsystems/unstoppable-wallet-ios/pull/<N>` to 
 
 ## Daily intake
 
-Handle iOS audits from `daily-version-branch-routines.yaml`; retain routine id, `BASE=version/X.Y`, cursor and lock identity across releases.
+Handle iOS audits from schema-v3 `daily-version-branch-routines.yaml`; routine `uaudit-daily-ios` and its lock stay version-neutral. FROM is only `/Users/Shared/UnstoppableAudit/state/ios-version-audit.json`; preserve it and never read below `/Users/Shared/UnstoppableAudit/artifacts/`.
 
-- FROM is only `/Users/Shared/UnstoppableAudit/state/ios-version-audit.json`; preserve it; never read below `/Users/Shared/UnstoppableAudit/artifacts/`.
-- `git fetch --no-tags` direct `master`, `$BASE`, and only strict next `version/X.(Y+1)` to `uaudit-upstream`; never use `origin/*`, mirrors, or `FETCH_HEAD`.
-- **Build resolver JSON input** (to be passed to `$RESOLVER --input`):
-  1. From cursor state file, extract `last_successfully_audited_sha` as `$CURSOR_SHA` and `last_successful_at` as cursor timestamp.
-  2. Set `$RELEASE_BRANCH=$BASE`, probe `uaudit-upstream/$BASE` for `$RELEASE_HEAD` (None if not found).
-  3. Set `$NEXT_RELEASE_BRANCH=version/X.(Y+1)`, probe `uaudit-upstream/$NEXT_RELEASE_BRANCH` for `$NEXT_RELEASE_HEAD`.
-  4. Probe `uaudit-upstream/master` for `$MASTER_HEAD`.
-  5. **NEW:** If `$RELEASE_HEAD` is None and `$NEXT_RELEASE_HEAD` exists, compute `$CURSOR_IN_NEXT=$(git merge-base --is-ancestor $CURSOR_SHA $NEXT_RELEASE_HEAD && echo true || echo false)` to prove cursor ancestry in next release. This enables incremental audit when release branch is skipped but cursor is already in next release.
-  6. Compute all required ancestry facts: `cursor_is_ancestor_of_release`, `cursor_is_ancestor_of_master`, `master_is_ancestor_of_release`, `master_is_ancestor_of_next_release` by Git proof or None if not provable.
-  7. Build JSON:
-     ```json
-     {
-       "cursor_sha": "$CURSOR_SHA",
-       "release_branch": "$RELEASE_BRANCH",
-       "release_head": $RELEASE_HEAD,
-       "master_anchor_sha": null,
-       "master_head": "$MASTER_HEAD",
-       "cursor_is_ancestor_of_release": <bool|null>,
-       "cursor_is_ancestor_of_master": <bool>,
-       "master_is_ancestor_of_release": <bool|null>,
-       "next_release_branch": "$NEXT_RELEASE_BRANCH",
-       "next_release_head": $NEXT_RELEASE_HEAD,
-       "master_is_ancestor_of_next_release": <bool|null>,
-       "cursor_is_ancestor_of_next_release": $CURSOR_IN_NEXT,
-       "old_series_equivalence": "unavailable"
-     }
-     ```
-  8. Run resolver: `python3 "$RESOLVER" --input <(echo "$JSON_INPUT")` and capture JSON output.
-- Run the resolver directly on iMac and follow its JSON: contiguous `daily|bridge|transition` starts daily; recovery kinds are forced-full with no cursor advance. Never block a proven range by size.
-- Resolver `no_change` assigns `UWIInfraEngineer` `mode=daily_status` with head/slot; no audit run or cursor mutation. Missing, rewrite, skipped, or unproven evidence blocks.
-- Explicit initialization: assign `339e9d3f-48c0-4348-a8da-5337e6f29491` `mode=initialize_cursor` with head/routine; no run/message.
-- Valid range: set `$RUN=/Users/Shared/UnstoppableAudit/runs/UNS-<issueNumber>-audit`, `LOCK=/Users/Shared/UnstoppableAudit/state/locks/daily-ios-version-0.52.lock`; `mkdir "$LOCK"` (existing blocks; never steal). Atomically write metadata/four inputs with selected branch/FROM/TO; run `bind-context --run-dir`, then assign `a6e2aec6-08d9-43ab-8496-d24ce99ac0de` `mode=daily_code_audit`.
+- Before every release operation run `python3 "$HELPER" verify-install --manifest "${HELPER%.py}.manifest.json"` and `python3 "$RESOLVER" verify-install --manifest "${RESOLVER%.py}.manifest.json"`; failure blocks.
+- Set `RUN=/Users/Shared/UnstoppableAudit/runs/UNS-<issueNumber>-audit` and `LOCK=/Users/Shared/UnstoppableAudit/state/locks/uaudit-daily-ios.lock`; create the issue-owned run directory, acquire the lock before discovery, never steal it, and keep it through terminal delivery, fenced reconciliation, and marker completion.
+- Under that lock run resolver `discover` with its manifest, the authoritative repository URL, declared checkout, cursor, `routine_key=uaudit-daily-ios`, `platform=ios`, configured `release_policy.major`, and `$RUN/profile.json`. The immutable profile is the only branch/head/ancestry authority; never rebuild it with manual `fetch`, `origin/*`, `FETCH_HEAD`, or strict-minor arithmetic.
+- If the active branch exists, audit only it and ignore higher refs. If absent, accept only the lowest same-major successor selected by the resolver; never skip a divergent lower successor. `daily|transition` must contain exactly one nonempty segment.
+- For `daily|transition`, atomically prepare the four range inputs and branch-aware intake source_ref with exact `routine_id,from_branch,branch,from_sha,to_sha` from `profile.json`. Write exact lock metadata with null `run_binding_sha256`, run `bind-context --run-dir "$RUN" --intake "$RUN/intake.json" --lock-dir "$LOCK"`, then assign `a6e2aec6-08d9-43ab-8496-d24ce99ac0de` `mode=daily_code_audit`.
+- `branch_transition` has equal cursor/head and no audit segment: atomically write exact lock metadata for the issue/routine with equal profile cursor/head and null binding digest, prepare the dedicated branch-transition status from the same profile, and assign `UWIInfraEngineer` `mode=daily_status`; it may change only the active branch after receipt and a fresh resolver fence.
+- `no_change`, waiting, blocked, major-transition, and recovery outcomes create only the matching receipt-bound status/recovery path and never mutate the cursor. Before status handoff, bind the neutral lock metadata to this issue/routine and the profile cursor SHA so Infra can verify ownership and release it after terminal receipt. A proven recovery range may run as cursorless forced-full. Never block a proven range by size.
+- Explicit initialization assigns `339e9d3f-48c0-4348-a8da-5337e6f29491` `mode=initialize_cursor` with canonical active branch, exact head, routine, and platform; only the helper may create cursor v2 and it never overwrites.
 
 Chain: `UWISwiftAuditor -> UWISecurityAuditor -> UWICryptoAuditor -> UWIInfraEngineer -> optional UWIResearchAgent -> UWIQAEngineer -> UWICTO -> UWIInfraEngineer`; do not use `uaudit-*` subagents for daily real-delta audits.
 

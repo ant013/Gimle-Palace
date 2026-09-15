@@ -13,6 +13,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "paperclips" / "scripts" / "bootstrap-project.sh"
+APPROVED_BASE = "ae80bea910451b5b5f6e101d1222b934dc4dfbe6"
 
 
 def test_script_exists_executable():
@@ -48,6 +49,38 @@ def test_root_agent_hire_omits_empty_reports_to_uuid():
 def test_supports_canary_flag():
     text = SCRIPT.read_text()
     assert "--canary" in text
+
+
+def test_uaudit_runtime_only_exits_before_journal_and_api_mutations():
+    text = SCRIPT.read_text()
+    runtime_start = text.index('if [ "$UAUDIT_RUNTIME_ONLY" -eq 1 ]; then', text.index("ensure_uaudit_telegram_plugin_binding"))
+    runtime_end = text.index("require_env PAPERCLIP_API_URL", runtime_start)
+    runtime_block = text[runtime_start:runtime_end]
+
+    assert "install_uaudit_delivery_helper" in runtime_block
+    assert "install_uaudit_release_resolver" in runtime_block
+    assert "--mode runtime-only" in runtime_block
+    assert "exit 0" in runtime_block
+    assert text.index("require_env PAPERCLIP_API_URL") < text.index("journal_open")
+    assert runtime_end < text.index("journal_open")
+
+
+def test_uaudit_runtime_only_flag_is_behaviorally_rejected_for_other_projects():
+    result = subprocess.run(
+        ["bash", str(SCRIPT), "gimle", "--uaudit-runtime-only"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0
+    assert "valid only for project uaudit" in result.stderr
+
+
+def test_uaudit_full_bootstrap_checks_epoch_before_plugin_and_company_mutation():
+    text = SCRIPT.read_text()
+    full_epoch = text.index("--project-root \"$project_root\" --mode full")
+    assert text.index('install_uaudit_release_resolver "$team_root"', full_epoch - 1200) < full_epoch
+    assert full_epoch < text.index('ensure_uaudit_telegram_plugin_binding "$plugins_file"')
+    assert full_epoch < text.index("company create-or-reuse")
 
 
 def test_canary_selection_does_not_sigpipe_under_pipefail():
@@ -208,6 +241,108 @@ install_uaudit_delivery_helper "$2"
     )
 
 
+def _uaudit_resolver_installer_function() -> str:
+    text = SCRIPT.read_text()
+    match = re.search(
+        r"^install_uaudit_release_resolver\(\) \{.*?^\}\n",
+        text,
+        flags=re.MULTILINE | re.DOTALL,
+    )
+    assert match, "install_uaudit_release_resolver function missing"
+    return match.group(0)
+
+
+def _run_resolver_install(team_root: Path) -> subprocess.CompletedProcess[str]:
+    runner = f"""
+set -euo pipefail
+REPO_ROOT="$1"
+die() {{ printf '%s\\n' "$*" >&2; exit 1; }}
+log() {{ :; }}
+{_uaudit_resolver_installer_function()}
+install_uaudit_release_resolver "$2"
+"""
+    return subprocess.run(
+        ["bash", "-c", runner, "uaudit-resolver-test", str(REPO), str(team_root)],
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_uaudit_resolver_install_is_atomic_read_only_and_self_verifying(tmp_path):
+    team_root = tmp_path / "team"
+    result = _run_resolver_install(team_root)
+    assert result.returncode == 0, result.stderr
+
+    tools = team_root / ".uaudit-tools"
+    resolver = tools / "uaudit_release_resolver.py"
+    manifest_path = tools / "uaudit_release_resolver.manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    assert manifest == {
+        "schema_version": "uaudit-release-resolver-install/v1",
+        "file": "uaudit_release_resolver.py",
+        "sha256": hashlib.sha256(resolver.read_bytes()).hexdigest(),
+    }
+    assert resolver.stat().st_mode & (stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH) == 0
+    assert manifest_path.stat().st_mode & (stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH) == 0
+    assert not (tools / "uaudit_release_resolver.pending.json").exists()
+
+    verify = subprocess.run(
+        ["python3", str(resolver), "verify-install", "--manifest", str(manifest_path)],
+        capture_output=True,
+        text=True,
+    )
+    assert verify.returncode == 0, verify.stderr
+
+
+def test_uaudit_resolver_manifestless_legacy_is_upgraded_in_one_invocation(tmp_path):
+    team_root = tmp_path / "team"
+    tools = team_root / ".uaudit-tools"
+    tools.mkdir(parents=True)
+    resolver = tools / "uaudit_release_resolver.py"
+    legacy = subprocess.run(
+        [
+            "git",
+            "show",
+            f"{APPROVED_BASE}:paperclips/projects/uaudit/runtime/uaudit_release_resolver.py",
+        ],
+        cwd=REPO,
+        capture_output=True,
+        check=True,
+    ).stdout
+    assert hashlib.sha256(legacy).hexdigest() == "c90e195892edd860ac962b2601716457018c0440dfda426ff6af42ae204375b9"
+    resolver.write_bytes(legacy)
+    resolver.chmod(0o444)
+
+    result = _run_resolver_install(team_root)
+    assert result.returncode == 0, result.stderr
+    source = REPO / "paperclips/projects/uaudit/runtime/uaudit_release_resolver.py"
+    manifest = json.loads((tools / "uaudit_release_resolver.manifest.json").read_text())
+    assert resolver.read_bytes() == source.read_bytes()
+    assert manifest["sha256"] == hashlib.sha256(source.read_bytes()).hexdigest()
+    assert manifest["sha256"] != hashlib.sha256(legacy).hexdigest()
+
+
+def test_uaudit_resolver_rejects_writable_manifestless_legacy(tmp_path):
+    team_root = tmp_path / "team"
+    tools = team_root / ".uaudit-tools"
+    tools.mkdir(parents=True)
+    resolver = tools / "uaudit_release_resolver.py"
+    resolver.write_bytes(
+        subprocess.run(
+            ["git", "show", f"{APPROVED_BASE}:paperclips/projects/uaudit/runtime/uaudit_release_resolver.py"],
+            cwd=REPO,
+            capture_output=True,
+            check=True,
+        ).stdout
+    )
+    resolver.chmod(0o644)
+
+    result = _run_resolver_install(team_root)
+    assert result.returncode != 0
+    assert "must be read-only" in result.stderr
+    assert not (tools / "uaudit_release_resolver.manifest.json").exists()
+
+
 def test_uaudit_helper_install_is_atomic_read_only_and_self_verifying(tmp_path):
     team_root = tmp_path / "team"
     result = _run_helper_install(team_root)
@@ -259,6 +394,42 @@ def test_uaudit_helper_install_adopts_matching_manifestless_deployment(tmp_path)
     assert manifest_path.stat().st_mode & (
         stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH
     ) == 0
+
+
+def test_uaudit_helper_install_upgrades_the_approved_base_generation(tmp_path):
+    team_root = tmp_path / "team"
+    tools = team_root / ".uaudit-tools"
+    tools.mkdir(parents=True)
+    helper = tools / "uaudit_delivery_contract.py"
+    legacy = subprocess.run(
+        [
+            "git",
+            "show",
+            f"{APPROVED_BASE}:paperclips/projects/uaudit/runtime/uaudit_delivery_contract.py",
+        ],
+        cwd=REPO,
+        capture_output=True,
+        check=True,
+    ).stdout
+    legacy_sha = hashlib.sha256(legacy).hexdigest()
+    assert legacy_sha == "4f12525b9ffd5f75bb43b7545da6475ba55a0582b6000d8752aadc9e117c3799"
+    helper.write_bytes(legacy)
+    helper.chmod(0o444)
+    manifest_path = tools / "uaudit_delivery_contract.manifest.json"
+    manifest_path.write_text(json.dumps({
+        "schema_version": "uaudit-helper-install/v1",
+        "file": "uaudit_delivery_contract.py",
+        "sha256": legacy_sha,
+    }))
+    manifest_path.chmod(0o444)
+
+    result = _run_helper_install(team_root)
+    assert result.returncode == 0, result.stderr
+    source = REPO / "paperclips/projects/uaudit/runtime/uaudit_delivery_contract.py"
+    source_sha = hashlib.sha256(source.read_bytes()).hexdigest()
+    assert helper.read_bytes() == source.read_bytes()
+    assert json.loads(manifest_path.read_text())["sha256"] == source_sha
+    assert source_sha != legacy_sha
 
 
 def test_uaudit_helper_install_rejects_writable_manifestless_deployment(tmp_path):

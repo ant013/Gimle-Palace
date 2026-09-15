@@ -110,6 +110,66 @@ def test_dry_run_does_not_call_api(tmp_path, monkeypatch):
     assert "21 bytes" in (out.stdout + out.stderr)
 
 
+def test_uaudit_bootstrap_mutating_rollback_is_blocked_before_replay(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    journal_dir = tmp_path / ".paperclip" / "journal"
+    journal_dir.mkdir(parents=True)
+    target = tmp_path / "managed-role.md"
+    target.write_text("CURRENT")
+    name = "20260516T120250Z-bootstrap-uaudit"
+    (journal_dir / f"{name}.json").write_text(json.dumps({
+        "op": "bootstrap-uaudit",
+        "timestamp": "20260516T120250Z",
+        "entries": [{
+            "kind": "workspace_file_snapshot",
+            "path": str(target),
+            "old_content": "STALE PRE-EPOCH ROLE",
+        }],
+        "outcome": "success",
+    }))
+
+    out = subprocess.run(
+        ["bash", str(SCRIPT), name],
+        capture_output=True,
+        text=True,
+    )
+
+    assert out.returncode != 0
+    assert "disabled after the cursor-v2 epoch" in (out.stdout + out.stderr)
+    assert target.read_text() == "CURRENT"
+
+
+def test_uaudit_bootstrap_rollback_dry_run_remains_available(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    journal_dir = tmp_path / ".paperclip" / "journal"
+    journal_dir.mkdir(parents=True)
+    target = tmp_path / "managed-role.md"
+    target.write_text("CURRENT")
+    name = "20260516T120251Z-bootstrap-uaudit"
+    (journal_dir / f"{name}.json").write_text(json.dumps({
+        "op": "bootstrap-uaudit",
+        "timestamp": "20260516T120251Z",
+        "entries": [{
+            "kind": "workspace_file_snapshot",
+            "path": str(target),
+            "old_content": "STALE PRE-EPOCH ROLE",
+        }],
+        "outcome": "success",
+    }))
+
+    out = subprocess.run(
+        ["bash", str(SCRIPT), name, "--dry-run"],
+        capture_output=True,
+        text=True,
+    )
+
+    assert out.returncode == 0, out.stderr
+    assert "DRY RUN" in (out.stdout + out.stderr)
+    assert target.read_text() == "CURRENT"
+
+
 def test_sources_lib_helpers():
     text = SCRIPT.read_text()
     assert "_common.sh" in text

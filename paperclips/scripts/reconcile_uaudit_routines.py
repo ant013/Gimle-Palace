@@ -21,6 +21,7 @@ if str(SCRIPT_DIR) not in sys.path:
 
 from resolve_bindings import resolve_all  # noqa: E402
 from resolve_template_sources import resolve  # noqa: E402
+from uaudit_schema_epoch import check_epoch  # noqa: E402
 
 DEFAULT_CONFIG = REPO_ROOT / "paperclips/projects/uaudit/daily-version-branch-routines.yaml"
 DEFAULT_AUTH_PATHS = (
@@ -44,13 +45,14 @@ ROUTINE_REQUIRED_STRINGS = (
     "routine_key",
     "title",
     "platform",
-    "branch",
     "repo_local_path_template",
     "cursor_path_template",
     "dispatcher",
     "infra_executor",
     "pr_audit_coordinator",
 )
+RELEASE_POLICY_FIELDS = ("major", "transition")
+RELEASE_TRANSITION = "when-active-branch-missing"
 IDENTITY_FIELDS = ("app_id", "routine_key", "platform")
 SCHEDULE_FIELDS = (
     "enabled", "cron", "timezone", "delivery_slo_minutes", "deferred_after_minutes",
@@ -94,8 +96,8 @@ def load_config(path: Path = DEFAULT_CONFIG) -> dict[str, Any]:
     data = yaml.safe_load(path.read_text())
     if not isinstance(data, dict):
         raise ValueError(f"{path}: root must be mapping")
-    if data.get("schemaVersion") != 2:
-        raise ValueError(f"{path}: schemaVersion must be 2")
+    if data.get("schemaVersion") != 3:
+        raise ValueError(f"{path}: schemaVersion must be 3")
     marker = _single_line(data.get("marker"), f"{path}: marker")
     routines = data.get("routines")
     apps = data.get("apps")
@@ -123,8 +125,22 @@ def load_config(path: Path = DEFAULT_CONFIG) -> dict[str, Any]:
             raise ValueError(f"{path}: routines[{index}].app_id is not registered")
         if routine["platform"] not in {"android", "ios"}:
             raise ValueError(f"{path}: routines[{index}].platform must be android or ios")
-        if not routine["branch"].startswith("version/"):
-            raise ValueError(f"{path}: routines[{index}].branch must start with version/")
+        if "branch" in routine:
+            raise ValueError(f"{path}: routines[{index}].branch is forbidden in schemaVersion 3")
+        policy = routine.get("release_policy")
+        if not isinstance(policy, dict) or set(policy) != set(RELEASE_POLICY_FIELDS):
+            raise ValueError(
+                f"{path}: routines[{index}].release_policy must contain exactly "
+                "major and transition"
+            )
+        major = policy["major"]
+        if not isinstance(major, int) or isinstance(major, bool) or major < 0:
+            raise ValueError(f"{path}: routines[{index}].release_policy.major must be a non-negative integer")
+        if policy["transition"] != RELEASE_TRANSITION:
+            raise ValueError(
+                f"{path}: routines[{index}].release_policy.transition must be "
+                f"{RELEASE_TRANSITION!r}"
+            )
         _validate_schedule(routine.get("schedule"), f"{path}: routines[{index}].schedule")
         if "required_subagents" in routine:
             raise ValueError(f"{path}: daily routines must use daily_chain, not required_subagents")
@@ -267,7 +283,8 @@ def render_description(config: dict[str, Any], routine: dict[str, Any], paths: d
             f"app_id: {routine['app_id']}",
             f"routine_key: {routine['routine_key']}",
             f"platform: {routine['platform']}",
-            f"branch: {routine['branch']}",
+            f"release_major: {routine['release_policy']['major']}",
+            f"transition: {routine['release_policy']['transition']}",
             f"repo: {repo_path}",
             f"cursor: {cursor_path}",
         )
@@ -554,6 +571,12 @@ def main() -> int:
         if args.apply:
             if args.current_routines_json:
                 raise ValueError("--apply cannot be used with --current-routines-json")
+            project_root = _single_line(paths.get("project_root"), "paths.project_root")
+            result["schema_epoch"] = check_epoch(
+                target_schema=config["schemaVersion"],
+                project_root=Path(project_root),
+                mode="full",
+            )
             if token is None:
                 token = resolve_token(args.api_url, args.auth_json)
             result["apply"], success = apply_plan(

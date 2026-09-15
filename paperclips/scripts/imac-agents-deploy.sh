@@ -35,7 +35,7 @@ source "$SCRIPT_DIR/lib/_common.sh"
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") <project-key> [--target-sha <sha>] [--from-develop] [--help]
+Usage: $(basename "$0") <project-key> [--target-sha <sha>] [--from-develop] [--uaudit-runtime-only] [--help]
 
 iMac AGENTS.md re-deploy for <project-key>. Uses a temporary worktree at
 origin/main (release-cut content) and invokes bootstrap-project.sh
@@ -47,6 +47,7 @@ Args:
                           Used for rollback per imac-agents-deploy.README.md.
   --from-develop          Deploy from origin/develop instead of origin/main.
                           For pre-release-cut smoke tests only.
+  --uaudit-runtime-only   Install UAudit compatibility tools without agent/API mutation.
   --help                  Show this message.
 
 Project-keys with bindings on this host:
@@ -58,6 +59,7 @@ EOF
 PROJECT_KEY=""
 TARGET_SHA=""
 FROM_DEVELOP=0
+UAUDIT_RUNTIME_ONLY=0
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -66,6 +68,8 @@ while [ "$#" -gt 0 ]; do
       TARGET_SHA="$2"; shift 2 ;;
     --from-develop)
       FROM_DEVELOP=1; shift ;;
+    --uaudit-runtime-only)
+      UAUDIT_RUNTIME_ONLY=1; shift ;;
     -h|--help) usage; exit 0 ;;
     -*) die "unknown flag: $1 (try --help)" ;;
     *)
@@ -80,6 +84,8 @@ done
 # Without this guard, PROJECT_KEY=../etc would escape ~/.paperclip/projects/
 # AND log-inject into DEPLOY_LOG (which GIM-244 watchdog parses).
 validate_project_key "$PROJECT_KEY"
+[ "$UAUDIT_RUNTIME_ONLY" -eq 0 ] || [ "$PROJECT_KEY" = "uaudit" ] || \
+  die "--uaudit-runtime-only is valid only for project uaudit"
 
 # ---- Log tee + dual-write (file + stdout) ----
 exec > >(tee -a "$RUN_LOG") 2>&1
@@ -159,22 +165,36 @@ if grep -RlE "PHASE-A-ONLY: not deployable" paperclips/dist/ 2>/dev/null | head 
 fi
 log ok "No PHASE-A-ONLY sentinels in dist"
 
+DEPLOY_MODE="full"
+if [ "$PROJECT_KEY" = "uaudit" ]; then
+  [ "$UAUDIT_RUNTIME_ONLY" -eq 0 ] || DEPLOY_MODE="runtime-only"
+  paths_file="${HOME}/.paperclip/projects/${PROJECT_KEY}/paths.yaml"
+  [ -f "$paths_file" ] && [ ! -L "$paths_file" ] || die "UAudit paths.yaml is missing or linked: $paths_file"
+  target_schema=$(yq -r '.schemaVersion // ""' "$WORKTREE_PATH/paperclips/projects/uaudit/daily-version-branch-routines.yaml")
+  project_root=$(yq -r '.project_root // ""' "$paths_file")
+  [ -n "$project_root" ] && [ "$project_root" != "null" ] || die "UAudit project_root is unresolved"
+  python3 "$SCRIPT_DIR/uaudit_schema_epoch.py" --target-schema "$target_schema" \
+    --project-root "$project_root" --mode "$DEPLOY_MODE" || die "UAudit schema epoch preflight failed"
+fi
+
 # ---- Hand off to bootstrap-project.sh ----
-log info "--- bootstrap-project.sh ${PROJECT_KEY} --reuse-bindings ${bindings} ---"
+log info "--- bootstrap-project.sh ${PROJECT_KEY} mode=${DEPLOY_MODE} ---"
 # Phase H2-followup-3: skip --reuse-bindings when bindings already at
 # canonical location (avoids "cp: source and dest identical" error on
 # idempotent re-deploy).
 canonical="${HOME}/.paperclip/projects/${PROJECT_KEY}/bindings.yaml"
+runtime_args=()
+[ "$UAUDIT_RUNTIME_ONLY" -eq 0 ] || runtime_args=(--uaudit-runtime-only)
 if [ "$bindings" = "$canonical" ]; then
-  bash "$WORKTREE_PATH/paperclips/scripts/bootstrap-project.sh" "$PROJECT_KEY" \
+  bash "$WORKTREE_PATH/paperclips/scripts/bootstrap-project.sh" "$PROJECT_KEY" "${runtime_args[@]}" \
     || die "bootstrap-project.sh failed"
 else
   bash "$WORKTREE_PATH/paperclips/scripts/bootstrap-project.sh" \
-    "$PROJECT_KEY" --reuse-bindings "$bindings" \
+    "$PROJECT_KEY" --reuse-bindings "$bindings" "${runtime_args[@]}" \
     || die "bootstrap-project.sh failed"
 fi
 
 # ---- Append deploy log (GIM-244 watchdog reads this) ----
-echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] deploy=${PROJECT_KEY} sha=${SHA} ok run_log=${RUN_LOG}" >> "$DEPLOY_LOG"
+echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] deploy=${PROJECT_KEY} mode=${DEPLOY_MODE} sha=${SHA} ok run_log=${RUN_LOG}" >> "$DEPLOY_LOG"
 
 log ok "=== imac-agents-deploy.sh complete for ${PROJECT_KEY} (SHA=${SHA}) ==="
