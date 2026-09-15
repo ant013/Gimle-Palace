@@ -71,7 +71,7 @@
   "project": "uaudit",
   "schemaVersion": 1,
   "sourceManifest": "paperclips/projects/uaudit/paperclip-agent-assembly.yaml",
-  "sourceManifestSha256": "9ddbed961a290fff5eb5f33ce9162325183827f784500562ef17a0f31ecd3b7f",
+  "sourceManifestSha256": "3e4c3bff11d484e2732ba7820189782aff3cfd84d2fdb8bbb7889b6cca217e2e",
   "targets": {
     "codex": {
       "adapterType": "codex_local",

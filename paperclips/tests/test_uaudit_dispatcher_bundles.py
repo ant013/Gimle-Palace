@@ -279,8 +279,39 @@ def test_uaudit_bootstrap_deploy_preserves_verified_helper_install():
 
 def test_uaudit_codex_agents_get_an_explicit_supported_model_when_unset():
     text = (SCRIPTS / "bootstrap-project.sh").read_text()
+    assert "if .model then .model" in text
     assert 'elif .target == "codex" then "gpt-5.6-sol"' in text
     assert 'else "auto"' in text
+    assert '.modelReasoningEffort // "medium"' in text
+
+
+def test_uaudit_routes_only_analysis_and_audit_agents_to_astra():
+    expected_astra_agents = {
+        "AUCEO",
+        "UWICTO",
+        "UWACTO",
+        "UWISwiftAuditor",
+        "UWAKotlinAuditor",
+        "UWICryptoAuditor",
+        "UWACryptoAuditor",
+        "UWISecurityAuditor",
+        "UWASecurityAuditor",
+        "UWIQAEngineer",
+        "UWAQAEngineer",
+        "UWIInfraEngineer",
+        "UWAInfraEngineer",
+        "UWIResearchAgent",
+        "UWAResearchAgent",
+    }
+    agents = {agent["agent_name"]: agent for agent in load_manifest()["agents"]}
+
+    assert {
+        name for name, agent in agents.items() if agent.get("model") == "gpt-6-astra"
+    } == expected_astra_agents
+    assert all("modelReasoningEffort" not in agents[name] for name in expected_astra_agents)
+    for writer in ("UWITechnicalWriter", "UWATechnicalWriter"):
+        assert "model" not in agents[writer]
+        assert "modelReasoningEffort" not in agents[writer]
 
 
 def test_infra_bundles_use_staged_daily_delivery_not_subagent_fanout():
@@ -531,7 +562,7 @@ def test_pr_subagents_emit_only_the_strict_v1_envelope():
     agents_dir = REPO / "paperclips/projects/uaudit/codex-agents"
     for path in sorted(agents_dir.glob("uaudit-*.toml")):
         config = tomllib.loads(path.read_text())
-        assert config["model"] == "gpt-5.6-sol"
+        assert config["model"] == "gpt-6-astra"
         assert config["model_reasoning_effort"] == "high"
         assert config["sandbox_mode"] == "read-only"
         instructions = config["developer_instructions"]
