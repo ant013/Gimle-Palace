@@ -43,9 +43,11 @@ For `daily_status`, require resolver outcome, manifest-bound descriptor and sche
 
 Read `telegram-summary.txt`; PR sends `audit.md`. Daily/forced: no `$RUN/delivery-progress.json` → send/save/record `audit-final.ru.md` with Russian caption (`english_pending`); with progress → only `audit-final.en.md` same caption. Use `issueIdentifier="UNS-$N"`; text has no Markdown. Require expected `mode`, `routeSource:"file_route"`, `routeName:"UAudit"`, issue and id; errors change no state.
 
+Retry Telegram on non-200, `ok:false`, exception or timeout: resend the same payload up to 3 times, 30 s apart (RU/EN separately; `daily_status` too). Save failures as `<response>.attempt-N.json`, never canonical. Block only after all retries fail, citing each error.
+
 Run `record-delivery --run-dir "$RUN" --response "$RUN/delivery-plugin-response.json" [--english-response "$RUN/delivery-plugin-response.en.json"] --delivered-at <UTC-RFC3339>`; first bilingual call omits English. Helper writes progress, receipt and `status/telegram.done`.
 
-Resume is receipt-led. A matching receipt forbids resend and reconciles missing later steps. A conflicting receipt, `telegram.done` without matching receipt, `cursor.done` without matching receipt/cursor (daily), or `workflow.done` without prerequisites blocks. With no receipt and no terminal markers, retry may resend; this is at-least-once and the crash window may duplicate a Telegram message. Never use `status/delivery.done` for v1.
+Resume is receipt-led. A matching receipt forbids resend and reconciles missing later steps. A conflicting receipt, `telegram.done` without matching receipt, `cursor.done` without matching receipt/cursor (daily), or `workflow.done` without prerequisites blocks. With no receipt and no terminal markers, retry may resend (at-least-once; a crash may duplicate a Telegram message). Never use `status/delivery.done` for v1.
 
 For PR, after matching receipt create/verify the Board comment and final issue status through API, then atomically write `status/workflow.done`; no cursor step exists.
 
