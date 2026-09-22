@@ -378,7 +378,7 @@ For `mode=daily_infra_audit`, read `$RUN/run-context.json`, prepared inputs, and
 
 Severity is `Critical|Block|Important|Observation`. The helper canonicalizes known aliases with a Russian `material=false` warning. Fix a recoverable sidecar format/schema error without changing binding/evidence, then retry `validate-stage` exactly once. Never PATCH the issue to `blocked` or request Board approval for a recoverable output error.
 
-The old iMac has Command Line Tools only and intentionally has no full Xcode, current iOS SDK, simulator/device execution, or equivalent runtime validation. When static source, dependency, configuration, CI, and available command-line evidence still support a defensible infra conclusion, record the unavailable build/runtime check as a warning with `material=false` and keep `audit_status=complete`; set `needs_runtime_verification=true` on any affected finding. Use `partial` only when the missing evidence materially prevents the infra conclusion. Never use `blocked` merely because this known host lacks the unavailable toolchain or runtime.
+The old iMac has Command Line Tools only (no full Xcode, current iOS SDK, simulator/device or equivalent runtime). If static, dependency, config, CI and CLI evidence support a defensible infra conclusion, record the missing build/runtime check as a `material=false` warning, keep `audit_status=complete` and set `needs_runtime_verification=true` on affected findings. Use `partial` only when missing evidence materially prevents the conclusion. Never use `blocked` merely for this known gap.
 
 For explicitly authorized `mode=initialize_cursor`, require the exact supplied upstream head to be a lowercase 40-hex SHA and atomically initialize the configured iOS routine cursor with exactly `{"last_successfully_audited_sha":"<40hex>"}`. Comment the routine/SHA, mark done and stop. Do not create `$RUN`, audit, or send Telegram.
 
@@ -394,9 +394,11 @@ For `daily_status`, require resolver outcome, manifest-bound descriptor and sche
 
 Read `telegram-summary.txt`; PR sends `audit.md`. Daily/forced: no `$RUN/delivery-progress.json` → send/save/record `audit-final.ru.md` with Russian caption (`english_pending`); with progress → only `audit-final.en.md` same caption. Use `issueIdentifier="UNS-$N"`; text has no Markdown. Require expected `mode`, `routeSource:"file_route"`, `routeName:"UAudit"`, issue and id; errors change no state.
 
+Retry Telegram on non-200, `ok:false`, exception or timeout: resend the same payload up to 3 times, 30 s apart (RU/EN separately; `daily_status` too). Save failures as `<response>.attempt-N.json`, never canonical. Block only after all retries fail, citing each error.
+
 Run `record-delivery --run-dir "$RUN" --response "$RUN/delivery-plugin-response.json" [--english-response "$RUN/delivery-plugin-response.en.json"] --delivered-at <UTC-RFC3339>`; first bilingual call omits English. Helper writes progress, receipt and `status/telegram.done`.
 
-Resume is receipt-led. A matching receipt forbids resend and reconciles missing later steps. A conflicting receipt, `telegram.done` without matching receipt, `cursor.done` without matching receipt/cursor (daily), or `workflow.done` without prerequisites blocks. With no receipt and no terminal markers, retry may resend; this is at-least-once and the crash window may duplicate a Telegram message. Never use `status/delivery.done` for v1.
+Resume is receipt-led. A matching receipt forbids resend and reconciles missing later steps. A conflicting receipt, `telegram.done` without matching receipt, `cursor.done` without matching receipt/cursor (daily), or `workflow.done` without prerequisites blocks. With no receipt and no terminal markers, retry may resend (at-least-once; a crash may duplicate a Telegram message). Never use `status/delivery.done` for v1.
 
 For PR, after matching receipt create/verify the Board comment and final issue status through API, then atomically write `status/workflow.done`; no cursor step exists.
 

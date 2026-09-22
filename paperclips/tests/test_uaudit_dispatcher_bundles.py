@@ -450,6 +450,18 @@ def test_ios_infra_bundle_treats_known_imac_toolchain_gap_as_non_material():
         assert "Never use `blocked` merely" in text
 
 
+def test_infra_bundles_retry_failed_telegram_sends():
+    for agent in ("UWIInfraEngineer", "UWAInfraEngineer"):
+        for path in (
+            REPO / f"paperclips/projects/uaudit/overlays/codex/{agent}.md",
+            REPO / f"paperclips/dist/uaudit/codex/{agent}.md",
+        ):
+            text = path.read_text()
+            assert "resend the same payload up to 3 times" in text
+            assert "`<response>.attempt-N.json`, never canonical" in text
+            assert "Block only after all retries fail" in text
+
+
 def test_ios_review_bundles_surface_warnings_and_trace_changed_behavior():
     qa_paths = (
         REPO / "paperclips/projects/uaudit/overlays/codex/UWIQAEngineer.md",
