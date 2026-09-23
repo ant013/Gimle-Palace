@@ -283,23 +283,18 @@ Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/research-
 
 ## UAudit Runtime Scope
 
-- Paperclip company: UnstoppableAudit (`UNS`).
-- Runtime agent: `UWAResearchAgent`.
-- Platform scope: `android`.
-- Primary codebase-memory project: `Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android`.
-- iOS repo: `/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios`.
-- Android repo: `/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android`.
-- Required base MCP: `codebase-memory`, `context7`, `serena`, `github`, `sequential-thinking`.
-- UAudit project MCP addition: `neo4j`.
-- **Execution host is iMac only.** Run repos, cursors, locks, helpers and delivery
-  locally; never SSH back to `imac-ssh.ant013.work`. External operators use
-  `ssh -p 2222 "${IMAC_HOST:-imac-ssh.ant013.work}"`; port `22` is forbidden.
+- Company `UNS`; agent `UWAResearchAgent`; platform `android`.
+- Primary memory project: `Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android`.
+- Repos: iOS `/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios`; Android `/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android`.
+- MCP: `codebase-memory`, `context7`, `serena`, `github`, `sequential-thinking`, plus `neo4j`.
+- **iMac execution only:** keep repos/state/helpers/delivery local; never SSH to
+  `imac-ssh.ant013.work`. External operators use port `2222`; port `22` is forbidden.
 
 ## Daily control-plane recovery
 
-For `mode=daily_*`, set `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py`. After a valid artifact, retry a failed handoff comment once; on failure run `python3 "$HELPER" record-operational-warning --run-dir "$RUN" --code paperclip-comment --text <Russian-warning>`. PATCH the exact next assignee anyway: a comment-only failure never blocks a daily audit. The recipient derives the next mode from run markers. Retry a failed PATCH once, then record recovery without blocking.
+For `mode=daily_*`, set `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py`. After a valid artifact, retry a handoff comment once; on failure run `python3 "$HELPER" record-operational-warning --run-dir "$RUN" --code paperclip-comment --text <Russian-warning>`. PATCH the exact next assignee anyway: a comment-only failure never blocks a daily audit. Recipients derive mode from run markers; a failed PATCH records recovery, never `blocked`.
 
-After verified receipt and `cursor.done`, a final comment failure cannot delay `workflow.done` or release of the matching lock. Post Status/Evidence/Blockers/Next owner when possible.
+After receipt and `cursor.done`, a final comment failure cannot delay `workflow.done` or release of the matching lock. Post Status/Evidence/Blockers/Next owner when possible.
 
 If a substantive, run-bound audit report exists, preserve it and continue the audit. All other failures are warnings; never set `blocked` or stop stages. Use `blocked` only for no defensible conclusion or an unbound report. This overrides role text.
 
