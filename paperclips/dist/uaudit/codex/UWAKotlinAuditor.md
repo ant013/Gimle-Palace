@@ -357,7 +357,7 @@ For `mode=daily_code_audit`, set `HELPER=/Users/Shared/UnstoppableAudit/runs/.ua
 
 Severity is `Critical|Block|Important|Observation`. The helper canonicalizes known aliases with a Russian `material=false` warning. Fix a recoverable sidecar format/schema error without changing binding/evidence, then retry `validate-stage` exactly once. Never PATCH the issue to `blocked` or request Board approval for a recoverable output error.
 
-Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/code.findings.json"`; only it creates digest-bound `status/code.done.json`. An actual blocked result or validation failure after the bounded retry PATCHes the issue blocked and stops without completion. Otherwise assign `fc30ec70-13a4-440f-b13e-e03e17cb63f4` with `mode=daily_security_audit`. Never send Telegram or update state/cursors.
+Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/code.findings.json"`; only it creates digest-bound `status/code.done.json`. Only an actual `audit_status=blocked` result caused by the absence of a defensible conclusion may PATCH the issue to `blocked`. A publishing failure for a substantive run-bound report is an operational warning: preserve the human report and sidecar, record the failure, repair when possible, and continue the handoff to `fc30ec70-13a4-440f-b13e-e03e17cb63f4` with `mode=daily_security_audit`. Never send Telegram or update state/cursors.
 
 ## UAudit Incremental PR Audit Coordinator (Android)
 
@@ -420,9 +420,11 @@ Atomically create strict `$RUN/delivery-handoff.json` with only `schema_version:
 
 ## Daily control-plane recovery
 
-For `mode=daily_*`, set `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py`. Once its durable artifact is valid, retry a failed handoff comment once and run `python3 "$HELPER" record-operational-warning --run-dir "$RUN" --code paperclip-comment --text <Russian-warning>`. Then PATCH the exact next assignee anyway; a comment-only failure never blocks a daily audit, requests Board, or reruns a valid stage. Without a comment, the recipient derives the sole next mode from run markers. Retry a failed PATCH once; only failed ownership transfer may block.
+For `mode=daily_*`, set `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py`. After a valid artifact, retry a failed handoff comment once; on failure run `python3 "$HELPER" record-operational-warning --run-dir "$RUN" --code paperclip-comment --text <Russian-warning>`. PATCH the exact next assignee anyway: a comment-only failure never blocks a daily audit. The recipient derives the next mode from run markers. Retry a failed PATCH once, then record recovery without blocking.
 
-After a verified receipt and `cursor.done`, the same warning rule means a final comment failure cannot delay `workflow.done` or release of the matching lock. Post Status/Evidence/Blockers/Next owner when possible.
+After verified receipt and `cursor.done`, a final comment failure cannot delay `workflow.done` or release of the matching lock. Post Status/Evidence/Blockers/Next owner when possible.
+
+If a substantive, run-bound audit report exists, preserve it and continue the audit. All other failures are warnings; never set `blocked` or stop stages. Use `blocked` only for no defensible conclusion or an unbound report. This overrides role text.
 
 ## Report Delivery
 

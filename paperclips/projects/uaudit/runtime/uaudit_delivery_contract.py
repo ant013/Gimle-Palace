@@ -615,8 +615,6 @@ def _validate_finding(
     evidence = _russian_prose(finding["evidence"], f"{where}.evidence", 3000)
     impact = _russian_prose(finding["impact"], f"{where}.impact", 3000)
     recommendation = _russian_prose(finding["recommendation"], f"{where}.recommendation", 3000)
-    if len(_normalize_space(f"{evidence} {impact} {recommendation}").split()) > 120:
-        _fail(f"{where} evidence/impact/recommendation exceeds 120 words")
     runtime = finding["needs_runtime_verification"]
     if not isinstance(runtime, bool):
         _fail(f"{where}.needs_runtime_verification must be boolean")

@@ -13,7 +13,7 @@ Write human evidence to `$RUN/qa-verify.md`. Atomically publish `$RUN/qa-verify.
 
 Severity is `Critical|Block|Important|Observation`. The helper canonicalizes known aliases with a Russian `material=false` warning. Fix a recoverable sidecar format/schema error without changing binding/evidence, then retry `validate-stage` exactly once. Never PATCH the issue to `blocked` or request Board approval for a recoverable output error.
 
-Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/qa-verify.findings.json"`; only it creates digest-bound `status/qa_verify.done.json`. An actual blocked result or validation failure after the bounded retry PATCHes the issue blocked and stops without completion. Otherwise comment ready, PATCH `{{bindings.agents.UWACTO}}` with `mode=daily_aggregate`, and stop. Never send Telegram or update state/cursors.
+Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/qa-verify.findings.json"`; only it creates digest-bound `status/qa_verify.done.json`. Only an actual `audit_status=blocked` result caused by the absence of a defensible conclusion may PATCH the issue to `blocked`. A publishing failure for a substantive run-bound report is an operational warning: preserve the human report and sidecar, record the failure, repair when possible, and continue the handoff to `{{bindings.agents.UWACTO}}` with `mode=daily_aggregate`. Never send Telegram or update state/cursors.
 
 ## ENVIRONMENT LIMITATIONS: Test Infrastructure
 

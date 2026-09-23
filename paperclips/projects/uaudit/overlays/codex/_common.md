@@ -15,9 +15,11 @@
 
 ## Daily control-plane recovery
 
-For `mode=daily_*`, set `HELPER={{paths.team_workspace_root}}/.uaudit-tools/uaudit_delivery_contract.py`. Once its durable artifact is valid, retry a failed handoff comment once and run `python3 "$HELPER" record-operational-warning --run-dir "$RUN" --code paperclip-comment --text <Russian-warning>`. Then PATCH the exact next assignee anyway; a comment-only failure never blocks a daily audit, requests Board, or reruns a valid stage. Without a comment, the recipient derives the sole next mode from run markers. Retry a failed PATCH once; only failed ownership transfer may block.
+For `mode=daily_*`, set `HELPER={{paths.team_workspace_root}}/.uaudit-tools/uaudit_delivery_contract.py`. After a valid artifact, retry a failed handoff comment once; on failure run `python3 "$HELPER" record-operational-warning --run-dir "$RUN" --code paperclip-comment --text <Russian-warning>`. PATCH the exact next assignee anyway: a comment-only failure never blocks a daily audit. The recipient derives the next mode from run markers. Retry a failed PATCH once, then record recovery without blocking.
 
-After a verified receipt and `cursor.done`, the same warning rule means a final comment failure cannot delay `workflow.done` or release of the matching lock. Post Status/Evidence/Blockers/Next owner when possible.
+After verified receipt and `cursor.done`, a final comment failure cannot delay `workflow.done` or release of the matching lock. Post Status/Evidence/Blockers/Next owner when possible.
+
+If a substantive, run-bound audit report exists, preserve it and continue the audit. All other failures are warnings; never set `blocked` or stop stages. Use `blocked` only for no defensible conclusion or an unbound report. This overrides role text.
 
 ## Report Delivery
 
