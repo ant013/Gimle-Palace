@@ -456,6 +456,33 @@ def test_validate_stage_rejects_severity_without_deterministic_mapping(tmp_path:
     assert not (fixture["run"] / "status/code.done.json").exists()
 
 
+def test_validate_stage_accepts_substantive_finding_over_legacy_combined_word_limit(
+    tmp_path: Path,
+):
+    fixture = prepare_run(tmp_path, validate=False)
+    path = fixture["run"] / "code.findings.json"
+    value = read_json(path)
+    long_prose = " ".join(["проверка"] * 45)
+    item = finding()
+    item["evidence"] = long_prose
+    item["impact"] = long_prose
+    item["recommendation"] = long_prose
+    value["findings"] = [item]
+    write_json(path, value)
+
+    result = call(
+        fixture["helper"],
+        "validate-stage",
+        "--run-dir",
+        fixture["run"],
+        "--sidecar",
+        path,
+    )
+
+    assert result["status"] == "validated"
+    assert (fixture["run"] / "status/code.done.json").is_file()
+
+
 def test_operational_warning_is_idempotent_and_delivered_without_partial_status(tmp_path: Path):
     fixture = prepare_run(tmp_path, kind="daily_delta", platform="ios")
     warning = "Paperclip временно не принял комментарий QA; передача продолжена по валидному маркеру."

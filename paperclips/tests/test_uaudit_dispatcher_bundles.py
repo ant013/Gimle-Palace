@@ -154,6 +154,35 @@ def test_uaudit_bundles_override_comment_only_handoff_failures():
         assert "cannot delay `workflow.done` or release of the matching lock" in text
 
 
+def test_every_uaudit_agent_gets_report_preservation_rule_without_stage_contradictions():
+    rule = "If a substantive, run-bound audit report exists, preserve it and continue the audit."
+    prohibited = (
+        "validation failure after the bounded retry PATCHes the issue blocked",
+        "Validation failure or `blocked` PATCHes issue blocked",
+        "Validation failure or blocked status PATCHes issue blocked",
+        "Block only after all retries fail",
+        "PATCH permission-blocked",
+    )
+    source_paths = [
+        *sorted((REPO / "paperclips/projects/uaudit/roles-codex").glob("*.md")),
+        *sorted((REPO / "paperclips/projects/uaudit/overlays/codex").glob("*.md")),
+    ]
+    common = REPO / "paperclips/projects/uaudit/overlays/codex/_common.md"
+    assert rule in common.read_text()
+    for path in source_paths:
+        text = path.read_text()
+        for phrase in prohibited:
+            assert phrase not in text, f"{path} contains contradictory rule: {phrase}"
+
+    names = [agent["agent_name"] for agent in load_manifest()["agents"]]
+    assert len(names) == 17
+    for name in names:
+        text = (REPO / f"paperclips/dist/uaudit/codex/{name}.md").read_text()
+        assert rule in text, name
+        for phrase in prohibited:
+            assert phrase not in text, f"{name} contains contradictory rule: {phrase}"
+
+
 def test_forced_full_range_is_explicit_and_does_not_relax_daily_rules():
     for platform, dispatcher, infra in (
         ("android", "UWACTO", "UWAInfraEngineer"),
@@ -450,7 +479,7 @@ def test_ios_infra_bundle_treats_known_imac_toolchain_gap_as_non_material():
         assert "Never use `blocked` merely" in text
 
 
-def test_infra_bundles_retry_failed_telegram_sends():
+def test_infra_bundles_retry_failed_telegram_sends_without_blocking_existing_report():
     for agent in ("UWIInfraEngineer", "UWAInfraEngineer"):
         for path in (
             REPO / f"paperclips/projects/uaudit/overlays/codex/{agent}.md",
@@ -459,7 +488,10 @@ def test_infra_bundles_retry_failed_telegram_sends():
             text = path.read_text()
             assert "resend the same payload up to 3 times" in text
             assert "`<response>.attempt-N.json`, never canonical" in text
-            assert "Block only after all retries fail" in text
+            assert "never PATCH the audit issue to `blocked`" in text
+            assert "delivery-recovery issue" in text
+            assert "release the matching daily audit lock" in text
+            assert "keep the cursor unchanged until a matching receipt exists" in text
 
 
 def test_ios_review_bundles_surface_warnings_and_trace_changed_behavior():

@@ -11,7 +11,7 @@ For `mode=daily_code_audit`, set `HELPER={{paths.team_workspace_root}}/.uaudit-t
 
 Severity is `Critical|Block|Important|Observation`. The helper canonicalizes known aliases with a Russian `material=false` warning. Fix a recoverable sidecar format/schema error without changing binding/evidence, then retry `validate-stage` exactly once. Never PATCH the issue to `blocked` or request Board approval for a recoverable output error.
 
-Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/code.findings.json"`; only it creates digest-bound `status/code.done.json`. An actual blocked result or validation failure after the bounded retry PATCHes the issue blocked and stops without completion. Otherwise assign `{{bindings.agents.UWASecurityAuditor}}` with `mode=daily_security_audit`. Never send Telegram or update state/cursors.
+Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/code.findings.json"`; only it creates digest-bound `status/code.done.json`. Only an actual `audit_status=blocked` result caused by the absence of a defensible conclusion may PATCH the issue to `blocked`. A publishing failure for a substantive run-bound report is an operational warning: preserve the human report and sidecar, record the failure, repair when possible, and continue the handoff to `{{bindings.agents.UWASecurityAuditor}}` with `mode=daily_security_audit`. Never send Telegram or update state/cursors.
 
 ## UAudit Incremental PR Audit Coordinator (Android)
 

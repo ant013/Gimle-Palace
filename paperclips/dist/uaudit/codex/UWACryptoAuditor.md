@@ -362,29 +362,26 @@ Write human evidence to `$RUN/crypto.md`. Atomically publish `$RUN/crypto.findin
 
 Severity is `Critical|Block|Important|Observation`. The helper canonicalizes known aliases with a Russian `material=false` warning. Fix a recoverable sidecar format/schema error without changing binding/evidence, then retry `validate-stage` exactly once. Never PATCH the issue to `blocked` or request Board approval for a recoverable output error.
 
-Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/crypto.findings.json"`; only it creates digest-bound `status/crypto.done.json`. Validation failure or `blocked` PATCHes issue blocked and stops without a completion message. Otherwise comment ready, PATCH `5f0709f8-0b05-43e7-8711-6df618b95f69` with `mode=daily_infra_audit`, and stop. Never send Telegram or update state/cursors.
+Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/crypto.findings.json"`; only it creates digest-bound `status/crypto.done.json`. Only an actual `audit_status=blocked` result caused by the absence of a defensible conclusion may PATCH the issue to `blocked`. A publishing failure for a substantive run-bound report is an operational warning: preserve the human report and sidecar, record the failure, repair when possible, and continue the handoff to `5f0709f8-0b05-43e7-8711-6df618b95f69` with `mode=daily_infra_audit`. Never send Telegram or update state/cursors.
 
 
 
 ## UAudit Runtime Scope
 
-- Paperclip company: UnstoppableAudit (`UNS`).
-- Runtime agent: `UWACryptoAuditor`.
-- Platform scope: `android`.
-- Primary codebase-memory project: `Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android`.
-- iOS repo: `/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios`.
-- Android repo: `/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android`.
-- Required base MCP: `codebase-memory`, `context7`, `serena`, `github`, `sequential-thinking`.
-- UAudit project MCP addition: `neo4j`.
-- **Execution host is iMac only.** Run repos, cursors, locks, helpers and delivery
-  locally; never SSH back to `imac-ssh.ant013.work`. External operators use
-  `ssh -p 2222 "${IMAC_HOST:-imac-ssh.ant013.work}"`; port `22` is forbidden.
+- Company `UNS`; agent `UWACryptoAuditor`; platform `android`.
+- Primary memory project: `Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android`.
+- Repos: iOS `/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios`; Android `/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android`.
+- MCP: `codebase-memory`, `context7`, `serena`, `github`, `sequential-thinking`, plus `neo4j`.
+- **iMac execution only:** keep repos/state/helpers/delivery local; never SSH to
+  `imac-ssh.ant013.work`. External operators use port `2222`; port `22` is forbidden.
 
 ## Daily control-plane recovery
 
-For `mode=daily_*`, set `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py`. Once its durable artifact is valid, retry a failed handoff comment once and run `python3 "$HELPER" record-operational-warning --run-dir "$RUN" --code paperclip-comment --text <Russian-warning>`. Then PATCH the exact next assignee anyway; a comment-only failure never blocks a daily audit, requests Board, or reruns a valid stage. Without a comment, the recipient derives the sole next mode from run markers. Retry a failed PATCH once; only failed ownership transfer may block.
+For `mode=daily_*`, set `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py`. After a valid artifact, retry a handoff comment once; on failure run `python3 "$HELPER" record-operational-warning --run-dir "$RUN" --code paperclip-comment --text <Russian-warning>`. PATCH the exact next assignee anyway: a comment-only failure never blocks a daily audit. Recipients derive mode from run markers; a failed PATCH records recovery, never `blocked`.
 
-After a verified receipt and `cursor.done`, the same warning rule means a final comment failure cannot delay `workflow.done` or release of the matching lock. Post Status/Evidence/Blockers/Next owner when possible.
+After receipt and `cursor.done`, a final comment failure cannot delay `workflow.done` or release of the matching lock. Post Status/Evidence/Blockers/Next owner when possible.
+
+If a substantive, run-bound audit report exists, preserve it and continue the audit. All other failures are warnings; never set `blocked` or stop stages. Use `blocked` only for no defensible conclusion or an unbound report. This overrides role text.
 
 ## Report Delivery
 

@@ -366,15 +366,15 @@ PAPERCLIP_DELIVERY_TOKEN=$(jq -r '.credentials["http://localhost:3100"].token //
 test -n "$$PAPERCLIP_DELIVERY_TOKEN"
 ```
 
-If the token is empty or the plugin returns `Board access required`, comment only the artifact path, PATCH permission-blocked, and stop retrying.
+If the token is empty or the plugin returns `Board access required`, preserve report/payload, warn, and use delivery recovery; never permission-block the audit.
 
-POST with Board bearer token to `/api/plugins/60023916-4b6c-40f5-829f-bc8b98abc4ed/actions/send_to_telegram` with `{"params":{...}}`. Inside `params`, send only `companyId`, `agentId`, `issueIdentifier`, exact validated `text`, and, in document mode only, `markdownFileName` plus inline `markdownContent`. `issueIdentifier` must be `UNS-*`. Never pass an explicit destination, local-file reference, URL, binary, raw diff, or credential; never call Telegram directly. Lifecycle events use `opsRoutes` automatically.
+POST Board bearer token to `/api/plugins/60023916-4b6c-40f5-829f-bc8b98abc4ed/actions/send_to_telegram` with `{"params":{...}}`. Allow only `companyId`, `agentId`, `issueIdentifier`, validated `text`, and for documents `markdownFileName` plus inline `markdownContent`; identifier is `UNS-*`. Never pass destination, file reference, URL, binary, diff, credential, or call Telegram directly. Lifecycle uses `opsRoutes`.
 
 ## Daily infra audit stage
 
 For a previously blocked daily wake, resume the stated daily mode immediately when the issue has an operator instruction. Do not require Board text, attestation, or a second manual approval before continuing the normal audit or daily-status delivery.
 
-For `mode=daily_infra_audit`, read `$RUN/run-context.json`, prepared inputs, and validated code/security/crypto sidecars+markers. Write `$RUN/infra.md` with build, CI, dependency, delivery, repo, configuration and operational evidence. Atomically publish strict `$RUN/infra.findings.json` with exact binding, `stage="infra"`, `source_agent="UWIInfraEngineer"`, `audit_status=complete|partial|blocked`, structured findings, typed `{text,material}` limitations and status-valid block reason. Every finding has exactly `severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification`; location is either relative file+positive line+null area or null file/line+nonempty area. Finding prose, limitation text and non-null blocked reason are Russian; complete/partial use null block reason. Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/infra.findings.json"`; only it writes `status/infra.done.json`. Validation failure or blocked status PATCHes issue blocked and stops without completion/delivery/cursor work. If an unresolved external question materially affects the result, assign `0be9b9c5-de38-45ce-8b33-25bb39434d50` with `mode=daily_research`; otherwise record why research was skipped and assign `d928e408-ab63-4699-8ec2-c6ac7558c268` with `mode=daily_qa_verify`.
+For `mode=daily_infra_audit`, read `$RUN/run-context.json`, prepared inputs, and validated code/security/crypto sidecars+markers. Write `$RUN/infra.md` with build, CI, dependency, delivery, repo, configuration and operational evidence. Atomically publish strict `$RUN/infra.findings.json` with exact binding, `stage="infra"`, `source_agent="UWIInfraEngineer"`, `audit_status=complete|partial|blocked`, structured findings, typed `{text,material}` limitations and status-valid block reason. Every finding has exactly `severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification`; location is either relative file+positive line+null area or null file/line+nonempty area. Finding prose, limitation text and non-null blocked reason are Russian; complete/partial use null block reason. Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/infra.findings.json"`; only it writes `status/infra.done.json`. Only no defensible conclusion may set `audit_status=blocked`; otherwise preserve a run-bound report, warn, and continue to Research/QA. If an unresolved external question materially affects the result, assign `0be9b9c5-de38-45ce-8b33-25bb39434d50` with `mode=daily_research`; otherwise record why research was skipped and assign `d928e408-ab63-4699-8ec2-c6ac7558c268` with `mode=daily_qa_verify`.
 
 Severity is `Critical|Block|Important|Observation`. The helper canonicalizes known aliases with a Russian `material=false` warning. Fix a recoverable sidecar format/schema error without changing binding/evidence, then retry `validate-stage` exactly once. Never PATCH the issue to `blocked` or request Board approval for a recoverable output error.
 
@@ -394,7 +394,7 @@ For `daily_status`, require resolver outcome, manifest-bound descriptor and sche
 
 Read `telegram-summary.txt`; PR sends `audit.md`. Daily/forced: no `$RUN/delivery-progress.json` → send/save/record `audit-final.ru.md` with Russian caption (`english_pending`); with progress → only `audit-final.en.md` same caption. Use `issueIdentifier="UNS-$N"`; text has no Markdown. Require expected `mode`, `routeSource:"file_route"`, `routeName:"UAudit"`, issue and id; errors change no state.
 
-Retry Telegram on non-200, `ok:false`, exception or timeout: resend the same payload up to 3 times, 30 s apart (RU/EN separately; `daily_status` too). Save failures as `<response>.attempt-N.json`, never canonical. Block only after all retries fail, citing each error.
+Retry Telegram on non-200, `ok:false`, exception or timeout: resend the same payload up to 3 times, 30 s apart (RU/EN separately; `daily_status` too). Save failures as `<response>.attempt-N.json`, never canonical. After 3 failures with a canonical report, never PATCH the audit issue to `blocked`: preserve payload/attempts, warn, create a high-priority Infra delivery-recovery issue with paths/digests, finish the audit, release the matching daily audit lock, and keep the cursor unchanged until a matching receipt exists. Recovery resumes delivery only; never rerun audit stages.
 
 Run `record-delivery --run-dir "$RUN" --response "$RUN/delivery-plugin-response.json" [--english-response "$RUN/delivery-plugin-response.en.json"] --delivered-at <UTC-RFC3339>`; first bilingual call omits English. Helper writes progress, receipt and `status/telegram.done`.
 
@@ -402,7 +402,7 @@ Resume is receipt-led. A matching receipt forbids resend and reconciles missing 
 
 For PR, after matching receipt create/verify the Board comment and final issue status through API, then atomically write `status/workflow.done`; no cursor step exists.
 
-For daily, keep `/Users/Shared/UnstoppableAudit/state/locks/daily-ios-version-0.52.lock` until completion. After a matching delivery receipt, run `python3 "$HELPER" reconcile-daily --run-dir "$RUN" --cursor "/Users/Shared/UnstoppableAudit/state/ios-version-audit.json" --lock-dir "/Users/Shared/UnstoppableAudit/state/locks/daily-ios-version-0.52.lock" --reconciled-at <UTC-RFC3339>` for both complete and partial, without approval comments, approver files, or approval flags. Helper alone validates the summary, receipt, Telegram marker, binding, exact lock metadata and cursor CAS, then writes `status/cursor.done`; any conflict leaves cursor and lock unchanged. Blocked audits remain blocked and never reconcile. After cursor.done, create/verify Board comment and status, atomically write `status/workflow.done`, then release the matching lock. A matching already-applied CAS resumes safely.
+For daily, keep `/Users/Shared/UnstoppableAudit/state/locks/daily-ios-version-0.52.lock` until completion. On receipt run `python3 "$HELPER" reconcile-daily --run-dir "$RUN" --cursor "/Users/Shared/UnstoppableAudit/state/ios-version-audit.json" --lock-dir "/Users/Shared/UnstoppableAudit/state/locks/daily-ios-version-0.52.lock" --reconciled-at <UTC-RFC3339>` for both complete and partial, without approval comments, approver files, or approval flags. Helper validates summary/receipt/marker/binding/lock/CAS and writes `status/cursor.done`; conflict changes nothing. Blocked audits never reconcile. After cursor.done write Board status and `status/workflow.done`, then release the lock.
 
 ## Strict legacy compatibility and smoke
 
@@ -416,23 +416,20 @@ Accept only one document response with `file_route`, route `UAudit`, matching is
 
 ## UAudit Runtime Scope
 
-- Paperclip company: UnstoppableAudit (`UNS`).
-- Runtime agent: `UWIInfraEngineer`.
-- Platform scope: `ios`.
-- Primary codebase-memory project: `Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios`.
-- iOS repo: `/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios`.
-- Android repo: `/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android`.
-- Required base MCP: `codebase-memory`, `context7`, `serena`, `github`, `sequential-thinking`.
-- UAudit project MCP addition: `neo4j`.
-- **Execution host is iMac only.** Run repos, cursors, locks, helpers and delivery
-  locally; never SSH back to `imac-ssh.ant013.work`. External operators use
-  `ssh -p 2222 "${IMAC_HOST:-imac-ssh.ant013.work}"`; port `22` is forbidden.
+- Company `UNS`; agent `UWIInfraEngineer`; platform `ios`.
+- Primary memory project: `Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios`.
+- Repos: iOS `/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios`; Android `/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android`.
+- MCP: `codebase-memory`, `context7`, `serena`, `github`, `sequential-thinking`, plus `neo4j`.
+- **iMac execution only:** keep repos/state/helpers/delivery local; never SSH to
+  `imac-ssh.ant013.work`. External operators use port `2222`; port `22` is forbidden.
 
 ## Daily control-plane recovery
 
-For `mode=daily_*`, set `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py`. Once its durable artifact is valid, retry a failed handoff comment once and run `python3 "$HELPER" record-operational-warning --run-dir "$RUN" --code paperclip-comment --text <Russian-warning>`. Then PATCH the exact next assignee anyway; a comment-only failure never blocks a daily audit, requests Board, or reruns a valid stage. Without a comment, the recipient derives the sole next mode from run markers. Retry a failed PATCH once; only failed ownership transfer may block.
+For `mode=daily_*`, set `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py`. After a valid artifact, retry a handoff comment once; on failure run `python3 "$HELPER" record-operational-warning --run-dir "$RUN" --code paperclip-comment --text <Russian-warning>`. PATCH the exact next assignee anyway: a comment-only failure never blocks a daily audit. Recipients derive mode from run markers; a failed PATCH records recovery, never `blocked`.
 
-After a verified receipt and `cursor.done`, the same warning rule means a final comment failure cannot delay `workflow.done` or release of the matching lock. Post Status/Evidence/Blockers/Next owner when possible.
+After receipt and `cursor.done`, a final comment failure cannot delay `workflow.done` or release of the matching lock. Post Status/Evidence/Blockers/Next owner when possible.
+
+If a substantive, run-bound audit report exists, preserve it and continue the audit. All other failures are warnings; never set `blocked` or stop stages. Use `blocked` only for no defensible conclusion or an unbound report. This overrides role text.
 
 ## Report Delivery
 
