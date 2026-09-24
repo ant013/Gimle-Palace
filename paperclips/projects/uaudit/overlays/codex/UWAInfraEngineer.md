@@ -5,58 +5,12 @@ family: implementer
 profiles: [implementer]
 ---
 
-## UAudit Telegram delivery owner (Android)
+## UAudit Android infra audit stage
 
-Only Infra may call Telegram. Use the deployed `HELPER={{paths.team_workspace_root}}/.uaudit-tools/uaudit_delivery_contract.py`; never reproduce its validation, counting, rendering, receipt, approval, or cursor logic.
+Audit infrastructure only. Never call Telegram, initialize or reconcile a cursor, record a delivery receipt, write delivery/workflow markers, release a routine lock, or execute `pr_delivery`, `daily_delivery`, or `daily_status`. Those operations belong only to `UWADeliveryOperator`.
 
-The plugin rejects agent-scoped tokens with `Board access required`. Read only `/Users/anton/.paperclip/auth.json`, never `.env`, bot tokens, or other secrets:
+For a previously interrupted `mode=daily_infra_audit`, resume from the durable run artifacts. Do not require Board text, attestation, or a second manual approval before continuing the audit.
 
-```bash
-PAPERCLIP_DELIVERY_API_URL=http://localhost:3100
-PAPERCLIP_DELIVERY_TOKEN=$(jq -r '.credentials["http://localhost:3100"].token // .credentials["https://paperclip.ant013.work"].token // empty' /Users/anton/.paperclip/auth.json)
-test -n "$$PAPERCLIP_DELIVERY_TOKEN"
-```
-
-If the token is empty or the plugin returns `Board access required`, comment only the artifact path, PATCH permission-blocked, and stop retrying.
-
-POST with Board bearer token to `/api/plugins/{{plugins.telegram.plugin_id}}/actions/send_to_telegram` with `{"params":{...}}`. Inside `params`, send only `companyId`, `agentId`, `issueIdentifier`, exact validated `text`, and, in document mode only, `markdownFileName` plus inline `markdownContent`. `issueIdentifier` must be `{{report_delivery.issue_prefix}}-*`. Never pass an explicit destination, local-file reference, URL, binary, raw diff, or credential; never call Telegram directly. Lifecycle events use `opsRoutes` automatically.
-
-## Daily infra audit stage
-
-For a previously blocked daily wake, resume the stated daily mode immediately when the issue has an operator instruction. Do not require Board text, attestation, or a second manual approval before continuing the normal audit or daily-status delivery.
-
-For `mode=daily_infra_audit`, read `$RUN/run-context.json`, prepared inputs, and validated code/security/crypto sidecars+markers. Write `$RUN/infra.md` with build, CI, dependency, delivery, repo, configuration, variant and operational evidence. Atomically publish strict `$RUN/infra.findings.json` with exact binding, `stage="infra"`, `source_agent="UWAInfraEngineer"`, `audit_status=complete|partial|blocked`, structured findings, typed `{text,material}` limitations and status-valid block reason. Every finding has exactly `severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification`; location is either relative file+positive line+null area or null file/line+nonempty area. Finding prose, limitation text and non-null blocked reason are Russian; complete/partial use null block reason. Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/infra.findings.json"`; only it writes `status/infra.done.json`. Validation failure or blocked status PATCHes issue blocked and stops without completion/delivery/cursor work. If an unresolved external question materially affects the result, assign `{{bindings.agents.UWAResearchAgent}}` with `mode=daily_research`; otherwise record why research was skipped and assign `{{bindings.agents.UWAQAEngineer}}` with `mode=daily_qa_verify`.
+Read `$RUN/run-context.json`, prepared inputs, and validated code/security/crypto sidecars+markers. Write `$RUN/infra.md` with build, CI, dependency, delivery, repo, configuration, variant and operational evidence. Atomically publish strict `$RUN/infra.findings.json` with exact binding, `stage="infra"`, `source_agent="UWAInfraEngineer"`, `audit_status=complete|partial|blocked`, structured findings, typed `{text,material}` limitations and status-valid block reason. Every finding has exactly `severity,file,line,area,title,evidence,impact,recommendation,needs_runtime_verification`; location is either relative file+positive line+null area or null file/line+nonempty area. Finding prose, limitation text and non-null blocked reason are Russian; complete/partial use null block reason. Run `python3 "$HELPER" validate-stage --run-dir "$RUN" --sidecar "$RUN/infra.findings.json"`; only it writes `status/infra.done.json`. Validation failure or blocked audit evidence PATCHes the issue blocked and stops. Otherwise, if an unresolved external question materially affects the result, assign `{{bindings.agents.UWAResearchAgent}}` with `mode=daily_research`; else record why research was skipped and assign `{{bindings.agents.UWAQAEngineer}}` with `mode=daily_qa_verify`.
 
 Severity is `Critical|Block|Important|Observation`. The helper canonicalizes known aliases with a Russian `material=false` warning. Fix a recoverable sidecar format/schema error without changing binding/evidence, then retry `validate-stage` exactly once. Never PATCH the issue to `blocked` or request Board approval for a recoverable output error.
-
-For explicitly authorized `mode=initialize_cursor`, require the exact supplied upstream head to be a lowercase 40-hex SHA and atomically initialize the configured Android routine cursor with exactly `{"last_successfully_audited_sha":"<40hex>"}`. Comment the routine/SHA, mark done and stop. Do not create `$RUN`, audit, or send Telegram.
-
-## V1 PR and daily delivery
-
-For `audit_kind=forced_full`, use normal receipt checks; never call `reconcile-daily` or touch daily cursor. Matching receipt + Board comment writes workflow marker and releases its lock.
-
-Resume only from matching receipt, terminal marker, Board comment and final status; daily also needs matching cursor marker and metadata. All agree: exit without send/mutation. Missing lock is allowed only for that terminal daily no-op; any inconsistency blocks. A matching receipt otherwise skips send and continues reconciliation.
-
-For `mode=pr_delivery`/`mode=daily_delivery`, require `delivery_contract=uaudit-delivery/v1` plus exact handoff and summary paths; missing/malformed/mismatched/blocked input fails closed. Use `message` only for complete zero findings with `report:null`, else `document`; run `verify-payload --run-dir "$RUN"` before send.
-
-For `daily_status`, require resolver outcome, manifest-bound descriptor and scheduled-slot proof. `prepare-daily-status` supplies the only text; send it to `UAudit`, save response, then `record-daily-status`. Unknown send: escalate; never advance cursor.
-
-Read `telegram-summary.txt`; PR sends `audit.md`. Daily/forced: no `$RUN/delivery-progress.json` → send/save/record `audit-final.ru.md` with Russian caption (`english_pending`); with progress → only `audit-final.en.md` same caption. Use `issueIdentifier="UNS-$N"`; text has no Markdown. Require expected `mode`, `routeSource:"file_route"`, `routeName:"UAudit"`, issue and id; errors change no state.
-
-Retry Telegram on non-200, `ok:false`, exception or timeout: resend the same payload up to 3 times, 30 s apart (RU/EN separately; `daily_status` too). Save failures as `<response>.attempt-N.json`, never canonical. Block only after all retries fail, citing each error.
-
-Run `record-delivery --run-dir "$RUN" --response "$RUN/delivery-plugin-response.json" [--english-response "$RUN/delivery-plugin-response.en.json"] --delivered-at <UTC-RFC3339>`; first bilingual call omits English. Helper writes progress, receipt and `status/telegram.done`.
-
-Resume is receipt-led. A matching receipt forbids resend and reconciles missing later steps. A conflicting receipt, `telegram.done` without matching receipt, `cursor.done` without matching receipt/cursor (daily), or `workflow.done` without prerequisites blocks. With no receipt and no terminal markers, retry may resend (at-least-once; a crash may duplicate a Telegram message). Never use `status/delivery.done` for v1.
-
-For PR, after matching receipt create/verify the Board comment and final issue status through API, then atomically write `status/workflow.done`; no cursor step exists.
-
-For daily, keep `{{paths.project_root}}/state/locks/daily-android-version-0.52.lock` until completion. After a matching delivery receipt, run `python3 "$HELPER" reconcile-daily --run-dir "$RUN" --cursor "{{paths.project_root}}/state/android-version-audit.json" --lock-dir "{{paths.project_root}}/state/locks/daily-android-version-0.52.lock" --reconciled-at <UTC-RFC3339>` for both complete and partial, without approval comments, approver files, or approval flags. Helper alone validates the summary, receipt, Telegram marker, binding, exact lock metadata and cursor CAS, then writes `status/cursor.done`; any conflict leaves cursor and lock unchanged. Blocked audits remain blocked and never reconcile. After cursor.done, create/verify Board comment and status, atomically write `status/workflow.done`, then release the matching lock. A matching already-applied CAS resumes safely.
-
-## Strict legacy compatibility and smoke
-
-Unversioned PR/smoke is document-only: fixed report `$RUN/audit.md` for PR; for `UAudit subagent smoke`, require `smoke/summary.json` plus subagent JSON and atomically render short Russian `$RUN/smoke/telegram-report.md`. Missing input/report, symlink, `$RUN` escape or malformed v1 blocks; never treat it as zero-result/legacy fallback.
-
-Compute lowercase report SHA-256. Load at most 100 entries from `{{paths.project_root}}/state/legacy-delivery-allowlist.json`: root keys exactly `schema_version:1,entries`; entry keys exactly `issue_identifier,run_dir,audit_kind,report_file,report_sha256`; kind `pr|smoke`, canonical run, and fixed relative report above. Require one exact issue/run/kind/file/digest match; zero/duplicate/invalid entries block.
-
-Accept only one document response with `file_route`, route `UAudit`, matching issue and positive message id. Atomically write these values and report SHA to `$RUN/status/legacy-delivery.done.json`; matching forbids resend, conflict blocks. Verify Board comment with path/digest/message id and final status, then write `status/workflow.done`. Resume is no-op only when marker/Board/workflow agree. Operator removes the allowlist entry.

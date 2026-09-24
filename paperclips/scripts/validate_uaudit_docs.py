@@ -70,7 +70,10 @@ def validate_stale_language(path: Path, errors: list[str]) -> None:
 
 def validate_config(errors: list[str]) -> None:
     config = load_config()
-    agents = resolve_agent_ids("uaudit", None)
+    agents = resolve_agent_ids(
+        "uaudit",
+        REPO_ROOT / "paperclips/projects/uaudit/bindings.local-example.yaml",
+    )
     missing = sorted(required_agent_names(config) - set(agents))
     if missing:
         errors.append(f"routine config references unknown agents: {missing}")

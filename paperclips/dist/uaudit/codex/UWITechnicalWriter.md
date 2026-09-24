@@ -279,12 +279,14 @@ Then atomically write `$RUN/translation-result.json` with exactly `schema_versio
 
 ## Daily control-plane recovery
 
-For `mode=daily_*`, set `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py`. Once its durable artifact is valid, retry a failed handoff comment once and run `python3 "$HELPER" record-operational-warning --run-dir "$RUN" --code paperclip-comment --text <Russian-warning>`. Then PATCH the exact next assignee anyway; a comment-only failure never blocks a daily audit, requests Board, or reruns a valid stage. Without a comment, the recipient derives the sole next mode from run markers. Retry a failed PATCH once; only failed ownership transfer may block.
+For `mode=daily_*`, set `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py`. After a valid durable artifact, retry a failed comment once, then run `python3 "$HELPER" record-operational-warning --run-dir "$RUN" --code paperclip-comment --text <Russian-warning>` and PATCH the exact next assignee anyway; a comment-only failure never blocks a daily audit. The recipient derives the next mode from markers. Retry a failed PATCH once. With a substantive report, transfer failure is operational: preserve the report and leave handoff retryable, never blocked.
 
-After a verified receipt and `cursor.done`, the same warning rule means a final comment failure cannot delay `workflow.done` or release of the matching lock. Post Status/Evidence/Blockers/Next owner when possible.
+After a verified receipt and `cursor.done`, a final comment failure cannot delay `workflow.done` or release of the matching lock.
+
+Once a substantive report exists, operational failures cannot delete, suppress, invalidate, or block it; preserve its result and keep delivery retryable.
 
 ## Report Delivery
 
 Non-delivery roles save Markdown in the writable artifact root and hand off to
-`UWAInfraEngineer` (`UWIInfraEngineer` for iOS-only
+`UWADeliveryOperator` (`UWIDeliveryOperator` for iOS-only
 issues). Do not call Telegram/bot/plugin notification actions.
