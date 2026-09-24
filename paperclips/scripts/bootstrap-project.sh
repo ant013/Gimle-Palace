@@ -649,6 +649,9 @@ for agent_name in $hire_order; do
     end
   ')
   agent_effort=$(echo "$agent_meta" | jq -r '.modelReasoningEffort // "medium"')
+  agent_max_turns=$(echo "$agent_meta" | jq -r '.maxTurnsPerRun // 200')
+  [[ "$agent_max_turns" =~ ^[1-9][0-9]*$ ]] || \
+    die "maxTurnsPerRun for $agent_name must be a positive integer"
   recovery_model=$(yq -r '.recovery.model // ""' "$manifest")
   recovery_profile='null'
   if [ -n "$recovery_model" ] && [ "$recovery_model" != "null" ]; then
@@ -768,6 +771,7 @@ for agent_name in $hire_order; do
     --arg adapter "${target}_local" \
     --arg model "$agent_model" \
     --arg effort "$agent_effort" \
+    --argjson maxTurnsPerRun "$agent_max_turns" \
     --argjson bypass "$sandbox_bypass" \
     --argjson writable "$writable_roots" \
     --argjson readonly "$read_only_roots" \
@@ -783,7 +787,7 @@ for agent_name in $hire_order; do
         instructionsFilePath: "AGENTS.md", instructionsEntryFile: "AGENTS.md",
         instructionsBundleMode: "managed",
         requireInstructionsFile: $requireInstructionsFile,
-        maxTurnsPerRun: 200, timeoutSec: 0, graceSec: 15,
+        maxTurnsPerRun: $maxTurnsPerRun, timeoutSec: 0, graceSec: 15,
         dangerouslyBypassApprovalsAndSandbox: $bypass,
         writableRoots: $writable, sourceRootsReadOnly: $readonly, env: $env
       },

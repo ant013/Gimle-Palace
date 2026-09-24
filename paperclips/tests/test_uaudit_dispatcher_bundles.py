@@ -66,6 +66,8 @@ def test_daily_routine_config_uses_names_not_uuids_and_resolves_agents():
         "UWICryptoAuditor",
         "UWAInfraEngineer",
         "UWIInfraEngineer",
+        "UWADeliveryOperator",
+        "UWIDeliveryOperator",
         "UWAQAEngineer",
         "UWIQAEngineer",
     } <= required_agent_names(config)
@@ -98,8 +100,8 @@ def test_generated_dispatcher_bundles_start_staged_daily_chain():
         "required subagent roster",
     ]
     expected = {
-        "UWACTO": ("UWAKotlinAuditor", "UWASecurityAuditor", "UWACryptoAuditor", "UWAInfraEngineer"),
-        "UWICTO": ("UWISwiftAuditor", "UWISecurityAuditor", "UWICryptoAuditor", "UWIInfraEngineer"),
+        "UWACTO": ("UWAKotlinAuditor", "UWASecurityAuditor", "UWACryptoAuditor", "UWAInfraEngineer", "UWADeliveryOperator"),
+        "UWICTO": ("UWISwiftAuditor", "UWISecurityAuditor", "UWICryptoAuditor", "UWIInfraEngineer", "UWIDeliveryOperator"),
     }
     for name, chain_names in expected.items():
         path = REPO / f"paperclips/dist/uaudit/codex/{name}.md"
@@ -155,22 +157,22 @@ def test_uaudit_bundles_override_comment_only_handoff_failures():
 
 
 def test_forced_full_range_is_explicit_and_does_not_relax_daily_rules():
-    for platform, dispatcher, infra in (
-        ("android", "UWACTO", "UWAInfraEngineer"),
-        ("ios", "UWICTO", "UWIInfraEngineer"),
+    for platform, dispatcher, delivery in (
+        ("android", "UWACTO", "UWADeliveryOperator"),
+        ("ios", "UWICTO", "UWIDeliveryOperator"),
     ):
         source = (
             REPO
             / f"paperclips/projects/uaudit/roles-codex/{'uwa' if platform == 'android' else 'uwi'}-platform-dispatcher.md"
         ).read_text()
-        infra_source = (
-            REPO / f"paperclips/projects/uaudit/overlays/codex/{infra}.md"
+        delivery_source = (
+            REPO / f"paperclips/projects/uaudit/overlays/codex/{delivery}.md"
         ).read_text()
         assert "UAudit forced full-range audit" in source
         assert "daily_limits_bypassed: true" in source
         assert "cursor_mutation: forbidden" in source
         assert "Never block a proven range by size" in source
-        assert "never call `reconcile-daily`" in infra_source
+        assert "never call `reconcile-daily`" in delivery_source
 
 
 def test_generated_dispatchers_pin_canonical_daily_cursors():
@@ -208,14 +210,14 @@ def test_daily_roles_use_version_052_lock_identity():
             "daily-ios-version-0.51.lock",
         ),
         (
-            REPO / "paperclips/projects/uaudit/overlays/codex/UWAInfraEngineer.md",
-            REPO / "paperclips/dist/uaudit/codex/UWAInfraEngineer.md",
+            REPO / "paperclips/projects/uaudit/overlays/codex/UWADeliveryOperator.md",
+            REPO / "paperclips/dist/uaudit/codex/UWADeliveryOperator.md",
             "daily-android-version-0.52.lock",
             "daily-android-version-0.51.lock",
         ),
         (
-            REPO / "paperclips/projects/uaudit/overlays/codex/UWIInfraEngineer.md",
-            REPO / "paperclips/dist/uaudit/codex/UWIInfraEngineer.md",
+            REPO / "paperclips/projects/uaudit/overlays/codex/UWIDeliveryOperator.md",
+            REPO / "paperclips/dist/uaudit/codex/UWIDeliveryOperator.md",
             "daily-ios-version-0.52.lock",
             "daily-ios-version-0.51.lock",
         ),
@@ -268,7 +270,79 @@ def test_uaudit_codex_agents_get_an_explicit_supported_model_when_unset():
     assert 'else "auto"' in text
 
 
-def test_infra_bundles_use_staged_daily_delivery_not_subagent_fanout():
+def test_uaudit_manifest_pins_token_efficient_model_matrix():
+    expected = {
+        "AUCEO": ("gpt-6-astra", "medium", 80),
+        "UWICTO": ("gpt-6-luna", "low", 40),
+        "UWACTO": ("gpt-6-luna", "low", 40),
+        "UWISwiftAuditor": ("gpt-6-sol", "medium", 80),
+        "UWAKotlinAuditor": ("gpt-6-sol", "medium", 80),
+        "UWISecurityAuditor": ("gpt-6-sol", "medium", 80),
+        "UWASecurityAuditor": ("gpt-6-sol", "medium", 80),
+        "UWICryptoAuditor": ("gpt-6-sol", "medium", 80),
+        "UWACryptoAuditor": ("gpt-6-sol", "medium", 80),
+        "UWIInfraEngineer": ("gpt-6-sol", "medium", 60),
+        "UWAInfraEngineer": ("gpt-6-sol", "medium", 60),
+        "UWIQAEngineer": ("gpt-6-sol", "low", 60),
+        "UWAQAEngineer": ("gpt-6-sol", "low", 60),
+        "UWIResearchAgent": ("gpt-6-luna", "medium", 50),
+        "UWAResearchAgent": ("gpt-6-luna", "medium", 50),
+        "UWITechnicalWriter": ("gpt-6-luna", "low", 30),
+        "UWATechnicalWriter": ("gpt-6-luna", "low", 30),
+        "UWIDeliveryOperator": ("gpt-6-luna", "low", 40),
+        "UWADeliveryOperator": ("gpt-6-luna", "low", 40),
+    }
+    agents = {agent["agent_name"]: agent for agent in load_manifest()["agents"]}
+    assert set(agents) == set(expected)
+    assert len(agents) == 19
+    for name, (model, effort, turns) in expected.items():
+        assert agents[name]["model"] == model
+        assert agents[name]["modelReasoningEffort"] == effort
+        assert agents[name]["maxTurnsPerRun"] == turns
+    assert [name for name, agent in agents.items() if agent["model"] == "gpt-6-astra"] == ["AUCEO"]
+
+
+def test_delivery_ownership_is_split_from_infra_for_both_platforms():
+    manifest = load_manifest()
+    assert manifest["report_delivery"] == {
+        "issue_prefix": "UNS",
+        "default_owner": "UWADeliveryOperator",
+        "android_owner": "UWADeliveryOperator",
+        "ios_owner": "UWIDeliveryOperator",
+    }
+    config = load_config(CONFIG)
+    expected = {
+        "android": ("UWAInfraEngineer", "UWADeliveryOperator"),
+        "ios": ("UWIInfraEngineer", "UWIDeliveryOperator"),
+    }
+    for routine in config["routines"]:
+        infra, delivery = expected[routine["platform"]]
+        assert routine["infra_executor"] == infra
+        assert routine["daily_chain"]["infra_auditor"] == infra
+        assert routine["daily_chain"]["delivery_agent"] == delivery
+
+
+def test_infra_bundles_are_audit_only():
+    for name, delivery in (
+        ("UWAInfraEngineer", "UWADeliveryOperator"),
+        ("UWIInfraEngineer", "UWIDeliveryOperator"),
+    ):
+        text = (REPO / f"paperclips/dist/uaudit/codex/{name}.md").read_text()
+        assert "mode=daily_infra_audit" in text
+        assert "infra.findings.json" in text
+        assert delivery in text
+        for forbidden in (
+            "send_to_telegram",
+            "mode=initialize_cursor",
+            "mode=daily_delivery",
+            "mode=pr_delivery",
+            "record-delivery --run-dir",
+            "reconcile-daily --run-dir",
+        ):
+            assert forbidden not in text, f"{name} retains delivery responsibility {forbidden!r}"
+
+
+def test_delivery_bundles_own_control_plane_not_audit_findings():
     forbidden = [
         "If the cursor file is missing, create it",
         "noop.done",
@@ -283,13 +357,12 @@ def test_infra_bundles_use_staged_daily_delivery_not_subagent_fanout():
         "partial-approvers.json",
         "approval-comments.json",
     ]
-    for name, cto in (("UWAInfraEngineer", "UWACTO"), ("UWIInfraEngineer", "UWICTO")):
+    for name in ("UWADeliveryOperator", "UWIDeliveryOperator"):
         path = REPO / f"paperclips/dist/uaudit/codex/{name}.md"
         text = path.read_text()
         for phrase in forbidden:
             assert phrase not in text, f"{name} still contains intake phrase {phrase!r}"
         assert "mode=initialize_cursor" in text
-        assert "mode=daily_infra_audit" in text
         assert "mode=daily_delivery" in text
         assert "audit-final.ru.md" in text
         assert "audit-final.en.md" in text
@@ -318,6 +391,9 @@ def test_infra_bundles_use_staged_daily_delivery_not_subagent_fanout():
         assert 'python3 "' in text
         assert "chatId" not in text
         assert "filePath" not in text
+        assert "Report-first invariant" in text
+        assert "never block an existing report" in text
+        assert "infra.findings.json" not in text
 
 
 def test_audit_stage_bundles_use_bound_structured_v1_sidecars():
@@ -416,8 +492,7 @@ def test_audit_stage_bundles_use_bound_structured_v1_sidecars():
             assert "1 to 240 characters inclusive" in text
         assert "validate-stage --run-dir" in text
         assert "Russian" in text
-        if "InfraEngineer" not in name:
-            assert "send_to_telegram" not in text
+        assert "send_to_telegram" not in text
 
 
 def test_ios_qa_bundle_treats_known_imac_runtime_gaps_as_non_material():
@@ -450,8 +525,8 @@ def test_ios_infra_bundle_treats_known_imac_toolchain_gap_as_non_material():
         assert "Never use `blocked` merely" in text
 
 
-def test_infra_bundles_retry_failed_telegram_sends():
-    for agent in ("UWIInfraEngineer", "UWAInfraEngineer"):
+def test_delivery_bundles_retry_failed_telegram_sends_without_blocking_reports():
+    for agent in ("UWIDeliveryOperator", "UWADeliveryOperator"):
         for path in (
             REPO / f"paperclips/projects/uaudit/overlays/codex/{agent}.md",
             REPO / f"paperclips/dist/uaudit/codex/{agent}.md",
@@ -459,7 +534,8 @@ def test_infra_bundles_retry_failed_telegram_sends():
             text = path.read_text()
             assert "resend the same payload up to 3 times" in text
             assert "`<response>.attempt-N.json`, never canonical" in text
-            assert "Block only after all retries fail" in text
+            assert "After all retries fail" in text
+            assert "never block an existing report" in text
 
 
 def test_ios_review_bundles_surface_warnings_and_trace_changed_behavior():

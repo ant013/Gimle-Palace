@@ -59,9 +59,9 @@ mcp:
 # default_owner, ios_owner, android_owner) are safe in repo (routing metadata).
 report_delivery:
   issue_prefix: UNS
-  default_owner: UWAInfraEngineer
-  android_owner: UWAInfraEngineer
-  ios_owner: UWIInfraEngineer
+  default_owner: UWADeliveryOperator
+  android_owner: UWADeliveryOperator
+  ios_owner: UWIDeliveryOperator
 
 skills:
   additions:
@@ -91,13 +91,16 @@ compatibility:
 # Phase F migration (2026-05-17): UUIDs + abs paths + workspace_cwd moved to
 # ~/.paperclip/projects/uaudit/{bindings.yaml,paths.yaml}. Builder reads via
 # resolve_bindings dual-read (Phase D). reportsTo added for topological hire.
-# uaudit is codex-only (no claude agents); 17 agents total.
+# uaudit is codex-only (no claude agents); 19 agents total.
 agents:
   - agent_name: AUCEO
     role_source: paperclips/roles-codex/cx-cto.md
     profile: cto
     target: codex
     platform: all
+    model: gpt-6-astra
+    modelReasoningEffort: medium
+    maxTurnsPerRun: 80
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
   - agent_name: UWICTO
     role_source: paperclips/projects/uaudit/roles-codex/uwi-platform-dispatcher.md
@@ -105,6 +108,9 @@ agents:
     target: codex
     reportsTo: AUCEO
     platform: ios
+    model: gpt-6-luna
+    modelReasoningEffort: low
+    maxTurnsPerRun: 40
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
   - agent_name: UWACTO
     role_source: paperclips/projects/uaudit/roles-codex/uwa-platform-dispatcher.md
@@ -112,6 +118,9 @@ agents:
     target: codex
     reportsTo: AUCEO
     platform: android
+    model: gpt-6-luna
+    modelReasoningEffort: low
+    maxTurnsPerRun: 40
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
   - agent_name: UWISwiftAuditor
     role_source: paperclips/projects/uaudit/overlays/codex/UWISwiftAuditor.md
@@ -119,6 +128,9 @@ agents:
     target: codex
     reportsTo: UWICTO
     platform: ios
+    model: gpt-6-sol
+    modelReasoningEffort: medium
+    maxTurnsPerRun: 80
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
   - agent_name: UWAKotlinAuditor
     role_source: paperclips/projects/uaudit/overlays/codex/UWAKotlinAuditor.md
@@ -126,6 +138,9 @@ agents:
     target: codex
     reportsTo: UWACTO
     platform: android
+    model: gpt-6-sol
+    modelReasoningEffort: medium
+    maxTurnsPerRun: 80
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
   - agent_name: UWICryptoAuditor
     role_source: paperclips/projects/uaudit/overlays/codex/UWICryptoAuditor.md
@@ -133,6 +148,9 @@ agents:
     target: codex
     reportsTo: UWICTO
     platform: ios
+    model: gpt-6-sol
+    modelReasoningEffort: medium
+    maxTurnsPerRun: 80
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
   - agent_name: UWACryptoAuditor
     role_source: paperclips/projects/uaudit/overlays/codex/UWACryptoAuditor.md
@@ -140,6 +158,9 @@ agents:
     target: codex
     reportsTo: UWACTO
     platform: android
+    model: gpt-6-sol
+    modelReasoningEffort: medium
+    maxTurnsPerRun: 80
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
   - agent_name: UWISecurityAuditor
     role_source: paperclips/projects/uaudit/overlays/codex/UWISecurityAuditor.md
@@ -147,6 +168,9 @@ agents:
     target: codex
     reportsTo: UWICTO
     platform: ios
+    model: gpt-6-sol
+    modelReasoningEffort: medium
+    maxTurnsPerRun: 80
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
   - agent_name: UWASecurityAuditor
     role_source: paperclips/projects/uaudit/overlays/codex/UWASecurityAuditor.md
@@ -154,6 +178,9 @@ agents:
     target: codex
     reportsTo: UWACTO
     platform: android
+    model: gpt-6-sol
+    modelReasoningEffort: medium
+    maxTurnsPerRun: 80
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
   - agent_name: UWIQAEngineer
     role_source: paperclips/projects/uaudit/overlays/codex/UWIQAEngineer.md
@@ -161,6 +188,9 @@ agents:
     target: codex
     reportsTo: UWICTO
     platform: ios
+    model: gpt-6-sol
+    modelReasoningEffort: low
+    maxTurnsPerRun: 60
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
   - agent_name: UWAQAEngineer
     role_source: paperclips/projects/uaudit/overlays/codex/UWAQAEngineer.md
@@ -168,6 +198,9 @@ agents:
     target: codex
     reportsTo: UWACTO
     platform: android
+    model: gpt-6-sol
+    modelReasoningEffort: low
+    maxTurnsPerRun: 60
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
   - agent_name: UWIInfraEngineer
     role_source: paperclips/projects/uaudit/overlays/codex/UWIInfraEngineer.md
@@ -175,6 +208,9 @@ agents:
     target: codex
     reportsTo: UWICTO
     platform: ios
+    model: gpt-6-sol
+    modelReasoningEffort: medium
+    maxTurnsPerRun: 60
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
   - agent_name: UWAInfraEngineer
     role_source: paperclips/projects/uaudit/overlays/codex/UWAInfraEngineer.md
@@ -182,6 +218,29 @@ agents:
     target: codex
     reportsTo: UWACTO
     platform: android
+    model: gpt-6-sol
+    modelReasoningEffort: medium
+    maxTurnsPerRun: 60
+    primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
+  - agent_name: UWIDeliveryOperator
+    role_source: paperclips/projects/uaudit/overlays/codex/UWIDeliveryOperator.md
+    profile: custom
+    target: codex
+    reportsTo: UWICTO
+    platform: ios
+    model: gpt-6-luna
+    modelReasoningEffort: low
+    maxTurnsPerRun: 40
+    primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
+  - agent_name: UWADeliveryOperator
+    role_source: paperclips/projects/uaudit/overlays/codex/UWADeliveryOperator.md
+    profile: custom
+    target: codex
+    reportsTo: UWACTO
+    platform: android
+    model: gpt-6-luna
+    modelReasoningEffort: low
+    maxTurnsPerRun: 40
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
   - agent_name: UWIResearchAgent
     role_source: paperclips/projects/uaudit/overlays/codex/UWIResearchAgent.md
@@ -189,6 +248,9 @@ agents:
     target: codex
     reportsTo: UWICTO
     platform: ios
+    model: gpt-6-luna
+    modelReasoningEffort: medium
+    maxTurnsPerRun: 50
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
   - agent_name: UWAResearchAgent
     role_source: paperclips/projects/uaudit/overlays/codex/UWAResearchAgent.md
@@ -196,6 +258,9 @@ agents:
     target: codex
     reportsTo: UWACTO
     platform: android
+    model: gpt-6-luna
+    modelReasoningEffort: medium
+    maxTurnsPerRun: 50
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
   - agent_name: UWITechnicalWriter
     role_source: paperclips/projects/uaudit/overlays/codex/UWITechnicalWriter.md
@@ -203,6 +268,9 @@ agents:
     target: codex
     reportsTo: UWICTO
     platform: ios
+    model: gpt-6-luna
+    modelReasoningEffort: low
+    maxTurnsPerRun: 30
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
   - agent_name: UWATechnicalWriter
     role_source: paperclips/projects/uaudit/overlays/codex/UWATechnicalWriter.md
@@ -210,4 +278,7 @@ agents:
     target: codex
     reportsTo: UWACTO
     platform: android
+    model: gpt-6-luna
+    modelReasoningEffort: low
+    maxTurnsPerRun: 30
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android

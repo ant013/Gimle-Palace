@@ -396,11 +396,11 @@ Store each response atomically at its mapped path. It must contain only the stri
 
 Run `python3 "$HELPER" aggregate --run-dir "$RUN"`. It alone validates all slots/run binding, deduplicates, counts, decides status/verdict, and atomically publishes canonical findings, `telegram-summary.txt`, optional compact Russian `audit.md`, then `delivery-summary.json` last. Only `complete+0+0 limitations` has no MD; any limitation requires the report/document path, `partial` always has MD and is explicitly incomplete, and `blocked` publishes no completion payload. Android variant impact belongs in report evidence/technical information when applicable. Do not derive findings from Markdown or edit helper outputs.
 
-Atomically create strict `$RUN/delivery-handoff.json` with only `schema_version:1`, `delivery_contract:"uaudit-delivery/v1"`, exact `run_dir`, `delivery_summary`, `issue_identifier`, `platform`, `audit_kind`, and context `source_ref`. Choose message only for validated `complete+0+report:null`, otherwise document; run `python3 "$HELPER" verify-payload --run-dir "$RUN" --handoff "$RUN/delivery-handoff.json" --expected-mode <message|document>`. Then assign `5f0709f8-0b05-43e7-8711-6df618b95f69` with `mode=pr_delivery`, contract and exact handoff/summary paths. Only after successful assignment API response atomically create `status/handoff.done`; it never means delivered.
+Atomically create strict `$RUN/delivery-handoff.json` with only `schema_version:1`, `delivery_contract:"uaudit-delivery/v1"`, exact `run_dir`, `delivery_summary`, `issue_identifier`, `platform`, `audit_kind`, and context `source_ref`. Choose message only for validated `complete+0+report:null`, otherwise document; run `python3 "$HELPER" verify-payload --run-dir "$RUN" --handoff "$RUN/delivery-handoff.json" --expected-mode <message|document>`. Then assign `UWADeliveryOperator` with `mode=pr_delivery`, contract and exact handoff/summary paths. Only after successful assignment API response atomically create `status/handoff.done`; it never means delivered.
 
 ### Smoke mode
 
-`UAudit subagent smoke` is not v1 completion. Use synthetic `smoke/{pr.json,pr.diff,subagents/,summary.json}`, the same exact-agent/timeouts, and block on missing/malformed/secret-reading/writing reviewers. Summary records expected/completed count, exact names, generic/default usage, and one outcome each without diff/secrets. Hand it to `UWAInfraEngineer`; unversioned delivery requires the exact legacy allowlist/report digest or fails closed.
+`UAudit subagent smoke` is not v1 completion. Use synthetic `smoke/{pr.json,pr.diff,subagents/,summary.json}`, the same exact-agent/timeouts, and block on missing/malformed/secret-reading/writing reviewers. Summary records expected/completed count, exact names, generic/default usage, and one outcome each without diff/secrets. Hand it to `UWADeliveryOperator`; unversioned delivery requires the exact legacy allowlist/report digest or fails closed.
 
 
 
@@ -420,12 +420,14 @@ Atomically create strict `$RUN/delivery-handoff.json` with only `schema_version:
 
 ## Daily control-plane recovery
 
-For `mode=daily_*`, set `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py`. Once its durable artifact is valid, retry a failed handoff comment once and run `python3 "$HELPER" record-operational-warning --run-dir "$RUN" --code paperclip-comment --text <Russian-warning>`. Then PATCH the exact next assignee anyway; a comment-only failure never blocks a daily audit, requests Board, or reruns a valid stage. Without a comment, the recipient derives the sole next mode from run markers. Retry a failed PATCH once; only failed ownership transfer may block.
+For `mode=daily_*`, set `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py`. After a valid durable artifact, retry a failed comment once, then run `python3 "$HELPER" record-operational-warning --run-dir "$RUN" --code paperclip-comment --text <Russian-warning>` and PATCH the exact next assignee anyway; a comment-only failure never blocks a daily audit. The recipient derives the next mode from markers. Retry a failed PATCH once. With a substantive report, transfer failure is operational: preserve the report and leave handoff retryable, never blocked.
 
-After a verified receipt and `cursor.done`, the same warning rule means a final comment failure cannot delay `workflow.done` or release of the matching lock. Post Status/Evidence/Blockers/Next owner when possible.
+After a verified receipt and `cursor.done`, a final comment failure cannot delay `workflow.done` or release of the matching lock.
+
+Once a substantive report exists, operational failures cannot delete, suppress, invalidate, or block it; preserve its result and keep delivery retryable.
 
 ## Report Delivery
 
 Non-delivery roles save Markdown in the writable artifact root and hand off to
-`UWAInfraEngineer` (`UWIInfraEngineer` for iOS-only
+`UWADeliveryOperator` (`UWIDeliveryOperator` for iOS-only
 issues). Do not call Telegram/bot/plugin notification actions.

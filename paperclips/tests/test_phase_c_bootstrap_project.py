@@ -157,6 +157,18 @@ def test_manifest_can_require_codex_instruction_file_without_changing_legacy_def
     assert "requireInstructionsFile" in text[managed_start:managed_end]
 
 
+def test_manifest_can_set_per_agent_max_turns_with_compatible_default():
+    text = SCRIPT.read_text()
+
+    assert ".maxTurnsPerRun // 200" in text
+    assert "maxTurnsPerRun for $agent_name must be a positive integer" in text
+    assert '--argjson maxTurnsPerRun "$agent_max_turns"' in text
+    assert "maxTurnsPerRun: $maxTurnsPerRun" in text
+    managed_start = text.index("managed_config_filter='")
+    managed_end = text.index("current_managed=", managed_start)
+    assert "maxTurnsPerRun" in text[managed_start:managed_end]
+
+
 def test_canary_cto_uses_workflow_role():
     text = SCRIPT.read_text()
     assert 'workflow_role == "inner_orchestrator"' in text

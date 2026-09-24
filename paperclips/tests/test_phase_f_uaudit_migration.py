@@ -106,9 +106,9 @@ def test_uaudit_manifest_no_abs_paths():
     assert not matches, f"abs paths in manifest: {matches}"
 
 
-def test_uaudit_manifest_has_17_agents():
+def test_uaudit_manifest_has_19_agents():
     data = yaml.safe_load(UAUDIT_MANIFEST.read_text())
-    assert len(data["agents"]) == 17
+    assert len(data["agents"]) == 19
 
 
 def test_uaudit_manifest_all_agents_codex_target():
@@ -350,6 +350,8 @@ _EXPECTED_PROFILES = {
     "UWAQAEngineer": "qa",
     "UWIInfraEngineer": "implementer",
     "UWAInfraEngineer": "implementer",
+    "UWIDeliveryOperator": "custom",
+    "UWADeliveryOperator": "custom",
     "UWIResearchAgent": "research",
     "UWAResearchAgent": "research",
     "UWITechnicalWriter": "writer",

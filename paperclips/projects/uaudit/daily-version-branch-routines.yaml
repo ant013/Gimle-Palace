@@ -38,7 +38,7 @@ routines:
       research_agent: UWAResearchAgent
       qa_agent: UWAQAEngineer
       aggregator: UWACTO
-      delivery_agent: UWAInfraEngineer
+      delivery_agent: UWADeliveryOperator
     initialization_allowed: false
     codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
 
@@ -71,6 +71,6 @@ routines:
       research_agent: UWIResearchAgent
       qa_agent: UWIQAEngineer
       aggregator: UWICTO
-      delivery_agent: UWIInfraEngineer
+      delivery_agent: UWIDeliveryOperator
     initialization_allowed: false
     codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios

@@ -1,6 +1,6 @@
 # UAudit Platform Dispatcher - Android
 
-Coordinate Android PR/daily intake; never send Telegram/update cursor. Runs locally on iMac: never SSH back to `imac-ssh.ant013.work`. `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py` and `RESOLVER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_release_resolver.py` are iMac paths. External: `IMAC="${IMAC_HOST:-imac-ssh.ant013.work}"; ssh "$IMAC" -p 2222`; never port `22`. Only `UWAInfraEngineer` delivers.
+Coordinate Android PR/daily intake; never send Telegram/update cursor. Runs locally on iMac: never SSH back to `imac-ssh.ant013.work`. `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py` and `RESOLVER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_release_resolver.py` are iMac paths. External: `IMAC="${IMAC_HOST:-imac-ssh.ant013.work}"; ssh "$IMAC" -p 2222`; never port `22`. Only `UWADeliveryOperator` delivers.
 
 ## PR routing
 
@@ -39,11 +39,11 @@ Handle Android audits from `daily-version-branch-routines.yaml`; retain routine 
      ```
   8. Run resolver: `python3 "$RESOLVER" --input <(echo "$JSON_INPUT")` and capture JSON output.
 - Run the resolver directly on iMac and follow its JSON: contiguous `daily|bridge|transition` starts daily; recovery kinds are forced-full with no cursor advance. Never block a proven range by size.
-- Resolver `no_change` assigns `UWAInfraEngineer` `mode=daily_status` with head/slot; no audit run or cursor mutation. Missing, rewrite, skipped, or unproven evidence blocks.
-- Explicit initialization: assign `5f0709f8-0b05-43e7-8711-6df618b95f69` `mode=initialize_cursor` with head/routine; no run/message.
+- Resolver `no_change` assigns `UWADeliveryOperator` `mode=daily_status` with head/slot; no audit run or cursor mutation. Missing, rewrite, skipped, or unproven evidence blocks.
+- Explicit initialization: assign `UWADeliveryOperator` `mode=initialize_cursor` with head/routine; no run/message.
 - Valid range: set `$RUN=/Users/Shared/UnstoppableAudit/runs/UNS-<issueNumber>-audit`, `LOCK=/Users/Shared/UnstoppableAudit/state/locks/daily-android-version-0.52.lock`; `mkdir "$LOCK"` (existing blocks; never steal). Atomically write metadata/four inputs with selected branch/FROM/TO; run `bind-context --run-dir`, then assign `18f0ee3e-0fd9-40e7-a3b4-99a4ad3ab400` `mode=daily_code_audit`.
 
-Chain: `UWAKotlinAuditor -> UWASecurityAuditor -> UWACryptoAuditor -> UWAInfraEngineer -> optional UWAResearchAgent -> UWAQAEngineer -> UWACTO -> UWAInfraEngineer`; do not use `uaudit-*` subagents for daily real-delta audits.
+Chain: `UWAKotlinAuditor -> UWASecurityAuditor -> UWACryptoAuditor -> UWAInfraEngineer -> optional UWAResearchAgent -> UWAQAEngineer -> UWACTO -> UWADeliveryOperator`; do not use `uaudit-*` subagents for daily real-delta audits.
 
 ## Explicit forced full-range intake
 
@@ -55,7 +55,7 @@ On `mode=daily_aggregate`, require bound v1 `code.findings.json`, `security.find
 
 Run `python3 "$HELPER" aggregate --run-dir "$RUN"` (`--research-required` iff invoked); never count/render. Only `complete+0+0 limitations` is ready as a message. Any limitation requires the report/document path. Other daily/forced-full runs write canonical findings, Russian `audit-final.ru.md`, and `translation-input.json`, then return `translation_required` with no delivery summary; assign `ae159ee7-05e2-48af-abf9-5bbeef4017c4` `mode=daily_audit_translation`.
 
-On `mode=daily_finalize_translation`, run `python3 "$HELPER" finalize-translation --run-dir "$RUN"`; it validates English and publishes summary last. When ready, atomically write v1 `$RUN/delivery-handoff.json` with `schema_version,delivery_contract,run_dir,delivery_summary,issue_identifier,platform,audit_kind,source_ref`; run `python3 "$HELPER" verify-payload --run-dir "$RUN" --handoff "$RUN/delivery-handoff.json" --expected-mode <message|document>`, assign `5f0709f8-0b05-43e7-8711-6df618b95f69` `mode=daily_delivery`.
+On `mode=daily_finalize_translation`, run `python3 "$HELPER" finalize-translation --run-dir "$RUN"`; it validates English and publishes summary last. When ready, atomically write v1 `$RUN/delivery-handoff.json` with `schema_version,delivery_contract,run_dir,delivery_summary,issue_identifier,platform,audit_kind,source_ref`; run `python3 "$HELPER" verify-payload --run-dir "$RUN" --handoff "$RUN/delivery-handoff.json" --expected-mode <message|document>`, assign `UWADeliveryOperator` `mode=daily_delivery`.
 
 
 
@@ -75,14 +75,16 @@ On `mode=daily_finalize_translation`, run `python3 "$HELPER" finalize-translatio
 
 ## Daily control-plane recovery
 
-For `mode=daily_*`, set `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py`. Once its durable artifact is valid, retry a failed handoff comment once and run `python3 "$HELPER" record-operational-warning --run-dir "$RUN" --code paperclip-comment --text <Russian-warning>`. Then PATCH the exact next assignee anyway; a comment-only failure never blocks a daily audit, requests Board, or reruns a valid stage. Without a comment, the recipient derives the sole next mode from run markers. Retry a failed PATCH once; only failed ownership transfer may block.
+For `mode=daily_*`, set `HELPER=/Users/Shared/UnstoppableAudit/runs/.uaudit-tools/uaudit_delivery_contract.py`. After a valid durable artifact, retry a failed comment once, then run `python3 "$HELPER" record-operational-warning --run-dir "$RUN" --code paperclip-comment --text <Russian-warning>` and PATCH the exact next assignee anyway; a comment-only failure never blocks a daily audit. The recipient derives the next mode from markers. Retry a failed PATCH once. With a substantive report, transfer failure is operational: preserve the report and leave handoff retryable, never blocked.
 
-After a verified receipt and `cursor.done`, the same warning rule means a final comment failure cannot delay `workflow.done` or release of the matching lock. Post Status/Evidence/Blockers/Next owner when possible.
+After a verified receipt and `cursor.done`, a final comment failure cannot delay `workflow.done` or release of the matching lock.
+
+Once a substantive report exists, operational failures cannot delete, suppress, invalidate, or block it; preserve its result and keep delivery retryable.
 
 ## Report Delivery
 
 Non-delivery roles save Markdown in the writable artifact root and hand off to
-`UWAInfraEngineer` (`UWIInfraEngineer` for iOS-only
+`UWADeliveryOperator` (`UWIDeliveryOperator` for iOS-only
 issues). Do not call Telegram/bot/plugin notification actions.
 
 
