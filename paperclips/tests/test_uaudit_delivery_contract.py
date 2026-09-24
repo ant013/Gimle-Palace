@@ -330,6 +330,22 @@ def write_handoff(fixture: dict) -> Path:
 def record(fixture: dict, mode: str, *, route: str = "UAudit", ok: bool = True) -> dict:
     if not (fixture["run"] / "delivery-handoff.json").exists():
         write_handoff(fixture)
+    summary = read_json(fixture["run"] / "delivery-summary.json")
+    expected_mode = "message" if summary["report"] is None else "document"
+    call(
+        fixture["helper"],
+        "verify-payload",
+        "--run-dir",
+        fixture["run"],
+        "--handoff",
+        fixture["run"] / "delivery-handoff.json",
+        "--expected-mode",
+        expected_mode,
+        "--company-id",
+        "company-123",
+        "--agent-id",
+        "agent-123",
+    )
     response = fixture["run"] / "delivery-plugin-response.json"
     write_json(
         response,
@@ -800,14 +816,30 @@ def test_daily_document_requires_bound_english_translation_before_delivery(tmp_p
     payload = call(
         fixture["helper"], "verify-payload", "--run-dir", fixture["run"],
         "--handoff", write_handoff(fixture), "--expected-mode", "document",
+        "--company-id", "company-123", "--agent-id", "agent-123",
     )
     assert payload["english_report_file"].endswith("audit-final.en.md")
+    russian_payload = read_json(fixture["run"] / "payload.ru.json")
+    english_payload = read_json(fixture["run"] / "payload.en.json")
+    assert russian_payload["params"]["markdownContent"] == (
+        fixture["run"] / "audit-final.ru.md"
+    ).read_text()
+    assert english_payload["params"]["markdownContent"] == (
+        fixture["run"] / "audit-final.en.md"
+    ).read_text()
+    assert russian_payload["params"]["markdownContent"].strip()
+    assert english_payload["params"]["markdownContent"].strip()
 
 
 def test_bilingual_delivery_records_russian_then_recovers_english_only(tmp_path: Path):
     fixture = prepare_run(tmp_path, kind="daily_delta", findings={"code": [finding()]})
     aggregate(fixture)
     write_handoff(fixture)
+    call(
+        fixture["helper"], "verify-payload", "--run-dir", fixture["run"],
+        "--handoff", fixture["run"] / "delivery-handoff.json", "--expected-mode", "document",
+        "--company-id", "company-123", "--agent-id", "agent-123",
+    )
     response = fixture["run"] / "delivery-plugin-response.json"
     write_json(response, {
         "ok": True, "mode": "document", "routeSource": "file_route", "routeName": "UAudit",
@@ -827,7 +859,58 @@ def test_bilingual_delivery_records_russian_then_recovers_english_only(tmp_path:
     assert receipt["english_message_id"] == 322
     assert stored["english_message_id"] == 322
     assert stored["english_report_sha256"] == read_json(fixture["run"] / "delivery-summary.json")["english_report"]["sha256"]
+    assert stored["payload_sha256"] == sha256_path(fixture["run"] / "payload.ru.json")
+    assert stored["english_payload_sha256"] == sha256_path(fixture["run"] / "payload.en.json")
     assert not (fixture["run"] / "delivery-progress.json").exists()
+
+
+def test_document_response_without_persisted_payload_cannot_create_receipt(tmp_path: Path):
+    fixture = prepare_run(tmp_path, findings={"security": [finding()]})
+    aggregate(fixture)
+    write_handoff(fixture)
+    response = fixture["run"] / "delivery-plugin-response.json"
+    write_json(response, {
+        "ok": True, "mode": "document", "routeSource": "file_route", "routeName": "UAudit",
+        "issueIdentifier": "UNS-123", "projectKey": "UNS", "messageId": 321,
+    })
+
+    failure = call(
+        fixture["helper"], "record-delivery", "--run-dir", fixture["run"],
+        "--response", response, "--delivered-at", DELIVERED_AT, ok=False,
+    )
+
+    assert "payload.ru.json" in failure["error"]
+    assert not (fixture["run"] / "delivery-result.json").exists()
+    assert not (fixture["run"] / "status/telegram.done").exists()
+
+
+def test_empty_document_payload_cannot_create_receipt(tmp_path: Path):
+    fixture = prepare_run(tmp_path, findings={"security": [finding()]})
+    aggregate(fixture)
+    write_handoff(fixture)
+    call(
+        fixture["helper"], "verify-payload", "--run-dir", fixture["run"],
+        "--handoff", fixture["run"] / "delivery-handoff.json", "--expected-mode", "document",
+        "--company-id", "company-123", "--agent-id", "agent-123",
+    )
+    payload_path = fixture["run"] / "payload.ru.json"
+    payload = read_json(payload_path)
+    payload["params"]["markdownContent"] = ""
+    write_json(payload_path, payload)
+    response = fixture["run"] / "delivery-plugin-response.json"
+    write_json(response, {
+        "ok": True, "mode": "document", "routeSource": "file_route", "routeName": "UAudit",
+        "issueIdentifier": "UNS-123", "projectKey": "UNS", "messageId": 321,
+    })
+
+    failure = call(
+        fixture["helper"], "record-delivery", "--run-dir", fixture["run"],
+        "--response", response, "--delivered-at", DELIVERED_AT, ok=False,
+    )
+
+    assert "immutable delivery payload" in failure["error"]
+    assert not (fixture["run"] / "delivery-result.json").exists()
+    assert not (fixture["run"] / "status/telegram.done").exists()
 
 
 def test_existing_single_language_daily_summary_remains_reconcilable(tmp_path: Path):

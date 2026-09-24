@@ -119,6 +119,8 @@ PAYLOAD_ARTIFACTS = (
     "audit-final.en.md",
     "translation-input.json",
     "translation-result.json",
+    "payload.ru.json",
+    "payload.en.json",
     "delivery-progress.json",
     "delivery-summary.json",
 )
@@ -1430,7 +1432,10 @@ def _validate_receipt(run_dir: Path, summary: Mapping[str, Any], summary_sha: st
     ]
     if bilingual:
         keys.extend(("english_message_id", "english_report_sha256"))
-    _exact_keys(receipt, tuple(keys), where="delivery-result.json")
+    payload_keys = ["payload_sha256"]
+    if bilingual:
+        payload_keys.append("english_payload_sha256")
+    _exact_keys(receipt, tuple(keys), tuple(payload_keys), where="delivery-result.json")
     if receipt["schema_version"] != SCHEMA_VERSION:
         _fail("unsupported receipt schema_version")
     expected_mode = "message" if summary["report"] is None else "document"
@@ -1454,6 +1459,11 @@ def _validate_receipt(run_dir: Path, summary: Mapping[str, Any], summary_sha: st
             _fail("receipt mismatch: english_report_sha256")
         if not _is_int(receipt["english_message_id"]) or receipt["english_message_id"] <= 0:
             _fail("receipt english_message_id must be a positive integer")
+    if "payload_sha256" in receipt:
+        payloads = _validate_delivery_payloads(run_dir, summary)
+        for field, expected_value in payloads.items():
+            if receipt.get(field) != expected_value:
+                _fail(f"receipt mismatch: {field}")
     _iso_utc(receipt["delivered_at"], "receipt.delivered_at")
     return receipt
 
@@ -1466,6 +1476,7 @@ def _validate_delivery_progress(summary: Mapping[str, Any], summary_sha: str, va
             "schema_version", "summary_sha256", "run_binding_sha256", "message_id",
             "telegram_text_sha256", "report_sha256",
         ),
+        ("payload_sha256",),
         where="delivery-progress.json",
     )
     expected = {
@@ -1750,6 +1761,138 @@ def verify_payload(args: argparse.Namespace) -> dict[str, Any]:
         if summary.get("english_report") is not None:
             result["english_report_file"] = str((run_dir / summary["english_report"]["file"]).resolve())
             result["english_report_sha256"] = summary["english_report"]["sha256"]
+    if (args.company_id is None) != (args.agent_id is None):
+        _fail("--company-id and --agent-id must be supplied together")
+    if args.company_id is not None:
+        payloads = _persist_delivery_payloads(
+            run_dir,
+            summary,
+            company_id=args.company_id,
+            agent_id=args.agent_id,
+        )
+        result.update(payloads)
+    return result
+
+
+def _delivery_payload(
+    run_dir: Path,
+    summary: Mapping[str, Any],
+    report: Mapping[str, Any] | None,
+    *,
+    company_id: str,
+    agent_id: str,
+) -> dict[str, Any]:
+    company_id = _bounded_string(company_id, "payload companyId", maximum=128)
+    agent_id = _bounded_string(agent_id, "payload agentId", maximum=128)
+    text = _read_bytes(run_dir / "telegram-summary.txt", maximum=899).decode("utf-8").removesuffix("\n")
+    params: dict[str, Any] = {
+        "companyId": company_id,
+        "agentId": agent_id,
+        "issueIdentifier": summary["issue_identifier"],
+        "text": text,
+    }
+    if report is not None:
+        report_path = run_dir / report["file"]
+        report_raw = _read_bytes(report_path)
+        try:
+            content = report_raw.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise ContractError(f"{report['file']} is not valid UTF-8") from exc
+        if not content.strip():
+            _fail(f"{report['file']} is empty")
+        if _sha256_bytes(report_raw) != report["sha256"]:
+            _fail(f"{report['file']} digest mismatch while building payload")
+        params.update({
+            "markdownFileName": report["file"],
+            "markdownContent": content,
+        })
+    return {"params": params}
+
+
+def _persist_delivery_payloads(
+    run_dir: Path,
+    summary: Mapping[str, Any],
+    *,
+    company_id: str,
+    agent_id: str,
+) -> dict[str, Any]:
+    russian = _delivery_payload(
+        run_dir,
+        summary,
+        summary["report"],
+        company_id=company_id,
+        agent_id=agent_id,
+    )
+    russian_raw = _canonical_bytes(russian)
+    _atomic_write(run_dir / "payload.ru.json", russian_raw)
+    result = {
+        "payload_file": str((run_dir / "payload.ru.json").resolve()),
+        "payload_sha256": _sha256_bytes(russian_raw),
+    }
+    english = summary.get("english_report")
+    if english is None:
+        _safe_unlink(run_dir / "payload.en.json")
+    else:
+        english_payload = _delivery_payload(
+            run_dir,
+            summary,
+            english,
+            company_id=company_id,
+            agent_id=agent_id,
+        )
+        english_raw = _canonical_bytes(english_payload)
+        _atomic_write(run_dir / "payload.en.json", english_raw)
+        result.update({
+            "english_payload_file": str((run_dir / "payload.en.json").resolve()),
+            "english_payload_sha256": _sha256_bytes(english_raw),
+        })
+    return result
+
+
+def _validate_payload_file(
+    run_dir: Path,
+    summary: Mapping[str, Any],
+    filename: str,
+    report: Mapping[str, Any] | None,
+) -> tuple[dict[str, Any], str]:
+    path = run_dir / filename
+    value = _expect_object(_load_json(path), filename)
+    _exact_keys(value, ("params",), where=filename)
+    params = _expect_object(value["params"], f"{filename}.params")
+    required = ("companyId", "agentId", "issueIdentifier", "text")
+    if report is not None:
+        required += ("markdownFileName", "markdownContent")
+    _exact_keys(params, required, where=f"{filename}.params")
+    expected = _delivery_payload(
+        run_dir,
+        summary,
+        report,
+        company_id=params["companyId"],
+        agent_id=params["agentId"],
+    )
+    raw = _read_bytes(path)
+    if value != expected or raw != _canonical_bytes(expected):
+        _fail(f"{filename} does not match the immutable delivery payload")
+    return value, _sha256_bytes(raw)
+
+
+def _validate_delivery_payloads(run_dir: Path, summary: Mapping[str, Any]) -> dict[str, str]:
+    russian, russian_sha = _validate_payload_file(
+        run_dir, summary, "payload.ru.json", summary["report"]
+    )
+    result = {"payload_sha256": russian_sha}
+    english = summary.get("english_report")
+    if english is None:
+        if (run_dir / "payload.en.json").exists():
+            _fail("unexpected payload.en.json without an English report")
+        return result
+    english_payload, english_sha = _validate_payload_file(
+        run_dir, summary, "payload.en.json", english
+    )
+    for field in ("companyId", "agentId", "issueIdentifier", "text"):
+        if english_payload["params"][field] != russian["params"][field]:
+            _fail(f"English payload mismatch: {field}")
+    result["english_payload_sha256"] = english_sha
     return result
 
 
@@ -1805,6 +1948,7 @@ def record_delivery(args: argparse.Namespace) -> dict[str, Any]:
     response_path = args.response.resolve()
     if response_path != run_dir / "delivery-plugin-response.json":
         _fail("plugin response must be $RUN/delivery-plugin-response.json")
+    payloads = _validate_delivery_payloads(run_dir, summary)
     data = _plugin_data(_load_json(response_path))
     expected_mode = "message" if summary["report"] is None else "document"
     required = {
@@ -1829,6 +1973,10 @@ def record_delivery(args: argparse.Namespace) -> dict[str, Any]:
         )
         if progress is not None and message_id != progress["message_id"]:
             _fail("Russian plugin response does not match delivery progress")
+        if progress is not None and progress.get("payload_sha256") not in (
+            None, payloads["payload_sha256"]
+        ):
+            _fail("Russian plugin response payload does not match delivery progress")
         if progress is None and args.english_response is None:
             _atomic_json(progress_path, {
                 "schema_version": SCHEMA_VERSION,
@@ -1837,6 +1985,7 @@ def record_delivery(args: argparse.Namespace) -> dict[str, Any]:
                 "message_id": message_id,
                 "telegram_text_sha256": summary["telegram_text"]["sha256"],
                 "report_sha256": summary["report"]["sha256"],
+                "payload_sha256": payloads["payload_sha256"],
             })
             return {"status": "english_pending", "message_id": message_id, "summary_sha256": summary_sha}
         if args.english_response is None:
@@ -1862,11 +2011,13 @@ def record_delivery(args: argparse.Namespace) -> dict[str, Any]:
         "message_id": message_id,
         "telegram_text_sha256": summary["telegram_text"]["sha256"],
         "report_sha256": None if summary["report"] is None else summary["report"]["sha256"],
+        "payload_sha256": payloads["payload_sha256"],
         "delivered_at": delivered_at,
     }
     if summary.get("english_report") is not None:
         receipt["english_message_id"] = english_message_id
         receipt["english_report_sha256"] = summary["english_report"]["sha256"]
+        receipt["english_payload_sha256"] = payloads["english_payload_sha256"]
     receipt_raw = _canonical_bytes(receipt)
     _atomic_write(receipt_path, receipt_raw)
     _safe_unlink(progress_path)
@@ -2233,6 +2384,8 @@ def build_parser() -> argparse.ArgumentParser:
     verify.add_argument("--run-dir", type=_path, required=True)
     verify.add_argument("--handoff", type=_path, required=True)
     verify.add_argument("--expected-mode", choices=("message", "document"), required=True)
+    verify.add_argument("--company-id")
+    verify.add_argument("--agent-id")
     verify.set_defaults(func=verify_payload)
 
     record = subparsers.add_parser("record-delivery", help="validate plugin response and record receipt")

@@ -71,7 +71,7 @@
   "project": "uaudit",
   "schemaVersion": 1,
   "sourceManifest": "paperclips/projects/uaudit/paperclip-agent-assembly.yaml",
-  "sourceManifestSha256": "a8679c5d733bd3432985471954cfedb0fc042156e649c0e51d92d2fb128d13f5",
+  "sourceManifestSha256": "f2290df11a3844d4a409108641e0107879c1b06ed83483c563096cd1ce7bc0d0",
   "targets": {
     "codex": {
       "adapterType": "codex_local",
@@ -290,7 +290,7 @@
         {
           "agentId": "",
           "agentName": "UWIDeliveryOperator",
-          "bytes": 9788,
+          "bytes": 10504,
           "family": "minimal",
           "lines": 81,
           "output": "paperclips/dist/uaudit/codex/UWIDeliveryOperator.md",
@@ -299,14 +299,14 @@
             "custom"
           ],
           "roleId": "codex:uwi-delivery-operator",
-          "sha256": "98dcfe2d2d923d10e869c8da4119143c35c15d6f76f46aa6cd8191d78c19bef2",
+          "sha256": "4e1e0b9b692f9f22785f3b13b80772269bdc76ba38e43cd059845109ddefca7c",
           "source": "paperclips/projects/uaudit/overlays/codex/UWIDeliveryOperator.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "",
           "agentName": "UWADeliveryOperator",
-          "bytes": 9824,
+          "bytes": 10540,
           "family": "minimal",
           "lines": 81,
           "output": "paperclips/dist/uaudit/codex/UWADeliveryOperator.md",
@@ -315,7 +315,7 @@
             "custom"
           ],
           "roleId": "codex:uwa-delivery-operator",
-          "sha256": "b836f3369e322e5b6c0d628e3155d436770a629da3a184921bdd91868bf22c18",
+          "sha256": "f480bb9ba5c3612b7497794bb798d36819c302e746fb6c159440c8aebc2d1034",
           "source": "paperclips/projects/uaudit/overlays/codex/UWADeliveryOperator.md",
           "workspaceCwd": ""
         },

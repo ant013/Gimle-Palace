@@ -272,25 +272,25 @@ def test_uaudit_codex_agents_get_an_explicit_supported_model_when_unset():
 
 def test_uaudit_manifest_pins_token_efficient_model_matrix():
     expected = {
-        "AUCEO": ("gpt-6-astra", "medium", 80),
-        "UWICTO": ("gpt-6-luna", "low", 40),
-        "UWACTO": ("gpt-6-luna", "low", 40),
-        "UWISwiftAuditor": ("gpt-6-sol", "medium", 80),
-        "UWAKotlinAuditor": ("gpt-6-sol", "medium", 80),
-        "UWISecurityAuditor": ("gpt-6-sol", "medium", 80),
-        "UWASecurityAuditor": ("gpt-6-sol", "medium", 80),
-        "UWICryptoAuditor": ("gpt-6-sol", "medium", 80),
-        "UWACryptoAuditor": ("gpt-6-sol", "medium", 80),
-        "UWIInfraEngineer": ("gpt-6-sol", "medium", 60),
-        "UWAInfraEngineer": ("gpt-6-sol", "medium", 60),
-        "UWIQAEngineer": ("gpt-6-sol", "low", 60),
-        "UWAQAEngineer": ("gpt-6-sol", "low", 60),
-        "UWIResearchAgent": ("gpt-6-luna", "medium", 50),
-        "UWAResearchAgent": ("gpt-6-luna", "medium", 50),
-        "UWITechnicalWriter": ("gpt-6-luna", "low", 30),
-        "UWATechnicalWriter": ("gpt-6-luna", "low", 30),
-        "UWIDeliveryOperator": ("gpt-6-luna", "low", 40),
-        "UWADeliveryOperator": ("gpt-6-luna", "low", 40),
+        "AUCEO": ("gpt-5.6-sol", "medium", 80),
+        "UWICTO": ("gpt-5.6-terra", "low", 40),
+        "UWACTO": ("gpt-5.6-terra", "low", 40),
+        "UWISwiftAuditor": ("gpt-5.6-sol", "medium", 80),
+        "UWAKotlinAuditor": ("gpt-5.6-sol", "medium", 80),
+        "UWISecurityAuditor": ("gpt-5.6-sol", "medium", 80),
+        "UWASecurityAuditor": ("gpt-5.6-sol", "medium", 80),
+        "UWICryptoAuditor": ("gpt-5.6-sol", "medium", 80),
+        "UWACryptoAuditor": ("gpt-5.6-sol", "medium", 80),
+        "UWIInfraEngineer": ("gpt-5.6-sol", "medium", 60),
+        "UWAInfraEngineer": ("gpt-5.6-sol", "medium", 60),
+        "UWIQAEngineer": ("gpt-5.6-sol", "low", 60),
+        "UWAQAEngineer": ("gpt-5.6-sol", "low", 60),
+        "UWIResearchAgent": ("gpt-5.6-terra", "medium", 50),
+        "UWAResearchAgent": ("gpt-5.6-terra", "medium", 50),
+        "UWITechnicalWriter": ("gpt-5.6-terra", "low", 30),
+        "UWATechnicalWriter": ("gpt-5.6-terra", "low", 30),
+        "UWIDeliveryOperator": ("gpt-5.6-terra", "low", 40),
+        "UWADeliveryOperator": ("gpt-5.6-terra", "low", 40),
     }
     agents = {agent["agent_name"]: agent for agent in load_manifest()["agents"]}
     assert set(agents) == set(expected)
@@ -299,7 +299,11 @@ def test_uaudit_manifest_pins_token_efficient_model_matrix():
         assert agents[name]["model"] == model
         assert agents[name]["modelReasoningEffort"] == effort
         assert agents[name]["maxTurnsPerRun"] == turns
-    assert [name for name, agent in agents.items() if agent["model"] == "gpt-6-astra"] == ["AUCEO"]
+    assert load_manifest()["recovery"] == {
+        "model": "gpt-5.6-terra",
+        "preserve_primary_reasoning_effort": True,
+    }
+    assert all(agent["model"] in {"gpt-5.6-sol", "gpt-5.6-terra"} for agent in agents.values())
     for name in ("UWIDeliveryOperator", "UWADeliveryOperator"):
         assert agents[name]["paperclip_role"] == "general"
         assert agents[name]["paperclip_icon"] == "mail"
