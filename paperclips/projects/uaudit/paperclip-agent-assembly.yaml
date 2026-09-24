@@ -88,6 +88,10 @@ targets:
 compatibility:
   legacy_output_paths: false
 
+recovery:
+  model: gpt-5.6-terra
+  preserve_primary_reasoning_effort: true
+
 # Phase F migration (2026-05-17): UUIDs + abs paths + workspace_cwd moved to
 # ~/.paperclip/projects/uaudit/{bindings.yaml,paths.yaml}. Builder reads via
 # resolve_bindings dual-read (Phase D). reportsTo added for topological hire.
@@ -98,7 +102,7 @@ agents:
     profile: cto
     target: codex
     platform: all
-    model: gpt-6-astra
+    model: gpt-5.6-sol
     modelReasoningEffort: medium
     maxTurnsPerRun: 80
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
@@ -108,7 +112,7 @@ agents:
     target: codex
     reportsTo: AUCEO
     platform: ios
-    model: gpt-6-luna
+    model: gpt-5.6-terra
     modelReasoningEffort: low
     maxTurnsPerRun: 40
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
@@ -118,7 +122,7 @@ agents:
     target: codex
     reportsTo: AUCEO
     platform: android
-    model: gpt-6-luna
+    model: gpt-5.6-terra
     modelReasoningEffort: low
     maxTurnsPerRun: 40
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
@@ -128,7 +132,7 @@ agents:
     target: codex
     reportsTo: UWICTO
     platform: ios
-    model: gpt-6-sol
+    model: gpt-5.6-sol
     modelReasoningEffort: medium
     maxTurnsPerRun: 80
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
@@ -138,7 +142,7 @@ agents:
     target: codex
     reportsTo: UWACTO
     platform: android
-    model: gpt-6-sol
+    model: gpt-5.6-sol
     modelReasoningEffort: medium
     maxTurnsPerRun: 80
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
@@ -148,7 +152,7 @@ agents:
     target: codex
     reportsTo: UWICTO
     platform: ios
-    model: gpt-6-sol
+    model: gpt-5.6-sol
     modelReasoningEffort: medium
     maxTurnsPerRun: 80
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
@@ -158,7 +162,7 @@ agents:
     target: codex
     reportsTo: UWACTO
     platform: android
-    model: gpt-6-sol
+    model: gpt-5.6-sol
     modelReasoningEffort: medium
     maxTurnsPerRun: 80
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
@@ -168,7 +172,7 @@ agents:
     target: codex
     reportsTo: UWICTO
     platform: ios
-    model: gpt-6-sol
+    model: gpt-5.6-sol
     modelReasoningEffort: medium
     maxTurnsPerRun: 80
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
@@ -178,7 +182,7 @@ agents:
     target: codex
     reportsTo: UWACTO
     platform: android
-    model: gpt-6-sol
+    model: gpt-5.6-sol
     modelReasoningEffort: medium
     maxTurnsPerRun: 80
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
@@ -188,7 +192,7 @@ agents:
     target: codex
     reportsTo: UWICTO
     platform: ios
-    model: gpt-6-sol
+    model: gpt-5.6-sol
     modelReasoningEffort: low
     maxTurnsPerRun: 60
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
@@ -198,7 +202,7 @@ agents:
     target: codex
     reportsTo: UWACTO
     platform: android
-    model: gpt-6-sol
+    model: gpt-5.6-sol
     modelReasoningEffort: low
     maxTurnsPerRun: 60
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
@@ -208,7 +212,7 @@ agents:
     target: codex
     reportsTo: UWICTO
     platform: ios
-    model: gpt-6-sol
+    model: gpt-5.6-sol
     modelReasoningEffort: medium
     maxTurnsPerRun: 60
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
@@ -218,7 +222,7 @@ agents:
     target: codex
     reportsTo: UWACTO
     platform: android
-    model: gpt-6-sol
+    model: gpt-5.6-sol
     modelReasoningEffort: medium
     maxTurnsPerRun: 60
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
@@ -230,7 +234,7 @@ agents:
     target: codex
     reportsTo: UWICTO
     platform: ios
-    model: gpt-6-luna
+    model: gpt-5.6-terra
     modelReasoningEffort: low
     maxTurnsPerRun: 40
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
@@ -242,7 +246,7 @@ agents:
     target: codex
     reportsTo: UWACTO
     platform: android
-    model: gpt-6-luna
+    model: gpt-5.6-terra
     modelReasoningEffort: low
     maxTurnsPerRun: 40
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
@@ -252,7 +256,7 @@ agents:
     target: codex
     reportsTo: UWICTO
     platform: ios
-    model: gpt-6-luna
+    model: gpt-5.6-terra
     modelReasoningEffort: medium
     maxTurnsPerRun: 50
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
@@ -262,7 +266,7 @@ agents:
     target: codex
     reportsTo: UWACTO
     platform: android
-    model: gpt-6-luna
+    model: gpt-5.6-terra
     modelReasoningEffort: medium
     maxTurnsPerRun: 50
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
@@ -272,7 +276,7 @@ agents:
     target: codex
     reportsTo: UWICTO
     platform: ios
-    model: gpt-6-luna
+    model: gpt-5.6-terra
     modelReasoningEffort: low
     maxTurnsPerRun: 30
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
@@ -282,7 +286,7 @@ agents:
     target: codex
     reportsTo: UWACTO
     platform: android
-    model: gpt-6-luna
+    model: gpt-5.6-terra
     modelReasoningEffort: low
     maxTurnsPerRun: 30
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
