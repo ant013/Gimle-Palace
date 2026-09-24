@@ -225,6 +225,8 @@ agents:
   - agent_name: UWIDeliveryOperator
     role_source: paperclips/projects/uaudit/overlays/codex/UWIDeliveryOperator.md
     profile: custom
+    paperclip_role: general
+    paperclip_icon: mail
     target: codex
     reportsTo: UWICTO
     platform: ios
@@ -235,6 +237,8 @@ agents:
   - agent_name: UWADeliveryOperator
     role_source: paperclips/projects/uaudit/overlays/codex/UWADeliveryOperator.md
     profile: custom
+    paperclip_role: general
+    paperclip_icon: mail
     target: codex
     reportsTo: UWACTO
     platform: android

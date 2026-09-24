@@ -300,6 +300,9 @@ def test_uaudit_manifest_pins_token_efficient_model_matrix():
         assert agents[name]["modelReasoningEffort"] == effort
         assert agents[name]["maxTurnsPerRun"] == turns
     assert [name for name, agent in agents.items() if agent["model"] == "gpt-6-astra"] == ["AUCEO"]
+    for name in ("UWIDeliveryOperator", "UWADeliveryOperator"):
+        assert agents[name]["paperclip_role"] == "general"
+        assert agents[name]["paperclip_icon"] == "mail"
 
 
 def test_delivery_ownership_is_split_from_infra_for_both_platforms():
