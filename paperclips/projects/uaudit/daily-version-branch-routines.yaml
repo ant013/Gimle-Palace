@@ -15,6 +15,7 @@ routines:
     title: UAudit daily Android version delta audit
     platform: android
     branch: version/0.52
+    base_branch: master
     schedule:
       enabled: true
       cron: "45 10 * * *"
@@ -48,6 +49,7 @@ routines:
     title: UAudit daily iOS version delta audit
     platform: ios
     branch: version/0.52
+    base_branch: master
     schedule:
       enabled: true
       cron: "0 11 * * *"

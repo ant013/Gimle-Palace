@@ -45,6 +45,8 @@ ROUTINE_REQUIRED_STRINGS = (
     "title",
     "platform",
     "branch",
+    "base_branch",
+    "repo_url",
     "repo_local_path_template",
     "cursor_path_template",
     "dispatcher",
@@ -125,6 +127,10 @@ def load_config(path: Path = DEFAULT_CONFIG) -> dict[str, Any]:
             raise ValueError(f"{path}: routines[{index}].platform must be android or ios")
         if not routine["branch"].startswith("version/"):
             raise ValueError(f"{path}: routines[{index}].branch must start with version/")
+        if routine["base_branch"] != "master":
+            raise ValueError(f"{path}: routines[{index}].base_branch must be master")
+        if not routine["repo_url"].startswith("https://"):
+            raise ValueError(f"{path}: routines[{index}].repo_url must be HTTPS")
         _validate_schedule(routine.get("schedule"), f"{path}: routines[{index}].schedule")
         if "required_subagents" in routine:
             raise ValueError(f"{path}: daily routines must use daily_chain, not required_subagents")

@@ -9,10 +9,15 @@ import json
 import re
 import stat
 import subprocess
+import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "paperclips" / "scripts" / "bootstrap-project.sh"
+
+
+def write_json(path: Path, value: object) -> None:
+    path.write_text(json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n")
 
 
 def test_script_exists_executable():
@@ -220,6 +225,64 @@ install_uaudit_delivery_helper "$2"
     )
 
 
+def _installer_function(name: str) -> str:
+    text = SCRIPT.read_text()
+    match = re.search(
+        rf"^{re.escape(name)}\(\) \{{.*?^\}}\n",
+        text,
+        flags=re.MULTILINE | re.DOTALL,
+    )
+    assert match, f"{name} function missing"
+    return match.group(0)
+
+
+def _run_uaudit_runtime_install(team_root: Path, tmp_path: Path) -> subprocess.CompletedProcess[str]:
+    project_root = tmp_path / "uaudit"
+    (project_root / "repos/android/unstoppable-wallet-android").mkdir(parents=True, exist_ok=True)
+    (project_root / "repos/ios/unstoppable-wallet-ios").mkdir(parents=True, exist_ok=True)
+    paths = tmp_path / "paths.yaml"
+    paths.write_text(
+        "schemaVersion: 2\n"
+        f"project_root: {project_root}\n"
+        f"primary_repo_root: {project_root / 'repos/ios/unstoppable-wallet-ios'}\n"
+        f"team_workspace_root: {team_root}\n"
+    )
+    routines = tmp_path / "routines.yaml"
+    write_json(
+        routines,
+        {
+            "schemaVersion": 1,
+            "routine_ids": {
+                "daily-android-version-0.52": "22222222-2222-4222-8222-222222222222",
+                "daily-ios-version-0.52": "33333333-3333-4333-8333-333333333333",
+            },
+        },
+    )
+    functions = "\n".join(
+        _installer_function(name)
+        for name in (
+            "install_uaudit_delivery_helper",
+            "install_uaudit_release_resolver",
+            "install_uaudit_daily_intake",
+        )
+    )
+    runner = f"""
+set -euo pipefail
+REPO_ROOT="$1"
+die() {{ printf '%s\\n' "$*" >&2; exit 1; }}
+log() {{ :; }}
+{functions}
+install_uaudit_delivery_helper "$2"
+install_uaudit_release_resolver "$2"
+install_uaudit_daily_intake "$2" "$3" "$4"
+"""
+    return subprocess.run(
+        ["bash", "-c", runner, "uaudit-runtime-test", str(REPO), str(team_root), str(paths), str(routines)],
+        capture_output=True,
+        text=True,
+    )
+
+
 def test_uaudit_helper_install_is_atomic_read_only_and_self_verifying(tmp_path):
     team_root = tmp_path / "team"
     result = _run_helper_install(team_root)
@@ -251,6 +314,94 @@ def test_uaudit_helper_install_is_atomic_read_only_and_self_verifying(tmp_path):
     assert text.rindex('mv -f "$helper_tmp" "$destination"') < text.rindex(
         'mv -f "$manifest_tmp" "$install_manifest"'
     )
+
+
+def test_uaudit_daily_intake_bundle_is_manifest_bound_and_self_verifying(tmp_path):
+    team_root = tmp_path / "team"
+    result = _run_uaudit_runtime_install(team_root, tmp_path)
+    assert result.returncode == 0, result.stderr
+    tools = team_root / ".uaudit-tools"
+    manifest = json.loads((tools / "uaudit_daily_intake.manifest.json").read_text())
+    assert manifest["schema_version"] == "uaudit-daily-intake-install/v1"
+    assert set(manifest["files"]) == {
+        "uaudit_daily_intake.py", "uaudit_daily_routines.json",
+        "uaudit_release_resolver.py", "uaudit_delivery_contract.py",
+    }
+    for name, expected in manifest["files"].items():
+        path = tools / name
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == expected
+        assert path.stat().st_mode & (stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH) == 0
+    assert (tools / "uaudit_daily_intake.manifest.json").stat().st_mode & 0o222 == 0
+    config = json.loads((tools / "uaudit_daily_routines.json").read_text())
+    assert config["schema_version"] == "uaudit-daily-intake-routines/v1"
+    assert {routine["base_branch"] for routine in config["routines"]} == {"master"}
+    assert all(routine["repo_url"].startswith("https://") for routine in config["routines"])
+    verify = subprocess.run(
+        [sys.executable, str(tools / "uaudit_daily_intake.py"), "verify-install", "--manifest", str(tools / "uaudit_daily_intake.manifest.json")],
+        capture_output=True,
+        text=True,
+    )
+    assert verify.returncode == 0, verify.stderr
+    assert not (tools / "uaudit_daily_intake.pending.json").exists()
+
+
+def test_uaudit_daily_intake_bundle_fails_closed_after_tampering(tmp_path):
+    team_root = tmp_path / "team"
+    first = _run_uaudit_runtime_install(team_root, tmp_path)
+    assert first.returncode == 0, first.stderr
+    helper = team_root / ".uaudit-tools/uaudit_daily_intake.py"
+    helper.chmod(0o644)
+    helper.write_bytes(helper.read_bytes() + b"# tampered\n")
+    helper.chmod(0o444)
+    second = _run_uaudit_runtime_install(team_root, tmp_path)
+    assert second.returncode != 0
+    assert "helper digest mismatch" in second.stderr
+
+
+def test_uaudit_daily_intake_bundle_rejects_writable_installed_manifest(tmp_path):
+    team_root = tmp_path / "team"
+    first = _run_uaudit_runtime_install(team_root, tmp_path)
+    assert first.returncode == 0, first.stderr
+    manifest = team_root / ".uaudit-tools/uaudit_daily_intake.manifest.json"
+    manifest.chmod(0o644)
+    second = _run_uaudit_runtime_install(team_root, tmp_path)
+    assert second.returncode != 0
+    assert "must be read-only" in second.stderr
+
+
+def test_uaudit_runtime_install_resumes_interrupted_resolver_and_intake_publish(tmp_path):
+    team_root = tmp_path / "team"
+    first = _run_uaudit_runtime_install(team_root, tmp_path)
+    assert first.returncode == 0, first.stderr
+    tools = team_root / ".uaudit-tools"
+    resolver_manifest = json.loads((tools / "uaudit_release_resolver.manifest.json").read_text())
+    write_json(
+        tools / "uaudit_release_resolver.pending.json",
+        {"schema_version": "uaudit-release-resolver-pending/v1", "target_sha256": resolver_manifest["sha256"], "previous_sha256": resolver_manifest["sha256"]},
+    )
+    (tools / "uaudit_release_resolver.pending.json").chmod(0o444)
+    (tools / "uaudit_release_resolver.manifest.json").unlink()
+    intake_manifest = tools / "uaudit_daily_intake.manifest.json"
+    write_json(
+        tools / "uaudit_daily_intake.pending.json",
+        {"schema_version": "uaudit-daily-intake-pending/v1", "target_sha256": hashlib.sha256(intake_manifest.read_bytes()).hexdigest()},
+    )
+    (tools / "uaudit_daily_intake.pending.json").chmod(0o444)
+    (tools / "uaudit_daily_routines.json").unlink()
+    resumed = _run_uaudit_runtime_install(team_root, tmp_path)
+    assert resumed.returncode == 0, resumed.stderr
+    assert not (tools / "uaudit_release_resolver.pending.json").exists()
+    assert not (tools / "uaudit_daily_intake.pending.json").exists()
+    assert (tools / "uaudit_release_resolver.manifest.json").is_file()
+    assert (tools / "uaudit_daily_routines.json").is_file()
+
+
+def test_uaudit_release_resolver_no_longer_bypasses_its_manifest():
+    function = _installer_function("install_uaudit_release_resolver")
+    assert "installed directly" not in function
+    assert "return 0\n  [ ! -e" not in function
+    assert 'verify-install' not in function
+    assert '--manifest "$manifest"' in function
 
 
 def test_uaudit_helper_install_adopts_matching_manifestless_deployment(tmp_path):

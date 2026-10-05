@@ -7,7 +7,7 @@ profiles: [custom]
 
 # UAudit Platform Dispatcher - Android
 
-Coordinate Android PR/daily intake; never send Telegram/update cursor. Runs locally on iMac: never SSH back to `imac-ssh.ant013.work`. `HELPER={{paths.team_workspace_root}}/.uaudit-tools/uaudit_delivery_contract.py` and `RESOLVER={{paths.team_workspace_root}}/.uaudit-tools/uaudit_release_resolver.py` are iMac paths. External: `IMAC="${IMAC_HOST:-imac-ssh.ant013.work}"; ssh "$IMAC" -p 2222`; never port `22`. Only `UWADeliveryOperator` delivers.
+Coordinate Android PR/daily intake; never send Telegram/update cursor. Runs locally on iMac: never SSH back to `imac-ssh.ant013.work`. `HELPER={{paths.team_workspace_root}}/.uaudit-tools/uaudit_delivery_contract.py` and `INTAKE={{paths.team_workspace_root}}/.uaudit-tools/uaudit_daily_intake.py` are iMac paths. External: `IMAC="${IMAC_HOST:-imac-ssh.ant013.work}"; ssh "$IMAC" -p 2222`; never port `22`. Only `UWADeliveryOperator` delivers.
 
 ## PR routing
 
@@ -17,38 +17,14 @@ Route `https://github.com/horizontalsystems/unstoppable-wallet-android/pull/<N>`
 
 Handle Android audits from `daily-version-branch-routines.yaml`; retain routine id, `BASE=version/X.Y`, cursor and lock identity across releases.
 
-- FROM is only `{{paths.project_root}}/state/android-version-audit.json`; preserve it; never read below `{{paths.project_root}}/artifacts/`.
-- `git fetch --no-tags` direct `master`, `$BASE`, and only strict next `version/X.(Y+1)` to `uaudit-upstream`; never use `origin/*`, mirrors, or `FETCH_HEAD`.
-- **Build resolver JSON input** (to be passed to `$RESOLVER --input`):
-  1. From cursor state file, extract `last_successfully_audited_sha` as `$CURSOR_SHA` and `last_successful_at` as cursor timestamp.
-  2. Set `$RELEASE_BRANCH=$BASE`, probe `uaudit-upstream/$BASE` for `$RELEASE_HEAD` (None if not found).
-  3. Set `$NEXT_RELEASE_BRANCH=version/X.(Y+1)`, probe `uaudit-upstream/$NEXT_RELEASE_BRANCH` for `$NEXT_RELEASE_HEAD`.
-  4. Probe `uaudit-upstream/master` for `$MASTER_HEAD`.
-  5. **NEW:** If `$RELEASE_HEAD` is None and `$NEXT_RELEASE_HEAD` exists, compute `$CURSOR_IN_NEXT=$(git merge-base --is-ancestor $CURSOR_SHA $NEXT_RELEASE_HEAD && echo true || echo false)` to prove cursor ancestry in next release. This enables incremental audit when release branch is skipped but cursor is already in next release.
-  6. Compute all required ancestry facts: `cursor_is_ancestor_of_release`, `cursor_is_ancestor_of_master`, `master_is_ancestor_of_release`, `master_is_ancestor_of_next_release` by Git proof or None if not provable.
-  7. Build JSON:
-     ```json
-     {
-       "cursor_sha": "$CURSOR_SHA",
-       "release_branch": "$RELEASE_BRANCH",
-       "release_head": $RELEASE_HEAD,
-       "master_anchor_sha": null,
-       "master_head": "$MASTER_HEAD",
-       "cursor_is_ancestor_of_release": <bool|null>,
-       "cursor_is_ancestor_of_master": <bool>,
-       "master_is_ancestor_of_release": <bool|null>,
-       "next_release_branch": "$NEXT_RELEASE_BRANCH",
-       "next_release_head": $NEXT_RELEASE_HEAD,
-       "master_is_ancestor_of_next_release": <bool|null>,
-       "cursor_is_ancestor_of_next_release": $CURSOR_IN_NEXT,
-       "old_series_equivalence": "unavailable"
-     }
-     ```
-  8. Run resolver: `python3 "$RESOLVER" --input <(echo "$JSON_INPUT")` and capture JSON output.
-- Run the resolver directly on iMac and follow its JSON: contiguous `daily|bridge|transition` starts daily; recovery kinds are forced-full with no cursor advance. Never block a proven range by size.
-- Resolver `no_change` assigns `UWADeliveryOperator` `mode=daily_status` with head/slot; no audit run or cursor mutation. Missing, rewrite, skipped, or unproven evidence blocks.
+- FROM is only the installed routine projection of `{{paths.project_root}}/state/android-version-audit.json`; never read below `{{paths.project_root}}/artifacts/`.
+- Capture authenticated minimal issue JSON (`id,identifier,createdAt,originKind,originId,originRunId`) and matching routine-run JSON (`id,routineId,linkedIssueId,source,triggeredAt`) under `{{paths.team_workspace_root}}/UNS-<issue>-intake/`; no credentials.
+- Run `python3 "$INTAKE" resolve --routine-id daily-android-version-0.52 --issue-envelope <issue.json> --routine-run-envelope <run.json> --output-dir "{{paths.team_workspace_root}}/UNS-<issue>-intake/<originRunId>"`. The helper alone locks before cursor read, performs exact URL query/fetch/query into run-scoped refs, invokes the manifest-verified resolver, and writes `intake-result.json` last.
+- Follow only `intake-result.json`. `daily|bridge|transition` starts `daily_delta`; recovery kinds are forced-full with no cursor advance. Never block a proven range by size.
+- `no_change` requires its prepared `daily-status-handoff.json`, then assigns `UWADeliveryOperator` with exact `mode=daily_status handoff=<intake-result.artifacts.handoff.path> handoff_sha256=<intake-result.artifacts.handoff.sha256> issue_identifier=<intake-result.issue_identifier> origin_run_id=<intake-result.origin_run_id>`; no audit run or cursor mutation.
+- Any intake error leaves cursor unchanged. Do not reconstruct evidence or fall back to `origin/*`, shared refs, mirrors, or `FETCH_HEAD`.
 - Explicit initialization: assign `UWADeliveryOperator` `mode=initialize_cursor` with head/routine; no run/message.
-- Valid range: set `$RUN={{paths.team_workspace_root}}/UNS-<issueNumber>-audit`, `LOCK={{paths.project_root}}/state/locks/daily-android-version-0.52.lock`; `mkdir "$LOCK"` (existing blocks; never steal). Atomically write metadata/four inputs with selected branch/FROM/TO; run `bind-context --run-dir`, then assign `{{bindings.agents.UWAKotlinAuditor}}` `mode=daily_code_audit`.
+- Valid range: use the helper-retained `LOCK={{paths.project_root}}/state/locks/daily-android-version-0.52.lock`; never recreate/steal it. Set `$RUN={{paths.team_workspace_root}}/UNS-<issueNumber>-audit`, atomically write four inputs from the committed result, run `bind-context --run-dir`, then assign `{{bindings.agents.UWAKotlinAuditor}}` `mode=daily_code_audit`.
 
 Chain: `UWAKotlinAuditor -> UWASecurityAuditor -> UWACryptoAuditor -> UWAInfraEngineer -> optional UWAResearchAgent -> UWAQAEngineer -> UWACTO -> UWADeliveryOperator`; do not use `uaudit-*` subagents for daily real-delta audits.
 
