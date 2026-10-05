@@ -84,6 +84,20 @@ class ReleaseResolverTests(unittest.TestCase):
         self.assertEqual(result["kind"], "daily")
         self.assertEqual(result["segments"][0]["from_sha"], sha("a"))
 
+    def test_json_adapter_rejects_truthy_non_boolean_ancestry(self) -> None:
+        value = {
+            "cursor_sha": sha("a"), "release_branch": "version/0.50", "release_head": sha("b"),
+            "master_anchor_sha": sha("a"), "master_head": sha("c"),
+            "cursor_is_ancestor_of_release": True, "cursor_is_ancestor_of_master": "false",
+            "master_is_ancestor_of_release": True,
+        }
+        with self.assertRaisesRegex(ResolutionError, "cursor_is_ancestor_of_master must be boolean"):
+            resolve_json(value)
+        value["cursor_is_ancestor_of_master"] = True
+        value["cursor_is_ancestor_of_release"] = 1
+        with self.assertRaisesRegex(ResolutionError, "cursor_is_ancestor_of_release must be boolean or null"):
+            resolve_json(value)
+
     def test_ambiguous_rebase_is_full_recovery(self) -> None:
         result = resolve_release_history(cursor_sha=sha("a"), release_branch="version/0.50", release_head=sha("d"), master_anchor_sha=sha("a"), master_head=sha("b"), cursor_is_ancestor_of_release=False, cursor_is_ancestor_of_master=True, master_is_ancestor_of_release=True, old_series_equivalence="ambiguous")
         self.assertEqual(result.kind, "full_recovery")

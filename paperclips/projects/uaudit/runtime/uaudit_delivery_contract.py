@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import sys
 import tempfile
 import unicodedata
@@ -24,6 +25,7 @@ from urllib.parse import urlparse
 SCHEMA_VERSION = 1
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
 ISSUE_RE = re.compile(r"^[A-Z][A-Z0-9]{0,15}-[1-9][0-9]*$")
 ROUTINE_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
 WARNING_CODE_RE = re.compile(r"^[a-z][a-z0-9._-]{0,63}$")
@@ -132,6 +134,7 @@ TERMINAL_MARKERS = (
 INSTALL_SCHEMA = "uaudit-helper-install/v1"
 INSTALL_MANIFEST = "uaudit_delivery_contract.manifest.json"
 STATUS_SCHEMA = "uaudit-daily-slot-status/v1"
+STATUS_PROOF_SCHEMA_V2 = "uaudit-daily-slot-status-proof/v2"
 STATUS_OUTCOMES = ("no_change", "blocked", "deferred")
 OPERATIONAL_WARNING_SCHEMA = "uaudit-operational-warnings/v1"
 OPERATIONAL_WARNING_FILE = "operational-warnings.json"
@@ -2241,12 +2244,13 @@ def _status_descriptor(path: Path) -> tuple[dict[str, Any], str]:
 
 def _status_slot_proof(path: Path, descriptor: Mapping[str, Any], descriptor_sha: str) -> dict[str, Any]:
     value = _expect_object(_load_json(path, maximum=64 * 1024), "daily status slot proof")
-    _exact_keys(
-        value,
-        ("schema_version", "routine_key", "platform", "scheduled_utc_slot", "descriptor_sha256", "source"),
-        where="daily status slot proof",
-    )
-    if value["schema_version"] != STATUS_SCHEMA:
+    legacy_keys = ("schema_version", "routine_key", "platform", "scheduled_utc_slot", "descriptor_sha256", "source")
+    v2_keys = (*legacy_keys, "issue_id", "issue_identifier", "origin_kind", "origin_id", "origin_run_id")
+    if value.get("schema_version") == STATUS_SCHEMA:
+        _exact_keys(value, legacy_keys, where="daily status slot proof")
+    elif value.get("schema_version") == STATUS_PROOF_SCHEMA_V2:
+        _exact_keys(value, v2_keys, where="daily status slot proof")
+    else:
         _fail("unsupported daily status slot proof schema")
     if value["routine_key"] != descriptor["routine_key"] or value["platform"] != descriptor["platform"]:
         _fail("daily status slot proof routine binding mismatch")
@@ -2255,6 +2259,18 @@ def _status_slot_proof(path: Path, descriptor: Mapping[str, Any], descriptor_sha
     value["scheduled_utc_slot"] = _iso_utc(value["scheduled_utc_slot"], "daily status slot proof.scheduled_utc_slot")
     if value["source"] != "paperclip_scheduled":
         _fail("daily status slot proof source is invalid")
+    if value["schema_version"] == STATUS_PROOF_SCHEMA_V2:
+        if value["origin_kind"] != "routine_execution":
+            _fail("daily status slot proof origin_kind is invalid")
+        for field in ("issue_id", "origin_id", "origin_run_id"):
+            candidate = _bounded_string(value[field], f"daily status slot proof.{field}", maximum=64)
+            if not UUID_RE.fullmatch(candidate):
+                _fail(f"daily status slot proof.{field} is invalid")
+            value[field] = candidate
+        issue = _bounded_string(value["issue_identifier"], "daily status slot proof.issue_identifier", maximum=64)
+        if not ISSUE_RE.fullmatch(issue):
+            _fail("daily status slot proof.issue_identifier is invalid")
+        value["issue_identifier"] = issue
     return value
 
 
@@ -2271,6 +2287,45 @@ def _status_summary(run_dir: Path) -> tuple[dict[str, Any], str]:
     )
     if summary["schema_version"] != STATUS_SCHEMA:
         _fail("unsupported daily status summary schema")
+    identity = _expect_object(summary["identity"], "daily status summary.identity")
+    legacy_identity = (
+        "app_id", "routine_key", "platform", "scheduled_utc_slot", "outcome",
+        "selected_head", "descriptor_sha256",
+    )
+    v2_identity = (*legacy_identity, "issue_id", "origin_id", "origin_run_id")
+    if set(identity) == set(legacy_identity):
+        pass
+    elif set(identity) == set(v2_identity):
+        for field in ("issue_id", "origin_id", "origin_run_id"):
+            candidate = _bounded_string(identity[field], f"daily status summary.identity.{field}", maximum=64)
+            if not UUID_RE.fullmatch(candidate):
+                _fail(f"daily status summary.identity.{field} is invalid")
+    else:
+        _fail("daily status summary.identity has invalid fields")
+    _bounded_string(identity["app_id"], "daily status summary.identity.app_id", maximum=128)
+    routine = _bounded_string(identity["routine_key"], "daily status summary.identity.routine_key", maximum=128)
+    if not ROUTINE_RE.fullmatch(routine):
+        _fail("daily status summary.identity.routine_key is invalid")
+    if identity["platform"] not in {"ios", "android"}:
+        _fail("daily status summary.identity.platform is invalid")
+    _iso_utc(identity["scheduled_utc_slot"], "daily status summary.identity.scheduled_utc_slot")
+    if identity["outcome"] not in STATUS_OUTCOMES:
+        _fail("daily status summary.identity.outcome is invalid")
+    if identity["selected_head"] is not None:
+        _sha(identity["selected_head"], "daily status summary.identity.selected_head", git=True)
+    _sha(identity["descriptor_sha256"], "daily status summary.identity.descriptor_sha256")
+    issue = _bounded_string(summary["issue_identifier"], "daily status summary.issue_identifier", maximum=64)
+    if not ISSUE_RE.fullmatch(issue):
+        _fail("daily status summary.issue_identifier is invalid")
+    telegram = _expect_object(summary["telegram_text"], "daily status summary.telegram_text")
+    _exact_keys(telegram, ("file", "sha256"), where="daily status summary.telegram_text")
+    if telegram["file"] != "telegram-summary.txt":
+        _fail("daily status summary telegram file is invalid")
+    expected_text_sha = _sha(telegram["sha256"], "daily status summary.telegram_text.sha256")
+    if _sha256_path(run_dir / telegram["file"]) != expected_text_sha:
+        _fail("daily status summary telegram digest mismatch")
+    _bounded_string(summary["attempt_id"], "daily status summary.attempt_id", maximum=128)
+    _iso_utc(summary["created_at"], "daily status summary.created_at")
     return summary, _sha256_path(run_dir / "status-summary.json")
 
 
@@ -2283,42 +2338,71 @@ def prepare_daily_status(args: argparse.Namespace) -> dict[str, Any]:
     issue = _bounded_string(args.issue_identifier, "daily status issue_identifier", maximum=64)
     if not ISSUE_RE.fullmatch(issue):
         _fail("daily status issue_identifier is invalid")
+    if proof.get("issue_identifier") is not None and proof["issue_identifier"] != issue:
+        _fail("daily status slot proof issue_identifier mismatch")
     head = None if args.selected_head is None else _sha(args.selected_head, "daily status selected_head", git=True)
     reason = _bounded_string(args.reason, "daily status reason", maximum=280)
     attempt_id = _bounded_string(args.attempt_id, "daily status attempt_id", maximum=128)
+    if proof["schema_version"] == STATUS_PROOF_SCHEMA_V2 and attempt_id != proof["origin_run_id"]:
+        _fail("daily status attempt_id must match v2 origin_run_id")
     identity = {
         "app_id": descriptor["app_id"], "routine_key": descriptor["routine_key"], "platform": descriptor["platform"],
         "scheduled_utc_slot": proof["scheduled_utc_slot"], "outcome": outcome, "selected_head": head,
         "descriptor_sha256": descriptor_sha,
     }
+    if proof["schema_version"] == STATUS_PROOF_SCHEMA_V2:
+        identity.update({
+            "issue_id": proof["issue_id"],
+            "origin_id": proof["origin_id"],
+            "origin_run_id": proof["origin_run_id"],
+        })
     run_dir = _status_dir(args.state_root, identity)
     if run_dir.exists():
-        summary, summary_sha = _status_summary(run_dir)
-        if summary["identity"] != identity or summary["issue_identifier"] != issue:
-            _fail("daily status slot conflicts with existing receipt identity")
-        return {"status": "already_prepared", "run_dir": str(run_dir), "summary_sha256": summary_sha}
+        if not (run_dir / "status-summary.json").exists():
+            fd, quarantine_name = tempfile.mkstemp(prefix=f".{run_dir.name}.incomplete.", dir=run_dir.parent)
+            os.close(fd)
+            os.unlink(quarantine_name)
+            try:
+                os.rename(run_dir, quarantine_name)
+            except FileNotFoundError:
+                return prepare_daily_status(args)
+        else:
+            summary, summary_sha = _status_summary(run_dir)
+            if summary["identity"] != identity or summary["issue_identifier"] != issue:
+                _fail("daily status slot conflicts with existing receipt identity")
+            send_started = run_dir / "status" / "send_started.json"
+            if not send_started.exists():
+                _atomic_json(send_started, {"schema_version": STATUS_SCHEMA, "attempt_id": attempt_id})
+            return {"status": "already_prepared", "run_dir": str(run_dir), "summary_sha256": summary_sha}
     run_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{run_dir.name}.staging.", dir=run_dir.parent))
     try:
-        run_dir.mkdir()
-    except FileExistsError:
-        return prepare_daily_status(args)
-    text = f"UAudit {descriptor['platform']} {outcome}: slot {proof['scheduled_utc_slot']}"
-    if head is not None:
-        text += f", head {head[:12]}"
-    text += f". {reason}"
-    text = _bounded_string(text, "daily status telegram text", maximum=899)
-    _atomic_write(run_dir / "telegram-summary.txt", (text + "\n").encode("utf-8"))
-    summary = {
-        "schema_version": STATUS_SCHEMA,
-        "identity": identity,
-        "issue_identifier": issue,
-        "telegram_text": {"file": "telegram-summary.txt", "sha256": _sha256_path(run_dir / "telegram-summary.txt")},
-        "attempt_id": attempt_id,
-        "created_at": _iso_utc(args.created_at, "daily status created_at"),
-    }
-    _atomic_json(run_dir / "status-summary.json", summary)
-    _atomic_json(run_dir / "status" / "send_started.json", {"schema_version": STATUS_SCHEMA, "attempt_id": attempt_id})
-    return {"status": "ready", "run_dir": str(run_dir), "summary_sha256": _sha256_path(run_dir / "status-summary.json")}
+        text = f"UAudit {descriptor['platform']} {outcome}: slot {proof['scheduled_utc_slot']}"
+        if head is not None:
+            text += f", head {head[:12]}"
+        text += f". {reason}"
+        text = _bounded_string(text, "daily status telegram text", maximum=899)
+        _atomic_write(staging / "telegram-summary.txt", (text + "\n").encode("utf-8"))
+        summary = {
+            "schema_version": STATUS_SCHEMA,
+            "identity": identity,
+            "issue_identifier": issue,
+            "telegram_text": {"file": "telegram-summary.txt", "sha256": _sha256_path(staging / "telegram-summary.txt")},
+            "attempt_id": attempt_id,
+            "created_at": _iso_utc(args.created_at, "daily status created_at"),
+        }
+        _atomic_json(staging / "status-summary.json", summary)
+        _atomic_json(staging / "status" / "send_started.json", {"schema_version": STATUS_SCHEMA, "attempt_id": attempt_id})
+        try:
+            os.rename(staging, run_dir)
+        except OSError:
+            if run_dir.exists():
+                return prepare_daily_status(args)
+            raise
+        return {"status": "ready", "run_dir": str(run_dir), "summary_sha256": _sha256_path(run_dir / "status-summary.json")}
+    finally:
+        if staging.exists():
+            shutil.rmtree(staging)
 
 
 def record_daily_status(args: argparse.Namespace) -> dict[str, Any]:

@@ -121,7 +121,7 @@ def test_generated_dispatcher_bundles_start_staged_daily_chain():
         assert "finalize-translation" in text
         assert "do not use `uaudit-*` subagents for daily real-delta audits" in text
         assert "uaudit_delivery_contract.py" in text
-        assert "uaudit_release_resolver.py" in text
+        assert "uaudit_daily_intake.py" in text
         assert 'IMAC="${IMAC_HOST:-imac-ssh.ant013.work}"' in text
         assert 'ssh "$IMAC"' in text
         assert "verify-install --manifest" not in text
@@ -229,7 +229,7 @@ def test_daily_roles_use_version_052_lock_identity():
             assert stale_lock not in text
 
 
-def test_daily_dispatchers_resolve_direct_release_successors_before_intake():
+def test_daily_dispatchers_delegate_authoritative_release_snapshot_to_intake_helper():
     expected = {
         "android": "https://github.com/horizontalsystems/unstoppable-wallet-android",
         "ios": "https://github.com/horizontalsystems/unstoppable-wallet-ios",
@@ -244,13 +244,18 @@ def test_daily_dispatchers_resolve_direct_release_successors_before_intake():
         rendered = (REPO / f"paperclips/dist/uaudit/codex/{dispatcher}.md").read_text()
         for text in (source, rendered):
             assert repo_url in text
-            assert "fetch --no-tags" in text
-            assert "`$BASE`" in text
-            assert "strict next `version/X.(Y+1)`" in text
-            assert "resolver" in text.lower()
+            assert "uaudit_daily_intake.py" in text
+            assert "query/fetch/query" in text
+            assert "run-scoped refs" in text
+            assert "intake-result.json" in text
+            assert "routine-run JSON" in text
+            assert "triggeredAt" in text
             assert "daily_status" in text
+            assert "intake-result.artifacts.handoff.sha256" in text
+            assert "intake-result.origin_run_id" in text
             assert "FROM ⊑ master ⊑ next" not in text
             assert "origin/*" in text
+            assert "git fetch --no-tags" not in text
 
 
 def test_uaudit_bootstrap_deploy_preserves_verified_helper_install():
@@ -258,10 +263,34 @@ def test_uaudit_bootstrap_deploy_preserves_verified_helper_install():
     assert "partial-approvers.json" not in text
     assert "approver_actor_ids" not in text
     assert "install_uaudit_delivery_helper \"$team_root\"" in text
-    assert 'cp "$source" "$destination"' in text
+    assert "install_uaudit_release_resolver \"$team_root\"" in text
+    assert 'install_uaudit_daily_intake "$team_root" "$paths_file" "$routine_bindings_file"' in text
     assert "UAudit delivery helper installed directly" not in text
+    assert "UAudit release resolver installed directly" not in text
     assert "adopted manifest-less UAudit delivery helper" in text
     assert 'verify-install --manifest "$install_manifest"' in text
+
+
+def test_daily_status_invalid_handoff_returns_ownership_before_commenting():
+    expected = {
+        "UWADeliveryOperator": "{{bindings.agents.UWACTO}}",
+        "UWIDeliveryOperator": "{{bindings.agents.UWICTO}}",
+    }
+    for name, owner in expected.items():
+        source = (REPO / f"paperclips/projects/uaudit/overlays/codex/{name}.md").read_text()
+        rendered = (REPO / f"paperclips/dist/uaudit/codex/{name}.md").read_text()
+        assert owner in source
+        for text in (source, rendered):
+            assert "verify-handoff --handoff" in text
+            assert "--expected-issue-identifier" in text
+            assert "--expected-origin-run-id" in text
+            assert "intake-result.artifacts.handoff.sha256" in text
+            assert "<intake-result digest>" not in text
+            assert "first PATCH" in text
+            assert "status=in_progress" in text
+            assert "mode=daily_intake_recovery" in text
+            assert "Never leave it blocked/assigned to delivery" in text
+            assert "best-effort comment" in text
 
 
 def test_uaudit_codex_agents_get_an_explicit_supported_model_when_unset():

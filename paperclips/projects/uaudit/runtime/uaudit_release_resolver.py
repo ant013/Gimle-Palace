@@ -214,6 +214,16 @@ def resolve_json(value: Any) -> dict[str, Any]:
     missing = sorted(required - set(value))
     if missing:
         raise ResolutionError(f"resolver input missing fields: {', '.join(missing)}")
+    if type(value["cursor_is_ancestor_of_master"]) is not bool:
+        raise ResolutionError("cursor_is_ancestor_of_master must be boolean")
+    for field in (
+        "cursor_is_ancestor_of_release",
+        "master_is_ancestor_of_release",
+        "master_is_ancestor_of_next_release",
+        "cursor_is_ancestor_of_next_release",
+    ):
+        if field in value and value[field] is not None and type(value[field]) is not bool:
+            raise ResolutionError(f"{field} must be boolean or null")
     return _resolution_json(resolve_release_history(**value))
 
 

@@ -1359,3 +1359,68 @@ def test_daily_status_rejects_slot_proof_for_a_different_descriptor(tmp_path: Pa
         "--reason", "No new commits.", "--attempt-id", "attempt-1", "--created-at", CREATED_AT, ok=False,
     )
     assert "descriptor digest mismatch" in failure["error"]
+
+
+def test_daily_status_v2_binds_issue_origin_run_attempt_and_repairs_partial_dir(tmp_path: Path):
+    helper = install_helper(tmp_path)
+    descriptor = tmp_path / "descriptor.json"
+    write_json(descriptor, {
+        "schema_version": "uaudit-daily-slot-status/v1", "app_id": "unstoppable_wallet",
+        "routine_key": "uaudit-daily-ios", "platform": "ios", "config_sha256": "a" * 64,
+    })
+    proof = tmp_path / "slot-proof.json"
+    write_json(proof, {
+        "schema_version": "uaudit-daily-slot-status-proof/v2", "routine_key": "uaudit-daily-ios",
+        "platform": "ios", "scheduled_utc_slot": "2026-10-05T11:00:00.248Z",
+        "descriptor_sha256": sha256_path(descriptor), "source": "paperclip_scheduled",
+        "issue_id": "11111111-1111-4111-8111-111111111111", "issue_identifier": "UNS-688",
+        "origin_kind": "routine_execution", "origin_id": "22222222-2222-4222-8222-222222222222",
+        "origin_run_id": "33333333-3333-4333-8333-333333333333",
+    })
+    common = (
+        "prepare-daily-status", "--descriptor", descriptor, "--slot-proof", proof,
+        "--issue-identifier", "UNS-688", "--outcome", "no_change", "--selected-head", HEAD_SHA,
+        "--reason", "No new commits.", "--created-at", CREATED_AT,
+    )
+    prepared = call(
+        helper, *common, "--state-root", tmp_path / "state",
+        "--attempt-id", "33333333-3333-4333-8333-333333333333",
+    )
+    summary = read_json(Path(prepared["run_dir"]) / "status-summary.json")
+    assert summary["identity"]["origin_run_id"] == "33333333-3333-4333-8333-333333333333"
+    assert summary["identity"]["issue_id"] == "11111111-1111-4111-8111-111111111111"
+    mismatch = call(
+        helper, *common, "--state-root", tmp_path / "attempt-state",
+        "--attempt-id", "wrong-attempt", ok=False,
+    )
+    assert "attempt_id must match v2 origin_run_id" in mismatch["error"]
+    issue_mismatch = call(
+        helper, "prepare-daily-status", "--state-root", tmp_path / "other-state",
+        "--descriptor", descriptor, "--slot-proof", proof, "--issue-identifier", "UNS-689",
+        "--outcome", "no_change", "--selected-head", HEAD_SHA, "--reason", "No new commits.",
+        "--attempt-id", "33333333-3333-4333-8333-333333333333", "--created-at", CREATED_AT,
+        ok=False,
+    )
+    assert "issue_identifier mismatch" in issue_mismatch["error"]
+    Path(prepared["run_dir"], "status-summary.json").unlink()
+    recovered = call(
+        helper, *common, "--state-root", tmp_path / "state",
+        "--attempt-id", "33333333-3333-4333-8333-333333333333",
+    )
+    assert recovered["status"] == "ready"
+    assert list((tmp_path / "state/daily-slot-status").glob(".*.incomplete.*"))
+
+
+def test_daily_status_deep_validation_rejects_tampered_telegram_text(tmp_path: Path):
+    helper, prepared = prepare_daily_status(tmp_path)
+    run = Path(prepared["run_dir"])
+    (run / "telegram-summary.txt").write_text("tampered\n")
+    response = tmp_path / "response.json"
+    write_json(response, {
+        "ok": True, "mode": "message", "routeName": "UAudit", "issueIdentifier": "UNS-123", "messageId": 77,
+    })
+    failure = call(
+        helper, "record-daily-status", "--run-dir", run, "--response", response,
+        "--delivered-at", DELIVERED_AT, ok=False,
+    )
+    assert "telegram digest mismatch" in failure["error"]

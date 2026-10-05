@@ -218,7 +218,10 @@ PY
     # bytes still have to match its adjacent read-only manifest above; any other
     # generation remains operator-approved only through the explicit variable.
     trusted_previous="${UAUDIT_HELPER_TRUSTED_PREVIOUS_SHA256:-}"
-    if [ -z "$trusted_previous" ] && [ "$manifest_sha" = "d3fe36b8c820f5092cde81ec9a69771a17fffa4d7e7ebfce1be65e68f5ba08b7" ]; then
+    if [ -z "$trusted_previous" ] && { \
+      [ "$manifest_sha" = "d3fe36b8c820f5092cde81ec9a69771a17fffa4d7e7ebfce1be65e68f5ba08b7" ] || \
+      [ "$manifest_sha" = "34c89b5d6cd082fa92b3bf2507c94d019fc6da40a6b6f44b33f4782e3c3d4056" ]; \
+    }; then
       trusted_previous="$manifest_sha"
     fi
     [[ "$trusted_previous" =~ ^[0-9a-f]{64}$ ]] && \
@@ -289,36 +292,58 @@ install_uaudit_release_resolver() {
   local destination="${tools_dir}/uaudit_release_resolver.py"
   local manifest="${tools_dir}/uaudit_release_resolver.manifest.json"
   local pending="${tools_dir}/uaudit_release_resolver.pending.json"
-  local source_sha destination_sha manifest_sha="" trusted_previous tmp manifest_tmp pending_tmp
+  local source_sha destination_sha manifest_sha="" trusted_previous tmp manifest_tmp pending_tmp resume_pending=0
+  local legacy_direct_sha="c90e195892edd860ac962b2601716457018c0440dfda426ff6af42ae204375b9"
 
   [ -f "$source" ] || die "UAudit release resolver source missing: $source"
   mkdir -p "$tools_dir"
-  # See install_uaudit_delivery_helper: routine execution must not wait for a
-  # manifest/transaction recovery before it can run on the iMac.
-  rm -f "$destination"
-  cp "$source" "$destination"
-  chmod 555 "$destination"
-  rm -f "$manifest" "$pending"
-  log ok "UAudit release resolver installed directly: $destination"
-  return 0
-  [ ! -e "$pending" ] || die "UAudit resolver pending transaction requires operator recovery"
   source_sha=$(shasum -a 256 "$source" | awk '{print $1}')
-  if [ -e "$destination" ] || [ -e "$manifest" ]; then
-    [ -f "$destination" ] && [ ! -L "$destination" ] && [ -f "$manifest" ] && [ ! -L "$manifest" ] || \
-      die "UAudit resolver install is incomplete"
-    manifest_sha=$(jq -r '.sha256 // ""' "$manifest")
-    [ "$(jq -r '.schema_version // ""' "$manifest")" = "uaudit-release-resolver-install/v1" ] && \
-      [ "$(jq -r '.file // ""' "$manifest")" = "uaudit_release_resolver.py" ] && \
-      [[ "$manifest_sha" =~ ^[0-9a-f]{64}$ ]] || die "UAudit resolver install manifest is invalid"
+  if [ -e "$pending" ]; then
+    [ -f "$pending" ] && [ ! -L "$pending" ] || die "UAudit resolver pending transaction is invalid"
+    [ "$(jq -r '.schema_version // ""' "$pending")" = "uaudit-release-resolver-pending/v1" ] && \
+      [ "$(jq -r '.target_sha256 // ""' "$pending")" = "$source_sha" ] || \
+      die "UAudit resolver pending transaction targets another generation"
+    resume_pending=1
+  fi
+  if [ "$resume_pending" -eq 0 ] && [ -f "$destination" ] && [ ! -L "$destination" ] && [ ! -e "$manifest" ]; then
     destination_sha=$(shasum -a 256 "$destination" | awk '{print $1}')
-    [ "$destination_sha" = "$manifest_sha" ] || die "UAudit resolver digest mismatch"
-    if [ "$manifest_sha" = "$source_sha" ]; then
-      python3 "$destination" --manifest "$manifest" || die "UAudit resolver rejected install manifest"
+    python3 - "$destination" <<'PY' || die "manifest-less UAudit resolver must be read-only"
+import pathlib
+import sys
+raise SystemExit(1 if pathlib.Path(sys.argv[1]).stat().st_mode & 0o222 else 0)
+PY
+    if [ "$destination_sha" = "$source_sha" ]; then
+      manifest_tmp=$(mktemp "${tools_dir}/.uaudit_release_resolver.manifest.json.XXXXXX")
+      jq -n --arg schema_version "uaudit-release-resolver-install/v1" --arg file "uaudit_release_resolver.py" --arg sha256 "$source_sha" \
+        '{schema_version:$schema_version,file:$file,sha256:$sha256}' > "$manifest_tmp"
+      chmod 444 "$manifest_tmp"
+      mv -f "$manifest_tmp" "$manifest"
+      python3 "$destination" --manifest "$manifest" || die "adopted UAudit resolver rejected install manifest"
+      log ok "adopted manifest-less UAudit release resolver: $destination"
       return 0
     fi
-    trusted_previous="${UAUDIT_RESOLVER_TRUSTED_PREVIOUS_SHA256:-}"
-    [[ "$trusted_previous" =~ ^[0-9a-f]{64}$ ]] && [ "$trusted_previous" = "$manifest_sha" ] || \
-      die "UAudit resolver generation differs from source and is not explicitly trusted for upgrade"
+    [ "$destination_sha" = "$legacy_direct_sha" ] || \
+      die "manifest-less UAudit resolver is not the trusted legacy generation"
+  fi
+  if [ "$resume_pending" -eq 0 ] && { [ -e "$destination" ] || [ -e "$manifest" ]; }; then
+    if [ -e "$manifest" ]; then
+      [ -f "$destination" ] && [ ! -L "$destination" ] && [ -f "$manifest" ] && [ ! -L "$manifest" ] || \
+        die "UAudit resolver install is incomplete"
+      manifest_sha=$(jq -r '.sha256 // ""' "$manifest")
+      [ "$(jq -r '.schema_version // ""' "$manifest")" = "uaudit-release-resolver-install/v1" ] && \
+        [ "$(jq -r '.file // ""' "$manifest")" = "uaudit_release_resolver.py" ] && \
+        [[ "$manifest_sha" =~ ^[0-9a-f]{64}$ ]] || die "UAudit resolver install manifest is invalid"
+      destination_sha=$(shasum -a 256 "$destination" | awk '{print $1}')
+      [ "$destination_sha" = "$manifest_sha" ] || die "UAudit resolver digest mismatch"
+      if [ "$manifest_sha" = "$source_sha" ]; then
+        python3 "$destination" --manifest "$manifest" || die "UAudit resolver rejected install manifest"
+        log ok "UAudit release resolver already installed: $destination"
+        return 0
+      fi
+      trusted_previous="${UAUDIT_RESOLVER_TRUSTED_PREVIOUS_SHA256:-}"
+      [[ "$trusted_previous" =~ ^[0-9a-f]{64}$ ]] && [ "$trusted_previous" = "$manifest_sha" ] || \
+        die "UAudit resolver generation differs from source and is not explicitly trusted for upgrade"
+    fi
   fi
   tmp=$(mktemp "${tools_dir}/.uaudit_release_resolver.py.XXXXXX")
   manifest_tmp=$(mktemp "${tools_dir}/.uaudit_release_resolver.manifest.json.XXXXXX")
@@ -337,6 +362,131 @@ install_uaudit_release_resolver() {
   rm -f "$pending"
   python3 "$destination" --manifest "$manifest" || die "UAudit resolver post-install verification failed"
   log ok "UAudit release resolver installed read-only: $destination"
+}
+
+install_uaudit_daily_intake() {
+  local team_root="$1" paths_file="$2" routine_bindings_file="$3"
+  local tools_dir="${team_root}/.uaudit-tools"
+  local helper_source="${REPO_ROOT}/paperclips/projects/uaudit/runtime/uaudit_daily_intake.py"
+  local config_source="${REPO_ROOT}/paperclips/projects/uaudit/daily-version-branch-routines.yaml"
+  local helper="${tools_dir}/uaudit_daily_intake.py"
+  local config="${tools_dir}/uaudit_daily_routines.json"
+  local manifest="${tools_dir}/uaudit_daily_intake.manifest.json"
+  local pending="${tools_dir}/uaudit_daily_intake.pending.json"
+  local helper_tmp config_tmp manifest_tmp pending_tmp resume_pending=0 target_manifest_sha
+  local helper_sha config_sha resolver_sha delivery_sha source_config_sha project_root primary_repo_root routine_ids_json
+
+  [ -f "$helper_source" ] || die "UAudit daily intake helper source missing"
+  [ -f "$config_source" ] || die "UAudit daily routine config missing"
+  [ -f "$paths_file" ] || die "UAudit host-local paths file missing"
+  [ -f "$routine_bindings_file" ] || die "UAudit host-local routine bindings file missing"
+  [ -f "${tools_dir}/uaudit_release_resolver.manifest.json" ] || die "UAudit resolver manifest missing before intake install"
+  [ -f "${tools_dir}/uaudit_delivery_contract.manifest.json" ] || die "UAudit delivery manifest missing before intake install"
+  mkdir -p "$tools_dir"
+  project_root=$(yq -r '.project_root // ""' "$paths_file")
+  primary_repo_root=$(yq -r '.primary_repo_root // ""' "$paths_file")
+  routine_ids_json=$(yq -o=json '.routine_ids // {}' "$routine_bindings_file")
+  [ -n "$project_root" ] && [ "$project_root" != "null" ] || die "UAudit project_root is unresolved"
+  [ -n "$primary_repo_root" ] && [ "$primary_repo_root" != "null" ] || die "UAudit primary_repo_root is unresolved"
+  source_config_sha=$(shasum -a 256 "$config_source" | awk '{print $1}')
+  helper_sha=$(shasum -a 256 "$helper_source" | awk '{print $1}')
+  resolver_sha=$(jq -r '.sha256 // ""' "${tools_dir}/uaudit_release_resolver.manifest.json")
+  delivery_sha=$(jq -r '.sha256 // ""' "${tools_dir}/uaudit_delivery_contract.manifest.json")
+  [[ "$resolver_sha" =~ ^[0-9a-f]{64}$ ]] || die "UAudit resolver manifest digest is invalid"
+  [[ "$delivery_sha" =~ ^[0-9a-f]{64}$ ]] || die "UAudit delivery manifest digest is invalid"
+
+  config_tmp=$(mktemp "${tools_dir}/.uaudit_daily_routines.json.XXXXXX")
+  yq -o=json '.routines' "$config_source" | jq \
+    --arg schema_version "uaudit-daily-intake-routines/v1" \
+    --arg source_config_sha256 "$source_config_sha" \
+    --arg project_root "$project_root" \
+    --arg primary_repo_root "$primary_repo_root" \
+    --argjson routine_ids "$routine_ids_json" '
+      {
+        schema_version: $schema_version,
+        source_config_sha256: $source_config_sha256,
+        routines: map({
+          id, app_id, routine_key, platform, branch, base_branch, repo_url,
+          live_routine_id: $routine_ids[.id],
+          repo_path: (.repo_local_path_template
+            | gsub("\\{\\{paths.project_root\\}\\}"; $project_root)
+            | gsub("\\{\\{paths.primary_repo_root\\}\\}"; $primary_repo_root)),
+          cursor_path: (.cursor_path_template
+            | gsub("\\{\\{paths.project_root\\}\\}"; $project_root)
+            | gsub("\\{\\{paths.primary_repo_root\\}\\}"; $primary_repo_root)),
+          lock_path: ($project_root + "/state/locks/" + .id + ".lock")
+        })
+      }
+    ' > "$config_tmp"
+  config_sha=$(shasum -a 256 "$config_tmp" | awk '{print $1}')
+
+  helper_tmp=$(mktemp "${tools_dir}/.uaudit_daily_intake.py.XXXXXX")
+  manifest_tmp=$(mktemp "${tools_dir}/.uaudit_daily_intake.manifest.json.XXXXXX")
+  cp "$helper_source" "$helper_tmp"
+  jq -n \
+    --arg helper "$helper_sha" --arg config "$config_sha" \
+    --arg resolver "$resolver_sha" --arg delivery "$delivery_sha" '
+      {
+        schema_version:"uaudit-daily-intake-install/v1",
+        files:{
+          "uaudit_daily_intake.py":$helper,
+          "uaudit_daily_routines.json":$config,
+          "uaudit_release_resolver.py":$resolver,
+          "uaudit_delivery_contract.py":$delivery
+        }
+      }
+    ' > "$manifest_tmp"
+  target_manifest_sha=$(shasum -a 256 "$manifest_tmp" | awk '{print $1}')
+  if [ -e "$pending" ]; then
+    [ -f "$pending" ] && [ ! -L "$pending" ] || die "UAudit daily intake pending transaction is invalid"
+    [ "$(jq -r '.schema_version // ""' "$pending")" = "uaudit-daily-intake-pending/v1" ] && \
+      [ "$(jq -r '.target_sha256 // ""' "$pending")" = "$target_manifest_sha" ] || \
+      die "UAudit daily intake pending transaction targets another generation"
+    resume_pending=1
+  fi
+
+  if [ "$resume_pending" -eq 0 ] && { [ -e "$helper" ] || [ -e "$config" ] || [ -e "$manifest" ]; }; then
+    [ -f "$helper" ] && [ ! -L "$helper" ] && [ -f "$config" ] && [ ! -L "$config" ] && \
+      [ -f "$manifest" ] && [ ! -L "$manifest" ] || die "UAudit daily intake install is incomplete"
+    python3 - "$helper" "$config" "$manifest" <<'PY' || \
+      die "existing UAudit daily intake bundle must be read-only"
+import pathlib
+import sys
+raise SystemExit(1 if any(pathlib.Path(item).stat().st_mode & 0o222 for item in sys.argv[1:]) else 0)
+PY
+    jq -e '
+      type == "object" and
+      keys == ["files", "schema_version"] and
+      .schema_version == "uaudit-daily-intake-install/v1" and
+      (.files | keys == ["uaudit_daily_intake.py", "uaudit_daily_routines.json", "uaudit_delivery_contract.py", "uaudit_release_resolver.py"])
+    ' "$manifest" >/dev/null || die "existing UAudit daily intake manifest is invalid"
+    [ "$(shasum -a 256 "$helper" | awk '{print $1}')" = "$(jq -r '.files["uaudit_daily_intake.py"]' "$manifest")" ] || \
+      die "existing UAudit daily intake helper digest mismatch"
+    [ "$(shasum -a 256 "$config" | awk '{print $1}')" = "$(jq -r '.files["uaudit_daily_routines.json"]' "$manifest")" ] || \
+      die "existing UAudit daily routine projection digest mismatch"
+    if [ "$(shasum -a 256 "$helper" | awk '{print $1}')" = "$helper_sha" ] && \
+       [ "$(shasum -a 256 "$config" | awk '{print $1}')" = "$config_sha" ] && \
+       [ "$(jq -r '.files["uaudit_release_resolver.py"]' "$manifest")" = "$resolver_sha" ] && \
+       [ "$(jq -r '.files["uaudit_delivery_contract.py"]' "$manifest")" = "$delivery_sha" ]; then
+      rm -f "$helper_tmp" "$config_tmp" "$manifest_tmp"
+      python3 "$helper" verify-install --manifest "$manifest" || \
+        die "existing UAudit daily intake bundle rejected its install manifest"
+      log ok "UAudit daily intake bundle already installed: $helper"
+      return 0
+    fi
+  fi
+
+  pending_tmp=$(mktemp "${tools_dir}/.uaudit_daily_intake.pending.json.XXXXXX")
+  jq -n --arg target_sha256 "$target_manifest_sha" \
+    '{schema_version:"uaudit-daily-intake-pending/v1",target_sha256:$target_sha256}' > "$pending_tmp"
+  chmod 444 "$helper_tmp" "$config_tmp" "$manifest_tmp" "$pending_tmp"
+  mv -f "$pending_tmp" "$pending"
+  mv -f "$helper_tmp" "$helper"
+  mv -f "$config_tmp" "$config"
+  mv -f "$manifest_tmp" "$manifest"
+  rm -f "$pending"
+  python3 "$helper" verify-install --manifest "$manifest" || die "UAudit daily intake bundle rejected its install manifest"
+  log ok "UAudit daily intake bundle installed read-only: $helper"
 }
 
 ensure_uaudit_telegram_plugin_binding() {
@@ -382,6 +532,7 @@ fi
 bindings="${host_dir}/bindings.yaml"
 paths_file="${host_dir}/paths.yaml"
 plugins_file="${host_dir}/plugins.yaml"
+routine_bindings_file="${host_dir}/routines.yaml"
 bindings_preexisting=0
 [ -f "$bindings" ] && bindings_preexisting=1
 
@@ -436,8 +587,49 @@ if [ "$project_key" = "uaudit" ]; then
   team_root=$(yq -r '.team_workspace_root // ""' "$paths_file")
   [ -n "$team_root" ] && [ "$team_root" != "null" ] || \
     die "team_workspace_root required to install UAudit delivery helper"
+  routine_bindings_ready=0
+  if [ ! -f "$routine_bindings_file" ]; then
+    existing_company_id=$(yq -r '.company_id // ""' "$bindings" 2>/dev/null || true)
+    if [[ "$existing_company_id" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
+      live_routines=$(paperclip_get "/api/companies/${existing_company_id}/routines") || \
+        die "failed to read UAudit live routines for immutable intake binding"
+      routine_bindings_tmp=$(mktemp "${host_dir}/.routines.yaml.XXXXXX")
+      jq -n \
+        --argjson configured "$(yq -o=json '.routines' "${REPO_ROOT}/paperclips/projects/uaudit/daily-version-branch-routines.yaml")" \
+        --argjson live "$live_routines" '
+        def items:
+          if type == "array" then . else (.routines // .items // .data // []) end;
+        ($live | items) as $available
+        | reduce $configured[] as $routine ({};
+            ([$available[]
+              | select(
+                  ((.description // "") | split("\n") | index("routine_key: \($routine.routine_key)")) != null
+                  and ((.description // "") | split("\n") | index("platform: \($routine.platform)")) != null
+                )]) as $matches
+            | if ($matches | length) != 1
+              then error("live routine binding is missing or ambiguous for \($routine.id)")
+              else . + {($routine.id): $matches[0].id}
+              end)
+        | {schemaVersion: 1, routine_ids: .}
+      ' > "$routine_bindings_tmp" || die "failed to resolve exact UAudit live routine bindings"
+      jq -e '
+      .schemaVersion == 1 and
+      (.routine_ids | type == "object" and length == 2) and
+      ([.routine_ids[] | test("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")] | all)
+      ' "$routine_bindings_tmp" >/dev/null || die "resolved UAudit live routine bindings are invalid"
+      chmod 600 "$routine_bindings_tmp"
+      mv -f "$routine_bindings_tmp" "$routine_bindings_file"
+      record_host_file_create "$routine_bindings_file"
+    else
+      log warn "UAudit intake deferred until company and live routines are bound"
+    fi
+  fi
+  [ -f "$routine_bindings_file" ] && routine_bindings_ready=1
   install_uaudit_delivery_helper "$team_root"
   install_uaudit_release_resolver "$team_root"
+  if [ "$routine_bindings_ready" -eq 1 ]; then
+    install_uaudit_daily_intake "$team_root" "$paths_file" "$routine_bindings_file"
+  fi
   ensure_uaudit_telegram_plugin_binding "$plugins_file"
 fi
 
