@@ -35,7 +35,7 @@ All recorded agent runs completed technically successfully. The failure is there
 
 ## Assumptions
 
-1. `daily-version-branch-routines.yaml` remains the source authority for routine identity, platform, repository URL, base branch, current release branch, and strict-next branch policy. Bootstrap installs a canonical, immutable JSON projection because the runtime must not depend on PyYAML or repository-relative files.
+1. `daily-version-branch-routines.yaml` remains the source authority for routine identity, platform, repository URL, base branch, current release branch, and strict-next branch policy. Bootstrap installs a canonical, immutable JSON projection because the runtime must not depend on PyYAML or repository-relative files. The live Paperclip routine UUID is resolved into a separate host-local binding and included in that projection; UUIDs do not enter the repository-owned routine document.
 2. The release branch is an exact branch name such as `version/0.52`; branch discovery must not silently replace the configured current branch.
 3. A missing strict-next branch is a valid, explicitly recorded state. It is not an error and must not invent `version/0.53`.
 4. The audit cursor remains receipt-led. This work must not advance it directly.
@@ -91,6 +91,8 @@ The helper must:
 11. persist provenance outside `resolver-input.json`, because the resolver rejects unknown fields;
 12. for a delta/recovery result, retain the routine lock through receipt-led reconciliation; for `no_change`, release it only after a prepared status handoff has been committed.
 
+The lock owner records the issue, routine execution, output bundle, host, process, and timestamp. A retry of the same execution resumes an orphaned intake; a later execution may recover a dead pre-commit owner but may never steal a lock carrying audit metadata. A committed `no_change` result safely releases its own orphaned lock.
+
 No resolver decision may be emitted from an unverified observation. A release ref proven absent in both remote observations is valid evidence and may enter the resolver's existing strict-next/bridge paths; absence must not be confused with a failed or incomplete query.
 
 ### 2. Persist a canonical issue-scoped intake bundle
@@ -144,6 +146,8 @@ The sequence is:
 8. intake completion marker committed and routine lock released;
 9. only then assign the issue to the platform delivery operator with the explicit handoff path.
 
+`prepare-daily-status` builds a complete staging directory and atomically publishes it. An older incomplete final directory is quarantined and rebuilt; incomplete staging directories never become authoritative.
+
 The delivery agent consumes the handoff artifact instead of reconstructing producer evidence from comments or workspace state.
 
 ### 5. Define deterministic missing-input recovery
@@ -169,6 +173,8 @@ Generated files under `paperclips/dist/uaudit/codex/` must be produced through t
 ### 7. Install the helper as one compatible runtime bundle
 
 Bootstrap compiles a canonical JSON routine projection containing resolved repo/cursor paths, exact `repo_url`, `base_branch`, branch, routine, platform, app, and source-config digest. It deploys that projection with the intake helper and a manifest-verified resolver. The current resolver direct-copy/early-return path must be removed. Startup compatibility checks reject mixed helper/resolver/config/delivery generations.
+
+Resolver and intake pending transactions are resumable after interruption. Re-running bootstrap may complete only the same target generation recorded by the pending marker; a marker for another generation fails closed.
 
 A deployment must install compatible runtime files and rendered agent bundles together so an updated dispatcher cannot call an older helper contract, and an updated delivery operator cannot receive an older handoff schema.
 
