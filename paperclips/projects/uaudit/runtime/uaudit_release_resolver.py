@@ -22,7 +22,16 @@ from typing import Any, Literal, Sequence
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 VERSION_RE = re.compile(r"^version/(\d+)\.(\d+)$")
-ResolutionKind = Literal["no_change", "daily", "bridge", "transition", "rebase", "full_recovery", "split_recovery"]
+ResolutionKind = Literal[
+    "no_change",
+    "daily",
+    "bridge",
+    "transition",
+    "rebase",
+    "full_recovery",
+    "split_recovery",
+    "blocked_recovery",
+]
 
 
 class ResolutionError(ValueError):
@@ -95,9 +104,9 @@ def resolve_release_history(
 ) -> Resolution:
     """Select auditable segments from independently verified Git facts.
 
-    ``None`` means the dispatcher could not prove an ancestry relation. Such a
-    condition is availability-first: it returns a full recovery whenever a
-    concrete release head is available, and never produces an empty success.
+    ``None`` means the dispatcher could not prove an ancestry relation. A
+    recovery range is returned only when its ancestry is proven. Ambiguous or
+    divergent history is blocked instead of manufacturing a reverse range.
     """
 
     cursor_sha = _sha(cursor_sha, "cursor_sha")  # type: ignore[assignment]
@@ -131,13 +140,35 @@ def resolve_release_history(
                 False, "configured release is absent; cursor is already in next release, continuing incrementally",
             )
         if master_is_ancestor_of_next_release is True and cursor_is_ancestor_of_master:
+            segments = tuple(
+                segment
+                for segment in (
+                    Segment("master", "master", cursor_sha, master_head),
+                    Segment(
+                        "release",
+                        next_release_branch or release_branch,
+                        master_head,
+                        next_release_head,
+                    ),
+                )
+                if segment.from_sha != segment.to_sha
+            )
+            if not segments:
+                return Resolution(
+                    "no_change", next_release_branch, next_release_head, (), False,
+                    "strict successor head already equals the cursor",
+                )
             return Resolution(
                 "transition", next_release_branch, next_release_head,
-                (Segment("master", "master", cursor_sha, master_head),
-                 Segment("release", next_release_branch or release_branch, master_head, next_release_head)),
+                segments,
                 False, "cursor reached master and the strictly next release contains master",
             )
         if release_head is None and master_is_ancestor_of_next_release is True:
+            if master_head == next_release_head:
+                return Resolution(
+                    "blocked_recovery", next_release_branch, next_release_head, (), False,
+                    "successor equals master but no forward range from the cursor is proven",
+                )
             return Resolution(
                 "full_recovery", next_release_branch, next_release_head,
                 (Segment("release", next_release_branch or release_branch, master_head, next_release_head),),
@@ -145,37 +176,44 @@ def resolve_release_history(
             )
         if master_is_ancestor_of_next_release is False:
             return Resolution(
-                "split_recovery", next_release_branch, next_release_head,
-                (Segment("master_hotfix", "master", master_anchor_sha or cursor_sha, master_head),
-                 Segment("release", next_release_branch or release_branch, cursor_sha, next_release_head)),
-                True, "next release does not contain current master; reports remain independent",
+                "blocked_recovery", release_branch, release_head, (), False,
+                "next release does not contain current master; no complete forward recovery range is proven",
             )
 
     if release_head is None:
+        if cursor_sha == master_head:
+            return Resolution(
+                "no_change", None, master_head, (), False,
+                "release branch is absent and the master bridge is already at the cursor",
+            )
         if cursor_is_ancestor_of_master:
             return Resolution("bridge", None, master_head, (Segment("master", "master", cursor_sha, master_head),), True,
                               "release branch is absent; audit the proven master bridge")
-        return Resolution("full_recovery", None, master_head, (Segment("master", "master", master_anchor_sha or cursor_sha, master_head),), True,
-                          "release is absent and cursor ancestry is not provable")
+        return Resolution(
+            "blocked_recovery", None, master_head, (), False,
+            "release is absent and no forward range from the cursor is proven",
+        )
 
     if cursor_sha == release_head:
         return Resolution("no_change", release_branch, release_head, (), False, "selected release head equals cursor")
     if cursor_is_ancestor_of_release is True:
         return Resolution("daily", release_branch, release_head, (Segment("release", release_branch, cursor_sha, release_head),), False,
                           "cursor is a proven release ancestor")
-    if master_is_ancestor_of_release is True and master_anchor_sha is not None:
-        if old_series_equivalence == "equivalent":
-            return Resolution("rebase", release_branch, release_head,
-                              (Segment("master_hotfix", "master", master_anchor_sha, master_head),), False,
-                              "rebased release series is patch-equivalent; only master hotfix is new")
-        if old_series_equivalence == "changed":
-            return Resolution("rebase", release_branch, release_head,
-                              (Segment("master_hotfix", "master", master_anchor_sha, master_head),
-                               Segment("changed_release", release_branch, master_head, release_head)), False,
-                              "rebase mapping identified changed release patches")
-    return Resolution("full_recovery", release_branch, release_head,
-                      (Segment("release", release_branch, master_head if master_is_ancestor_of_release else cursor_sha, release_head),), True,
-                      "release ancestry or rebase mapping is ambiguous; audit the full proven release range")
+    if master_is_ancestor_of_release is True:
+        if master_head == release_head:
+            return Resolution(
+                "blocked_recovery", release_branch, release_head, (), False,
+                "release equals master but no forward range from the cursor is proven",
+            )
+        return Resolution(
+            "full_recovery", release_branch, release_head,
+            (Segment("release", release_branch, master_head, release_head),), True,
+            "cursor ancestry is ambiguous; recover from the proven master ancestor",
+        )
+    return Resolution(
+        "blocked_recovery", release_branch, release_head, (), False,
+        "release ancestry is ambiguous or divergent; no forward recovery range is proven",
+    )
 
 
 def _resolution_json(result: Resolution) -> dict[str, Any]:

@@ -28,6 +28,7 @@ GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
 ISSUE_RE = re.compile(r"^[A-Z][A-Z0-9]{0,15}-[1-9][0-9]*$")
 ROUTINE_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
+VERSION_BRANCH_RE = re.compile(r"^version/[0-9]+\.[0-9]+$")
 WARNING_CODE_RE = re.compile(r"^[a-z][a-z0-9._-]{0,63}$")
 CONTROL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 CYRILLIC_RE = re.compile(r"[\u0400-\u04ff]")
@@ -133,6 +134,7 @@ TERMINAL_MARKERS = (
 )
 INSTALL_SCHEMA = "uaudit-helper-install/v1"
 INSTALL_MANIFEST = "uaudit_delivery_contract.manifest.json"
+CURSOR_SCHEMA_V2 = "uaudit-daily-cursor/v2"
 STATUS_SCHEMA = "uaudit-daily-slot-status/v1"
 STATUS_PROOF_SCHEMA_V2 = "uaudit-daily-slot-status-proof/v2"
 STATUS_OUTCOMES = ("no_change", "blocked", "deferred")
@@ -357,7 +359,12 @@ def _validate_source_ref(value: Any, audit_kind: str, where: str = "source_ref")
         base_sha = _sha(ref["base_sha"], f"{where}.base_sha", git=True)
         head_sha = _sha(ref["head_sha"], f"{where}.head_sha", git=True)
         return {"repo": repo, "pr_url": pr_url, "base_sha": base_sha, "head_sha": head_sha}
-    _exact_keys(ref, ("routine_id", "branch", "from_sha", "to_sha"), where=where)
+    _exact_keys(
+        ref,
+        ("routine_id", "branch", "from_sha", "to_sha"),
+        ("routine_key", "cursor_from_branch", "cursor_to_branch"),
+        where=where,
+    )
     routine = _bounded_string(ref["routine_id"], f"{where}.routine_id", maximum=128)
     if not ROUTINE_RE.fullmatch(routine):
         _fail(f"{where}.routine_id has invalid format")
@@ -368,7 +375,42 @@ def _validate_source_ref(value: Any, audit_kind: str, where: str = "source_ref")
     to_sha = _sha(ref["to_sha"], f"{where}.to_sha", git=True)
     if from_sha == to_sha:
         _fail(f"{where} delta range must be non-empty")
-    return {"routine_id": routine, "branch": branch, "from_sha": from_sha, "to_sha": to_sha}
+    normalized = {
+        "routine_id": routine,
+        "branch": branch,
+        "from_sha": from_sha,
+        "to_sha": to_sha,
+    }
+    branch_fields = {"routine_key", "cursor_from_branch", "cursor_to_branch"}
+    present = branch_fields & set(ref)
+    if present and present != branch_fields:
+        _fail(f"{where} branch-aware cursor fields must be supplied together")
+    if present:
+        routine_key = _bounded_string(
+            ref["routine_key"], f"{where}.routine_key", maximum=128
+        )
+        if not ROUTINE_RE.fullmatch(routine_key):
+            _fail(f"{where}.routine_key has invalid format")
+        cursor_from_branch = _bounded_string(
+            ref["cursor_from_branch"], f"{where}.cursor_from_branch", maximum=64
+        )
+        cursor_to_branch = _bounded_string(
+            ref["cursor_to_branch"], f"{where}.cursor_to_branch", maximum=64
+        )
+        if not VERSION_BRANCH_RE.fullmatch(cursor_from_branch):
+            _fail(f"{where}.cursor_from_branch must be version/X.Y")
+        if not VERSION_BRANCH_RE.fullmatch(cursor_to_branch):
+            _fail(f"{where}.cursor_to_branch must be version/X.Y")
+        if branch not in {cursor_to_branch, "master"}:
+            _fail(f"{where}.branch must be cursor_to_branch or master")
+        normalized.update(
+            {
+                "routine_key": routine_key,
+                "cursor_from_branch": cursor_from_branch,
+                "cursor_to_branch": cursor_to_branch,
+            }
+        )
+    return normalized
 
 
 def _validate_run_binding(value: Any, where: str = "run_binding") -> dict[str, Any]:
@@ -446,6 +488,7 @@ def _lock_metadata(
     _exact_keys(
         metadata,
         ("schema_version", "issue_identifier", "routine_id", "from_sha", "to_sha", "run_binding_sha256"),
+        ("routine_key", "cursor_from_branch", "cursor_to_branch"),
         where="lock metadata",
     )
     if metadata["schema_version"] != SCHEMA_VERSION:
@@ -458,6 +501,12 @@ def _lock_metadata(
         "from_sha": ref["from_sha"],
         "to_sha": ref["to_sha"],
     }
+    for field in ("routine_key", "cursor_from_branch", "cursor_to_branch"):
+        if field in ref:
+            expected[field] = ref[field]
+    branch_fields = {"routine_key", "cursor_from_branch", "cursor_to_branch"}
+    if (branch_fields & set(metadata)) != (branch_fields & set(ref)):
+        _fail("lock metadata branch-aware fields do not match the run binding")
     for field, expected_value in expected.items():
         if metadata[field] != expected_value:
             _fail(f"lock metadata mismatch: {field}")
@@ -2082,15 +2131,67 @@ def _validate_approval(comments_path: Path, approvers_path: Path, summary_sha: s
 
 def _load_cursor(path: Path) -> dict[str, Any]:
     cursor = _expect_object(_load_json(path, maximum=64 * 1024), "daily cursor")
-    _exact_keys(
-        cursor,
-        ("last_successfully_audited_sha",),
-        (
-            "last_successful_issue", "last_successful_at", "last_delivery_summary_sha256",
-            "last_telegram_message_id",
-        ),
-        where="daily cursor",
+    common_optional = (
+        "last_successful_issue",
+        "last_successful_at",
+        "last_delivery_summary_sha256",
+        "last_telegram_message_id",
     )
+    if "schema_version" in cursor:
+        _exact_keys(
+            cursor,
+            (
+                "schema_version",
+                "routine_key",
+                "active_release_branch",
+                "last_successfully_audited_sha",
+            ),
+            (*common_optional, "last_transition"),
+            where="daily cursor",
+        )
+        if cursor["schema_version"] != CURSOR_SCHEMA_V2:
+            _fail("unsupported daily cursor schema_version")
+        routine_key = _bounded_string(
+            cursor["routine_key"], "cursor.routine_key", maximum=128
+        )
+        if not ROUTINE_RE.fullmatch(routine_key):
+            _fail("cursor.routine_key has invalid format")
+        active_branch = _bounded_string(
+            cursor["active_release_branch"],
+            "cursor.active_release_branch",
+            maximum=64,
+        )
+        if not VERSION_BRANCH_RE.fullmatch(active_branch):
+            _fail("cursor.active_release_branch must be version/X.Y")
+        if "last_transition" in cursor:
+            transition = _expect_object(
+                cursor["last_transition"], "cursor.last_transition"
+            )
+            _exact_keys(
+                transition,
+                ("from_branch", "to_branch", "issue_identifier", "completed_at"),
+                where="cursor.last_transition",
+            )
+            for field in ("from_branch", "to_branch"):
+                branch = _bounded_string(
+                    transition[field], f"cursor.last_transition.{field}", maximum=64
+                )
+                if not VERSION_BRANCH_RE.fullmatch(branch):
+                    _fail(f"cursor.last_transition.{field} must be version/X.Y")
+            _validate_issue(
+                transition["issue_identifier"],
+                "cursor.last_transition.issue_identifier",
+            )
+            _iso_utc(
+                transition["completed_at"], "cursor.last_transition.completed_at"
+            )
+    else:
+        _exact_keys(
+            cursor,
+            ("last_successfully_audited_sha",),
+            common_optional,
+            where="daily cursor",
+        )
     _sha(cursor["last_successfully_audited_sha"], "cursor.last_successfully_audited_sha", git=True)
     if "last_successful_issue" in cursor and cursor["last_successful_issue"] is not None:
         _validate_issue(cursor["last_successful_issue"], "cursor.last_successful_issue")
@@ -2105,8 +2206,18 @@ def _load_cursor(path: Path) -> dict[str, Any]:
 
 
 def _cursor_matches(cursor: Mapping[str, Any], binding: Mapping[str, Any], receipt: Mapping[str, Any]) -> bool:
+    ref = binding["source_ref"]
+    branch_matches = True
+    if "routine_key" in ref:
+        branch_matches = (
+            cursor.get("schema_version") == CURSOR_SCHEMA_V2
+            and cursor.get("routine_key") == ref["routine_key"]
+            and cursor.get("active_release_branch") == ref["cursor_to_branch"]
+        )
     return (
-        cursor.get("last_successfully_audited_sha") == binding["source_ref"]["to_sha"]
+        branch_matches
+        and cursor.get("last_successfully_audited_sha")
+        == binding["source_ref"]["to_sha"]
         and cursor.get("last_successful_issue") == binding["issue_identifier"]
         and cursor.get("last_delivery_summary_sha256") == receipt["summary_sha256"]
         and cursor.get("last_telegram_message_id") == receipt["message_id"]
@@ -2168,15 +2279,47 @@ def reconcile_daily(args: argparse.Namespace) -> dict[str, Any]:
     reconciled_at = _iso_utc(args.reconciled_at, "reconciled_at")
     from_sha = binding["source_ref"]["from_sha"]
     to_sha = binding["source_ref"]["to_sha"]
+    ref = binding["source_ref"]
     current = cursor["last_successfully_audited_sha"]
-    if current == from_sha:
-        updated = {
+    branch_aware = "routine_key" in ref
+    if branch_aware:
+        if cursor.get("schema_version") != CURSOR_SCHEMA_V2:
+            _fail("branch-aware reconciliation requires a v2 daily cursor")
+        if cursor.get("routine_key") != ref["routine_key"]:
+            _fail("daily cursor routine_key does not match the run binding")
+        from_matches = (
+            current == from_sha
+            and cursor.get("active_release_branch") == ref["cursor_from_branch"]
+        )
+    else:
+        if cursor.get("schema_version") == CURSOR_SCHEMA_V2:
+            _fail("legacy reconciliation cannot overwrite a v2 daily cursor")
+        from_matches = current == from_sha
+    if from_matches:
+        updated: dict[str, Any] = {
             "last_successfully_audited_sha": to_sha,
             "last_successful_issue": binding["issue_identifier"],
             "last_successful_at": reconciled_at,
             "last_delivery_summary_sha256": summary_sha,
             "last_telegram_message_id": receipt["message_id"],
         }
+        if branch_aware:
+            updated.update(
+                {
+                    "schema_version": CURSOR_SCHEMA_V2,
+                    "routine_key": ref["routine_key"],
+                    "active_release_branch": ref["cursor_to_branch"],
+                }
+            )
+            if ref["cursor_from_branch"] != ref["cursor_to_branch"]:
+                updated["last_transition"] = {
+                    "from_branch": ref["cursor_from_branch"],
+                    "to_branch": ref["cursor_to_branch"],
+                    "issue_identifier": binding["issue_identifier"],
+                    "completed_at": reconciled_at,
+                }
+            elif "last_transition" in cursor:
+                updated["last_transition"] = cursor["last_transition"]
         _atomic_json(cursor_path, updated)
         status = "applied"
     elif current == to_sha:

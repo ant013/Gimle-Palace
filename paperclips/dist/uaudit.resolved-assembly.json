@@ -98,7 +98,7 @@
         {
           "agentId": "9f0f6fc5-e9ef-4664-ac54-15ffc64069bc",
           "agentName": "UWICTO",
-          "bytes": 6863,
+          "bytes": 7473,
           "family": "dispatcher",
           "lines": 70,
           "output": "paperclips/dist/uaudit/codex/UWICTO.md",
@@ -107,14 +107,14 @@
             "custom"
           ],
           "roleId": "codex:uwi-platform-dispatcher",
-          "sha256": "be93f61c42e722aefcf924f42684df2db2f6e1363386382f2014a13d4251a154",
+          "sha256": "6c021279389b7ecf3e8a00a4f275df6af23efccd4b29a147b451d52c1f8c72a7",
           "source": "paperclips/projects/uaudit/roles-codex/uwi-platform-dispatcher.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "e63b7f27-cc4f-41f4-8883-b5b9677984d9",
           "agentName": "UWACTO",
-          "bytes": 6916,
+          "bytes": 7530,
           "family": "dispatcher",
           "lines": 70,
           "output": "paperclips/dist/uaudit/codex/UWACTO.md",
@@ -123,7 +123,7 @@
             "custom"
           ],
           "roleId": "codex:uwa-platform-dispatcher",
-          "sha256": "48da705a0f1961f0d7caeea8fd56f600a5304c256dd37af59b935cc389c29e0e",
+          "sha256": "6f5bd4d29cc24140dc9716aba0f456454acf3a606b2a36747479f54595e7bd9f",
           "source": "paperclips/projects/uaudit/roles-codex/uwa-platform-dispatcher.md",
           "workspaceCwd": ""
         },
@@ -288,9 +288,9 @@
           "workspaceCwd": ""
         },
         {
-          "agentId": "",
+          "agentId": "a152178e-21c3-408a-b932-05cbdcb0be51",
           "agentName": "UWIDeliveryOperator",
-          "bytes": 11216,
+          "bytes": 11335,
           "family": "minimal",
           "lines": 81,
           "output": "paperclips/dist/uaudit/codex/UWIDeliveryOperator.md",
@@ -299,14 +299,14 @@
             "custom"
           ],
           "roleId": "codex:uwi-delivery-operator",
-          "sha256": "4a7165e866dc1a97274018ec38c5f0a5b82f522cab423bf57dc42835f4831a76",
+          "sha256": "a24ff55817873a7404925da8398ae70e75fce24b86d4386ca8d8c954e533b9f2",
           "source": "paperclips/projects/uaudit/overlays/codex/UWIDeliveryOperator.md",
           "workspaceCwd": ""
         },
         {
-          "agentId": "",
+          "agentId": "d5054f81-0fc7-4308-b041-1959b2c04670",
           "agentName": "UWADeliveryOperator",
-          "bytes": 11252,
+          "bytes": 11375,
           "family": "minimal",
           "lines": 81,
           "output": "paperclips/dist/uaudit/codex/UWADeliveryOperator.md",
@@ -315,7 +315,7 @@
             "custom"
           ],
           "roleId": "codex:uwa-delivery-operator",
-          "sha256": "49365568393cb247b40d971594d78081dfb8e6f532974141c0956e256e4e56a5",
+          "sha256": "6db6052dfb38507842062119df05b320597b06788968539c798464356dd06d08",
           "source": "paperclips/projects/uaudit/overlays/codex/UWADeliveryOperator.md",
           "workspaceCwd": ""
         },
