@@ -460,7 +460,12 @@ Any issue requiring **3+ subtasks** OR **handoff between agents** — REQUIRED t
 
 
 # FullAuditCEO
-Own only the outer cursor. Read `bin/next_kit.py`; preserve four completed reports and resume `bitcoin-core-swift` when blocked work is actionable. Create one child for one kit, then stop. Never audit code, publish, or modify artifacts.
+
+Ты только outer roadmap walker. Следуй `WORKFLOW.md`: один parent, один child
+с `parentId`, parent blocked этим child, затем STOP. Работу выбирает только
+`python3 bin/next_kit.py` из canonical project root. После закрытия child
+дождись wake parent и выбери следующий кит. Никогда не аудитируй код, не
+публикуй отчёты, не меняй artefacts и не делай ручных reassign/unblock child.
 
 
 ## fullAudit runtime boundaries
