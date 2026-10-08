@@ -254,6 +254,164 @@ def test_stale_shared_tracking_ref_cannot_produce_no_change(tmp_path: Path):
         )
 
 
+def test_v2_cursor_active_branch_ignores_late_commit_on_previous_release(
+    tmp_path: Path,
+):
+    remote, producer, first = make_remote(tmp_path)
+    repo = audit_repo(tmp_path, remote, first)
+    git("checkout", "master", cwd=producer)
+    commit(producer, "master release bridge")
+    git("push", "upstream", "master", cwd=producer)
+    git("checkout", "-b", "version/0.53", cwd=producer)
+    first_053 = commit(producer, "0.53 transition")
+    git("push", "upstream", "version/0.53", cwd=producer)
+    second_053 = commit(producer, "0.53 advance")
+    git("push", "upstream", "version/0.53", cwd=producer)
+    git("checkout", "version/0.52", cwd=producer)
+    commit(producer, "late 0.52 commit")
+    git("push", "upstream", "version/0.52", cwd=producer)
+    cursor = tmp_path / "state/android-version-audit.json"
+    write_json(
+        cursor,
+        {
+            "schema_version": "uaudit-daily-cursor/v2",
+            "routine_key": "uaudit-daily-android",
+            "active_release_branch": "version/0.53",
+            "last_successfully_audited_sha": first_053,
+        },
+    )
+    lock = tmp_path / "state/locks/daily-android-version-0.52.lock"
+    module = install_runtime(
+        tmp_path, repo=repo, cursor=cursor, lock=lock, remote=remote
+    )
+    issue, routine_run = envelopes(tmp_path)
+    output = tmp_path / "runs/UNS-688-intake" / RUN_ID
+
+    result = module.run_intake(
+        routine_id="daily-android-version-0.52",
+        issue_envelope=issue,
+        routine_run_envelope=routine_run,
+        output_dir=output,
+        allow_file_url=True,
+    )
+
+    assert result["resolution_kind"] == "daily"
+    assert result["active_branch"] == "version/0.53"
+    assert result["selected_branch"] == "version/0.53"
+    assert result["selected_head"] == second_053
+    assert result["source_ref"] == {
+        "routine_id": "daily-android-version-0.52",
+        "routine_key": "uaudit-daily-android",
+        "branch": "version/0.53",
+        "from_sha": first_053,
+        "to_sha": second_053,
+        "cursor_from_branch": "version/0.53",
+        "cursor_to_branch": "version/0.53",
+    }
+    resolver_input = json.loads((output / "resolver-input.json").read_text())
+    assert resolver_input["release_branch"] == "version/0.53"
+    resolver_output = json.loads((output / "resolver-output.json").read_text())
+    assert resolver_output["segments"] == [
+        {
+            "branch": "version/0.53",
+            "from_sha": first_053,
+            "name": "release",
+            "to_sha": second_053,
+        }
+    ]
+
+
+def test_legacy_cursor_on_successor_never_forces_reverse_old_release_range(
+    tmp_path: Path,
+):
+    remote, producer, first = make_remote(tmp_path)
+    repo = audit_repo(tmp_path, remote, first)
+    git("checkout", "master", cwd=producer)
+    commit(producer, "master release bridge")
+    git("push", "upstream", "master", cwd=producer)
+    git("checkout", "-b", "version/0.53", cwd=producer)
+    cursor_sha = commit(producer, "0.53 transition")
+    git("push", "upstream", "version/0.53", cwd=producer)
+    git("checkout", "version/0.52", cwd=producer)
+    commit(producer, "late 0.52 commit")
+    git("push", "upstream", "version/0.52", cwd=producer)
+    cursor = tmp_path / "state/android-version-audit.json"
+    write_json(cursor, {"last_successfully_audited_sha": cursor_sha})
+    lock = tmp_path / "state/locks/daily-android-version-0.52.lock"
+    module = install_runtime(
+        tmp_path, repo=repo, cursor=cursor, lock=lock, remote=remote
+    )
+    issue, routine_run = envelopes(tmp_path)
+    output = tmp_path / "runs/UNS-688-intake" / RUN_ID
+
+    result = module.run_intake(
+        routine_id="daily-android-version-0.52",
+        issue_envelope=issue,
+        routine_run_envelope=routine_run,
+        output_dir=output,
+        allow_file_url=True,
+    )
+
+    assert result["resolution_kind"] == "blocked_recovery"
+    assert result["next_action"] == "daily_status"
+    assert result["audit_kind"] is None
+    assert result["source_ref"] is None
+    assert not lock.exists()
+    handoff = json.loads((output / "daily-status-handoff.json").read_text())
+    assert handoff["status"]["outcome"] == "blocked"
+
+
+def test_migrate_cursor_v1_to_v2_verifies_remote_branch_and_keeps_backup(
+    tmp_path: Path,
+):
+    remote, producer, first = make_remote(tmp_path)
+    repo = audit_repo(tmp_path, remote, first)
+    git("checkout", "master", cwd=producer)
+    git("checkout", "-b", "version/0.53", cwd=producer)
+    head_053 = commit(producer, "0.53 migration head")
+    git("push", "upstream", "version/0.53", cwd=producer)
+    cursor = tmp_path / "state/android-version-audit.json"
+    write_json(cursor, {"last_successfully_audited_sha": head_053})
+    lock = tmp_path / "state/locks/daily-android-version-0.52.lock"
+    module = install_runtime(
+        tmp_path, repo=repo, cursor=cursor, lock=lock, remote=remote
+    )
+    backup_dir = tmp_path / "state/cursor-migration-backups"
+
+    dry_run = module.migrate_cursor(
+        routine_id="daily-android-version-0.52",
+        active_branch="version/0.53",
+        backup_dir=backup_dir,
+        allow_file_url=True,
+        dry_run=True,
+    )
+    assert dry_run["status"] == "ready"
+    assert json.loads(cursor.read_text()) == {
+        "last_successfully_audited_sha": head_053
+    }
+    assert not backup_dir.exists()
+    assert not lock.exists()
+
+    result = module.migrate_cursor(
+        routine_id="daily-android-version-0.52",
+        active_branch="version/0.53",
+        backup_dir=backup_dir,
+        allow_file_url=True,
+    )
+
+    assert result["status"] == "migrated"
+    assert json.loads(cursor.read_text()) == {
+        "schema_version": "uaudit-daily-cursor/v2",
+        "routine_key": "uaudit-daily-android",
+        "active_release_branch": "version/0.53",
+        "last_successfully_audited_sha": head_053,
+    }
+    assert json.loads((backup_dir / "android-version-audit.v1.json").read_text()) == {
+        "last_successfully_audited_sha": head_053
+    }
+    assert not lock.exists()
+
+
 def test_no_change_prepares_v2_status_from_triggered_at_and_releases_lock(
     tmp_path: Path,
 ):

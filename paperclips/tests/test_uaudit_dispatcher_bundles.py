@@ -189,7 +189,7 @@ def test_generated_dispatchers_pin_canonical_daily_cursors():
     for name, (canonical, legacy) in expected.items():
         text = (REPO / f"paperclips/dist/uaudit/codex/{name}.md").read_text()
         assert canonical in text
-        assert "FROM is only" in text
+        assert "FROM and the active release line are only" in text
         assert "preserve it" in text
         assert legacy in text
         assert "never read below" in text
@@ -414,7 +414,8 @@ def test_delivery_bundles_own_control_plane_not_audit_findings():
         assert "status/telegram.done" in text
         assert "status/cursor.done" in text
         assert "status/workflow.done" in text
-        assert '{"last_successfully_audited_sha":"<40hex>"}' in text
+        assert "active_release_branch" in text
+        assert "last_successfully_audited_sha" in text
         assert "Missing lock is allowed only" in text
         assert "for both complete and partial" in text
         assert "without approval comments, approver files, or approval flags" in text
@@ -430,6 +431,17 @@ def test_delivery_bundles_own_control_plane_not_audit_findings():
         assert "Report-first invariant" in text
         assert "never block an existing report" in text
         assert "infra.findings.json" not in text
+
+
+def test_daily_dispatchers_require_branch_aware_cursor_and_forward_ranges():
+    for source_name in ("uwa-platform-dispatcher.md", "uwi-platform-dispatcher.md"):
+        text = (
+            REPO / "paperclips/projects/uaudit/roles-codex" / source_name
+        ).read_text()
+        assert "active release line" in text
+        assert "blocked_recovery" in text
+        assert "FROM is not a proven ancestor of TO" in text
+        assert "cursor_from_branch,cursor_to_branch" in text
 
 
 def test_audit_stage_bundles_use_bound_structured_v1_sidecars():

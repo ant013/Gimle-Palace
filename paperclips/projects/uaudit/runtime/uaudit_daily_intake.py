@@ -14,6 +14,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import uuid
 from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
@@ -26,6 +27,7 @@ RESULT_SCHEMA = "uaudit-daily-intake-result/v1"
 HANDOFF_SCHEMA = "uaudit-daily-status-handoff/v1"
 STATUS_SCHEMA_V1 = "uaudit-daily-slot-status/v1"
 STATUS_PROOF_SCHEMA_V2 = "uaudit-daily-slot-status-proof/v2"
+CURSOR_SCHEMA_V2 = "uaudit-daily-cursor/v2"
 
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -154,6 +156,32 @@ def _atomic_json(path: Path, value: Any) -> None:
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temporary, path)
+    finally:
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
+
+
+def _replace_json(path: Path, value: Any) -> None:
+    if path.is_symlink():
+        raise IntakeError("mutable JSON path must not be a symlink")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(_canonical_bytes(value))
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+        try:
+            directory_fd = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        except OSError:
+            pass
     finally:
         try:
             os.unlink(temporary)
@@ -305,6 +333,149 @@ def _next_branch(branch: str) -> str:
     assert match
     major, minor = map(int, match.groups())
     return f"version/{major}.{minor + 1}"
+
+
+def _load_daily_cursor(
+    path: Path, routine: Mapping[str, Any]
+) -> tuple[dict[str, Any], str]:
+    cursor = _load_json(path, "daily audit cursor", maximum=64 * 1024)
+    if not isinstance(cursor, dict):
+        raise IntakeError("daily audit cursor must be an object")
+    cursor_sha = _sha(
+        cursor.get("last_successfully_audited_sha"), "daily audit cursor SHA"
+    )
+    assert cursor_sha is not None
+    schema = cursor.get("schema_version")
+    if schema is None:
+        return cursor, routine["branch"]
+    if schema != CURSOR_SCHEMA_V2:
+        raise IntakeError("daily audit cursor schema is unsupported")
+    required = {
+        "schema_version",
+        "routine_key",
+        "active_release_branch",
+        "last_successfully_audited_sha",
+    }
+    optional = {
+        "last_successful_issue",
+        "last_successful_at",
+        "last_delivery_summary_sha256",
+        "last_telegram_message_id",
+        "last_transition",
+    }
+    missing = sorted(required - set(cursor))
+    unknown = sorted(set(cursor) - required - optional)
+    if missing or unknown:
+        raise IntakeError("daily audit cursor v2 has invalid fields")
+    if cursor["routine_key"] != routine["routine_key"]:
+        raise IntakeError("daily audit cursor routine_key mismatch")
+    active_branch = _string(
+        cursor["active_release_branch"],
+        "daily audit cursor active_release_branch",
+        maximum=64,
+    )
+    if not VERSION_RE.fullmatch(active_branch):
+        raise IntakeError("daily audit cursor active_release_branch is invalid")
+    return cursor, active_branch
+
+
+def _validate_resolver_output(
+    value: Mapping[str, Any],
+    *,
+    runner: CommandRunner,
+    repo: Path,
+    branches: Mapping[str, str],
+    refs: Mapping[str, str | None],
+    cursor_sha: str,
+) -> None:
+    _exact(
+        value,
+        {
+            "ok",
+            "kind",
+            "selected_branch",
+            "selected_head",
+            "segments",
+            "requires_full_audit",
+            "reason",
+        },
+        "resolver output",
+    )
+    allowed_kinds = {
+        "no_change",
+        "daily",
+        "bridge",
+        "transition",
+        "rebase",
+        "full_recovery",
+        "split_recovery",
+        "blocked_recovery",
+    }
+    if value.get("kind") not in allowed_kinds:
+        raise IntakeError("resolver kind is invalid")
+    if type(value.get("requires_full_audit")) is not bool:
+        raise IntakeError("resolver requires_full_audit must be boolean")
+    _string(value.get("reason"), "resolver reason", maximum=1024)
+    segments = value.get("segments")
+    if not isinstance(segments, list):
+        raise IntakeError("resolver segments must be an array")
+    selected_branch = value.get("selected_branch")
+    selected_head = value.get("selected_head")
+    expected_heads = {
+        None: refs["base"],
+        branches["current"]: refs["current"],
+        branches["next"]: refs["next"],
+    }
+    if selected_branch not in expected_heads:
+        raise IntakeError("resolver selected an unobserved branch")
+    if selected_head != expected_heads[selected_branch]:
+        raise IntakeError("resolver selected head does not match authoritative refs")
+    if value["kind"] in {"no_change", "blocked_recovery"}:
+        if segments:
+            raise IntakeError("non-audit resolution must not contain segments")
+        return
+    if not segments:
+        raise IntakeError("audit resolution must contain a segment")
+    allowed_segment_branches = set(branches.values())
+    previous_to: str | None = None
+    for index, raw_segment in enumerate(segments):
+        segment = _exact(
+            raw_segment,
+            {"name", "branch", "from_sha", "to_sha"},
+            f"resolver segment[{index}]",
+        )
+        _string(segment["name"], f"resolver segment[{index}].name", maximum=128)
+        branch = _string(
+            segment["branch"], f"resolver segment[{index}].branch", maximum=64
+        )
+        if branch not in allowed_segment_branches:
+            raise IntakeError("resolver segment selected an unobserved branch")
+        from_sha = _sha(segment["from_sha"], f"resolver segment[{index}].from_sha")
+        to_sha = _sha(segment["to_sha"], f"resolver segment[{index}].to_sha")
+        assert from_sha is not None and to_sha is not None
+        if previous_to is not None and from_sha != previous_to:
+            raise IntakeError("resolver segments do not form one continuous range")
+        if from_sha == to_sha:
+            raise IntakeError("resolver segment range must be non-empty")
+        for endpoint in (from_sha, to_sha):
+            _run(runner, ["git", "cat-file", "-e", f"{endpoint}^{{commit}}"], cwd=repo)
+        if not _is_ancestor(runner, repo, from_sha, to_sha):
+            raise IntakeError("resolver segment FROM is not an ancestor of TO")
+        count_result = _run(
+            runner, ["git", "rev-list", "--count", f"{from_sha}..{to_sha}"], cwd=repo
+        )
+        try:
+            count = int(count_result.stdout.strip())
+        except ValueError as exc:
+            raise IntakeError("resolver segment commit count is invalid") from exc
+        if count <= 0:
+            raise IntakeError("resolver segment must contain commits")
+        previous_to = to_sha
+    if value["kind"] in {"daily", "bridge", "transition"}:
+        if segments[0]["from_sha"] != cursor_sha:
+            raise IntakeError("incremental resolver range does not start at the cursor")
+    if segments[-1]["to_sha"] != selected_head:
+        raise IntakeError("resolver final segment does not reach selected head")
 
 
 def _validate_envelopes(
@@ -548,19 +719,30 @@ def _validate_retained_lock(
             "schema_version",
             "issue_identifier",
             "routine_id",
+            "routine_key",
             "from_sha",
             "to_sha",
+            "cursor_from_branch",
+            "cursor_to_branch",
             "run_binding_sha256",
         },
         "intake lock metadata",
     )
+    source_ref = result.get("source_ref")
+    if not isinstance(source_ref, dict):
+        raise IntakeError("completed audit intake is missing its source binding")
     if (
         owner.get("issue_identifier") != issue["identifier"]
         or owner.get("origin_run_id") != issue["originRunId"]
         or owner.get("routine_id") != result.get("routine_id")
         or metadata.get("issue_identifier") != issue["identifier"]
-        or metadata.get("routine_id") != result.get("routine_id")
-        or metadata.get("to_sha") != result.get("selected_head")
+        or metadata.get("routine_id") != source_ref.get("routine_id")
+        or metadata.get("routine_key") != source_ref.get("routine_key")
+        or metadata.get("from_sha") != source_ref.get("from_sha")
+        or metadata.get("to_sha") != source_ref.get("to_sha")
+        or metadata.get("cursor_from_branch")
+        != source_ref.get("cursor_from_branch")
+        or metadata.get("cursor_to_branch") != source_ref.get("cursor_to_branch")
     ):
         raise IntakeError("completed audit intake retained lock binding mismatch")
 
@@ -730,6 +912,121 @@ def _release_owned_lock(lock_dir: Path, issue: Mapping[str, Any]) -> None:
         _discard_lock(lock_dir)
 
 
+def migrate_cursor(
+    *,
+    routine_id: str,
+    active_branch: str,
+    backup_dir: Path,
+    manifest_path: Path | None = None,
+    runner: CommandRunner = _default_runner,
+    allow_file_url: bool = False,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Migrate one legacy cursor after proving its SHA belongs to the branch."""
+
+    verify_install(manifest_path)
+    if not VERSION_RE.fullmatch(active_branch):
+        raise IntakeError("migration active branch must be version/X.Y")
+    helper_dir = Path(__file__).resolve().parent
+    config, _config_sha = _load_config(
+        helper_dir / "uaudit_daily_routines.json", allow_file_url=allow_file_url
+    )
+    matches = [item for item in config["routines"] if item["id"] == routine_id]
+    if len(matches) != 1:
+        raise IntakeError("migration routine id is not uniquely configured")
+    routine = matches[0]
+    repo = Path(routine["repo_path"]).resolve()
+    cursor_path = Path(routine["cursor_path"]).resolve()
+    lock_dir = Path(routine["lock_path"]).resolve()
+    if not repo.is_dir() or cursor_path.is_symlink() or lock_dir.is_symlink():
+        raise IntakeError("migration runtime paths are invalid")
+    if backup_dir.is_symlink():
+        raise IntakeError("migration backup directory must not be a symlink")
+    backup_dir = backup_dir.resolve()
+    lock_dir.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        lock_dir.mkdir()
+    except FileExistsError as exc:
+        raise IntakeError("daily routine lock is held; cursor migration refused") from exc
+    try:
+        _atomic_json(
+            lock_dir / "cursor-migration.json",
+            {
+                "schema_version": CURSOR_SCHEMA_V2,
+                "routine_id": routine_id,
+                "routine_key": routine["routine_key"],
+                "active_release_branch": active_branch,
+                "created_at": _now_utc(),
+            },
+        )
+        legacy = _load_json(cursor_path, "legacy daily cursor", maximum=64 * 1024)
+        if not isinstance(legacy, dict):
+            raise IntakeError("legacy daily cursor must be an object")
+        if "schema_version" in legacy:
+            if legacy.get("schema_version") == CURSOR_SCHEMA_V2:
+                raise IntakeError("daily cursor is already v2")
+            raise IntakeError("legacy daily cursor has an unsupported schema")
+        allowed = {
+            "last_successfully_audited_sha",
+            "last_successful_issue",
+            "last_successful_at",
+            "last_delivery_summary_sha256",
+            "last_telegram_message_id",
+        }
+        if set(legacy) - allowed or "last_successfully_audited_sha" not in legacy:
+            raise IntakeError("legacy daily cursor has invalid fields")
+        cursor_sha = _sha(
+            legacy["last_successfully_audited_sha"], "legacy daily cursor SHA"
+        )
+        assert cursor_sha is not None
+        run_id = str(uuid.uuid4())
+        refs, _evidence = _authoritative_snapshot(
+            runner,
+            repo,
+            routine["repo_url"],
+            {"active": active_branch},
+            run_id,
+        )
+        active_head = refs["active"]
+        if active_head is None:
+            raise IntakeError("migration active branch is proven absent")
+        _run(runner, ["git", "cat-file", "-e", f"{cursor_sha}^{{commit}}"], cwd=repo)
+        if not _is_ancestor(runner, repo, cursor_sha, active_head):
+            raise IntakeError(
+                "legacy cursor SHA is not an ancestor of the migration active branch"
+            )
+        if dry_run:
+            return {
+                "status": "ready",
+                "routine_id": routine_id,
+                "routine_key": routine["routine_key"],
+                "active_release_branch": active_branch,
+                "cursor_sha": cursor_sha,
+                "remote_head": active_head,
+            }
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        backup_path = backup_dir / f"{cursor_path.stem}.v1.json"
+        _atomic_json(backup_path, legacy)
+        migrated = {
+            "schema_version": CURSOR_SCHEMA_V2,
+            "routine_key": routine["routine_key"],
+            "active_release_branch": active_branch,
+            **legacy,
+        }
+        _replace_json(cursor_path, migrated)
+        return {
+            "status": "migrated",
+            "routine_id": routine_id,
+            "routine_key": routine["routine_key"],
+            "active_release_branch": active_branch,
+            "cursor_sha": cursor_sha,
+            "remote_head": active_head,
+            "backup_path": str(backup_path),
+        }
+    finally:
+        _discard_lock(lock_dir)
+
+
 def run_intake(
     *,
     routine_id: str,
@@ -796,17 +1093,15 @@ def run_intake(
         tempfile.mkdtemp(prefix=f".{issue['originRunId']}.", dir=output_dir.parent)
     )
     try:
-        cursor = _load_json(cursor_path, "daily audit cursor", maximum=64 * 1024)
-        if not isinstance(cursor, dict):
-            raise IntakeError("daily audit cursor must be an object")
+        cursor, active_branch = _load_daily_cursor(cursor_path, routine)
         cursor_sha = _sha(
-            cursor.get("last_successfully_audited_sha"), "daily audit cursor SHA"
+            cursor["last_successfully_audited_sha"], "daily audit cursor SHA"
         )
         assert cursor_sha is not None
         branches = {
             "base": routine["base_branch"],
-            "current": routine["branch"],
-            "next": _next_branch(routine["branch"]),
+            "current": active_branch,
+            "next": _next_branch(active_branch),
         }
         try:
             refs, snapshot_evidence = _authoritative_snapshot(
@@ -858,7 +1153,7 @@ def run_intake(
         _run(runner, ["git", "cat-file", "-e", f"{cursor_sha}^{{commit}}"], cwd=repo)
         resolver_input = {
             "cursor_sha": cursor_sha,
-            "release_branch": routine["branch"],
+            "release_branch": active_branch,
             "release_head": current_head,
             "master_anchor_sha": None,
             "master_head": base_head,
@@ -909,29 +1204,61 @@ def run_intake(
             ],
             runner=runner,
         )
+        _validate_resolver_output(
+            resolver_output,
+            runner=runner,
+            repo=repo,
+            branches=branches,
+            refs=refs,
+            cursor_sha=cursor_sha,
+        )
         _atomic_json(resolver_output_path, resolver_output)
         kind = resolver_output.get("kind")
+        selected_branch = resolver_output.get("selected_branch")
         selected_head = _sha(
             resolver_output.get("selected_head"),
             "resolver selected head",
             nullable=True,
         )
+        is_status = kind in {"no_change", "blocked_recovery"}
+        audit_kind = None
+        source_ref = None
+        if not is_status:
+            audit_kind = (
+                "daily_delta"
+                if kind in {"daily", "bridge", "transition"}
+                else "forced_full"
+            )
+            segments = resolver_output["segments"]
+            cursor_to_branch = (
+                selected_branch
+                if isinstance(selected_branch, str)
+                and VERSION_RE.fullmatch(selected_branch)
+                else active_branch
+            )
+            source_ref = {
+                "routine_id": routine["id"],
+                "routine_key": routine["routine_key"],
+                "branch": segments[-1]["branch"],
+                "from_sha": segments[0]["from_sha"],
+                "to_sha": selected_head,
+                "cursor_from_branch": active_branch,
+                "cursor_to_branch": cursor_to_branch,
+            }
         result: dict[str, Any] = {
             "schema_version": RESULT_SCHEMA,
             "issue_identifier": issue["identifier"],
             "origin_run_id": issue["originRunId"],
             "routine_id": routine["id"],
+            "routine_key": routine["routine_key"],
             "platform": routine["platform"],
+            "active_branch": active_branch,
             "resolution_kind": kind,
+            "selected_branch": selected_branch,
             "selected_head": selected_head,
-            "next_action": "daily_status" if kind == "no_change" else "audit",
-            "audit_kind": None
-            if kind == "no_change"
-            else (
-                "daily_delta"
-                if kind in {"daily", "bridge", "transition"}
-                else "forced_full"
-            ),
+            "next_action": "daily_status" if is_status else "audit",
+            "audit_kind": audit_kind,
+            "source_ref": source_ref,
             "artifacts": {
                 "git_evidence": _artifact(git_path),
                 "resolver_input": _artifact(resolver_input_path),
@@ -945,7 +1272,7 @@ def run_intake(
         }
         for name, path in final_paths.items():
             result["artifacts"][name]["path"] = path
-        if kind == "no_change":
+        if is_status:
             routine_digest = _sha256_bytes(_canonical_bytes(routine))
             descriptor_path = temporary / "daily-status-descriptor.json"
             proof_path = temporary / "daily-status-slot-proof.json"
@@ -997,7 +1324,7 @@ def run_intake(
                     "--issue-identifier",
                     issue["identifier"],
                     "--outcome",
-                    "no_change",
+                    "no_change" if kind == "no_change" else "blocked",
                     "--selected-head",
                     str(selected_head),
                     "--reason",
@@ -1037,7 +1364,7 @@ def run_intake(
                     "state_root": str(cursor_path.parent),
                     "run_dir": str(status_run),
                     "summary_sha256": summary_sha,
-                    "outcome": "no_change",
+                    "outcome": "no_change" if kind == "no_change" else "blocked",
                     "selected_head": selected_head,
                     "reason": str(resolver_output.get("reason", "No new commits.")),
                     "attempt_id": issue["originRunId"],
@@ -1064,16 +1391,19 @@ def run_intake(
             result["status_run_dir"] = str(status_run)
             result["status_summary_sha256"] = summary_sha
         else:
-            if selected_head is None:
-                raise IntakeError("audit resolution is missing selected head")
+            if selected_head is None or source_ref is None:
+                raise IntakeError("audit resolution is missing its source binding")
             _atomic_json(
                 lock_dir / "metadata.json",
                 {
                     "schema_version": 1,
                     "issue_identifier": issue["identifier"],
-                    "routine_id": routine["id"],
-                    "from_sha": cursor_sha,
-                    "to_sha": selected_head,
+                    "routine_id": source_ref["routine_id"],
+                    "routine_key": source_ref["routine_key"],
+                    "from_sha": source_ref["from_sha"],
+                    "to_sha": source_ref["to_sha"],
+                    "cursor_from_branch": source_ref["cursor_from_branch"],
+                    "cursor_to_branch": source_ref["cursor_to_branch"],
                     "run_binding_sha256": None,
                 },
             )
@@ -1087,7 +1417,7 @@ def run_intake(
             if existing is None:
                 raise IntakeError("could not publish intake result") from exc
             result = existing
-        if kind != "no_change":
+        if not is_status:
             retained_lock = True
         return result
     finally:
@@ -1247,6 +1577,12 @@ def build_parser() -> argparse.ArgumentParser:
     resolve.add_argument("--issue-envelope", type=Path, required=True)
     resolve.add_argument("--routine-run-envelope", type=Path, required=True)
     resolve.add_argument("--output-dir", type=Path, required=True)
+    migrate = subparsers.add_parser("migrate-cursor")
+    migrate.add_argument("--manifest", type=Path)
+    migrate.add_argument("--routine-id", required=True)
+    migrate.add_argument("--active-branch", required=True)
+    migrate.add_argument("--backup-dir", type=Path, required=True)
+    migrate.add_argument("--dry-run", action="store_true")
     handoff = subparsers.add_parser("verify-handoff")
     handoff.add_argument("--manifest", type=Path)
     handoff.add_argument("--handoff", type=Path, required=True)
@@ -1268,6 +1604,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 routine_run_envelope=args.routine_run_envelope,
                 output_dir=args.output_dir,
                 manifest_path=args.manifest,
+            )
+        elif args.command == "migrate-cursor":
+            result = migrate_cursor(
+                routine_id=args.routine_id,
+                active_branch=args.active_branch,
+                backup_dir=args.backup_dir,
+                manifest_path=args.manifest,
+                dry_run=args.dry_run,
             )
         else:
             result = verify_handoff(

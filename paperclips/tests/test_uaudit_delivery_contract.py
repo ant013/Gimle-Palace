@@ -194,6 +194,9 @@ def prepare_run(
     limitations: dict[str, list[dict]] | None = None,
     diff_patch: bytes | None = None,
     validate: bool = True,
+    routine_key: str | None = None,
+    cursor_from_branch: str | None = None,
+    cursor_to_branch: str | None = None,
 ) -> dict:
     helper = install_helper(root)
     run = root / "run"
@@ -207,6 +210,16 @@ def prepare_run(
             ref["routine_id"] = "daily-android-version-0.49"
     if kind != "pr" and routine_id is not None:
         ref["routine_id"] = routine_id
+    if kind != "pr" and routine_key is not None:
+        assert cursor_from_branch is not None and cursor_to_branch is not None
+        ref["branch"] = cursor_to_branch
+        ref.update(
+            {
+                "routine_key": routine_key,
+                "cursor_from_branch": cursor_from_branch,
+                "cursor_to_branch": cursor_to_branch,
+            }
+        )
     intake = {
         "schema_version": 1,
         "issue_identifier": "UNS-123",
@@ -240,6 +253,15 @@ def prepare_run(
                 "from_sha": BASE_SHA,
                 "to_sha": HEAD_SHA,
                 "run_binding_sha256": None,
+                **(
+                    {
+                        "routine_key": ref["routine_key"],
+                        "cursor_from_branch": ref["cursor_from_branch"],
+                        "cursor_to_branch": ref["cursor_to_branch"],
+                    }
+                    if routine_key is not None
+                    else {}
+                ),
             },
         )
         call(
@@ -1049,6 +1071,68 @@ def test_reconcile_daily_accepts_metadata_bound_versioned_lock_for_stable_routin
 
     assert result["status"] == "applied"
     assert read_json(cursor)["last_successfully_audited_sha"] == HEAD_SHA
+
+
+def test_reconcile_daily_atomically_advances_v2_branch_and_sha(tmp_path: Path):
+    fixture = prepare_run(
+        tmp_path,
+        kind="daily_delta",
+        routine_id="daily-ios-version-0.52",
+        routine_key="uaudit-daily-ios",
+        cursor_from_branch="version/0.52",
+        cursor_to_branch="version/0.53",
+    )
+    aggregate(fixture)
+    record(fixture, "message")
+    cursor = tmp_path / "state" / "ios-version-audit.json"
+    write_json(
+        cursor,
+        {
+            "schema_version": "uaudit-daily-cursor/v2",
+            "routine_key": "uaudit-daily-ios",
+            "active_release_branch": "version/0.52",
+            "last_successfully_audited_sha": BASE_SHA,
+        },
+    )
+
+    applied = call(
+        fixture["helper"],
+        "reconcile-daily",
+        "--run-dir",
+        fixture["run"],
+        "--cursor",
+        cursor,
+        "--lock-dir",
+        fixture["lock"],
+        "--reconciled-at",
+        RECONCILED_AT,
+    )
+
+    assert applied["status"] == "applied"
+    updated = read_json(cursor)
+    assert updated["schema_version"] == "uaudit-daily-cursor/v2"
+    assert updated["routine_key"] == "uaudit-daily-ios"
+    assert updated["active_release_branch"] == "version/0.53"
+    assert updated["last_successfully_audited_sha"] == HEAD_SHA
+    assert updated["last_transition"] == {
+        "from_branch": "version/0.52",
+        "to_branch": "version/0.53",
+        "issue_identifier": "UNS-123",
+        "completed_at": RECONCILED_AT,
+    }
+    resumed = call(
+        fixture["helper"],
+        "reconcile-daily",
+        "--run-dir",
+        fixture["run"],
+        "--cursor",
+        cursor,
+        "--lock-dir",
+        fixture["lock"],
+        "--reconciled-at",
+        RECONCILED_AT,
+    )
+    assert resumed["status"] == "already_applied"
 
 
 @pytest.mark.parametrize("state", ["blocked", "missing_marker"])

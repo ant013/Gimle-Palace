@@ -27,8 +27,8 @@ class ReleaseResolverTests(unittest.TestCase):
         self.assertEqual(transition.kind, "transition")
         self.assertFalse(transition.requires_full_audit)
         split = resolve_release_history(cursor_sha=sha("a"), release_branch="version/0.50", release_head=sha("c"), master_anchor_sha=sha("a"), master_head=sha("b"), cursor_is_ancestor_of_release=False, cursor_is_ancestor_of_master=True, master_is_ancestor_of_release=False, next_release_branch="version/0.51", next_release_head=sha("d"), master_is_ancestor_of_next_release=False)
-        self.assertEqual(split.kind, "split_recovery")
-        self.assertEqual(len(split.segments), 2)
+        self.assertEqual(split.kind, "blocked_recovery")
+        self.assertEqual(split.segments, ())
 
     def test_absent_base_successor_at_cursor_is_no_change_even_if_master_is_behind(self) -> None:
         result = resolve_release_history(
@@ -102,6 +102,47 @@ class ReleaseResolverTests(unittest.TestCase):
         result = resolve_release_history(cursor_sha=sha("a"), release_branch="version/0.50", release_head=sha("d"), master_anchor_sha=sha("a"), master_head=sha("b"), cursor_is_ancestor_of_release=False, cursor_is_ancestor_of_master=True, master_is_ancestor_of_release=True, old_series_equivalence="ambiguous")
         self.assertEqual(result.kind, "full_recovery")
         self.assertTrue(result.requires_full_audit)
+
+    def test_non_ancestor_release_blocks_instead_of_reverse_full_recovery(self) -> None:
+        result = resolve_release_history(
+            cursor_sha=sha("d"),
+            release_branch="version/0.52",
+            release_head=sha("b"),
+            master_anchor_sha=None,
+            master_head=sha("c"),
+            cursor_is_ancestor_of_release=False,
+            cursor_is_ancestor_of_master=False,
+            master_is_ancestor_of_release=False,
+            next_release_branch="version/0.53",
+            next_release_head=sha("e"),
+            master_is_ancestor_of_next_release=True,
+            cursor_is_ancestor_of_next_release=True,
+        )
+
+        self.assertEqual(result.kind, "blocked_recovery")
+        self.assertEqual(result.selected_branch, "version/0.52")
+        self.assertEqual(result.selected_head, sha("b"))
+        self.assertEqual(result.segments, ())
+        self.assertFalse(result.requires_full_audit)
+
+    def test_split_recovery_never_emits_unproven_segments(self) -> None:
+        result = resolve_release_history(
+            cursor_sha=sha("a"),
+            release_branch="version/0.52",
+            release_head=sha("b"),
+            master_anchor_sha=None,
+            master_head=sha("c"),
+            cursor_is_ancestor_of_release=False,
+            cursor_is_ancestor_of_master=False,
+            master_is_ancestor_of_release=False,
+            next_release_branch="version/0.53",
+            next_release_head=sha("d"),
+            master_is_ancestor_of_next_release=False,
+            cursor_is_ancestor_of_next_release=False,
+        )
+
+        self.assertEqual(result.kind, "blocked_recovery")
+        self.assertEqual(result.segments, ())
 
     def test_rejects_skipping_release_line(self) -> None:
         with self.assertRaises(ResolutionError):

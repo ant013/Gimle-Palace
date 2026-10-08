@@ -25,7 +25,7 @@ test -n "$$PAPERCLIP_DELIVERY_TOKEN"
 
 POST with Board bearer token to `/api/plugins/{{plugins.telegram.plugin_id}}/actions/send_to_telegram` with `{"params":{...}}`. Inside `params`, send only `companyId`, `agentId`, `issueIdentifier`, exact validated `text`, and, in document mode only, `markdownFileName` plus inline `markdownContent`. `issueIdentifier` must be `{{report_delivery.issue_prefix}}-*`. Never pass an explicit destination, local-file reference, URL, binary, raw diff, or credential; never call Telegram directly. Empty Board token or `Board access required` records the artifact path and permission warning, leaves delivery pending, and stops retries without blocking an existing report.
 
-For explicitly authorized `mode=initialize_cursor`, require the exact supplied upstream head to be a lowercase 40-hex SHA and atomically initialize the configured iOS routine cursor with exactly `{"last_successfully_audited_sha":"<40hex>"}`. Comment the routine/SHA, mark done and stop. Do not create `$RUN`, audit, or send Telegram.
+For explicitly authorized `mode=initialize_cursor`, require the exact supplied upstream head to be a lowercase 40-hex SHA, `routine_key=uaudit-daily-ios`, and an exact `version/X.Y` active release branch. Atomically initialize the configured iOS cursor as v2 with exactly `schema_version,routine_key,active_release_branch,last_successfully_audited_sha`. Comment the routine/branch/SHA, mark done and stop. Do not create `$RUN`, audit, or send Telegram.
 
 ### V1 PR and daily delivery
 
