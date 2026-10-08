@@ -327,6 +327,68 @@ async def test_embeddings_not_ready_returns_warning_without_vector_query() -> No
 
 
 @pytest.mark.asyncio
+async def test_legacy_name_embedding_counts_as_embedded_coverage() -> None:
+    from palace_mcp.code.find_semantic import semantic_search
+
+    backend = _FakeBackend()
+    dispatcher = EmbeddingBackendDispatcher({"qodo": backend}, default_backend="qodo")
+    settings = MagicMock(neo4j_uri="bolt://neo4j:7687")
+
+    def run_fn(query: str, _params: dict[str, Any]) -> _FakeResult:
+        if "collect(p.slug)" in query:
+            return _FakeResult(single_value={"found_projects": ["wallet-core"]})
+        if "coalesce(s.embedding, s.name_embedding)" in query:
+            if "embedded_symbol_count" in query:
+                return _FakeResult(single_value={"embedded_symbol_count": 1})
+            if "embedded_cnt" in query:
+                return _FakeResult(
+                    data_value=[
+                        {"source_scope": "project", "total": 1, "embedded_cnt": 1}
+                    ]
+                )
+        if _is_vector_query(query):
+            return _FakeResult(
+                data_value=[
+                    {
+                        "group_id": "project/wallet-core",
+                        "qualified_name": "Crypto.verify",
+                        "kind": "function",
+                        "file_path": "Sources/A.swift",
+                        "module_name": "WalletCore",
+                        "source_scope": "project",
+                        "embedding_input_hash": "hash-a",
+                        "commit_sha": None,
+                        "score": 0.91,
+                    }
+                ]
+            )
+        if (
+            "OPTIONAL MATCH (s:Symbol {group_id: hit.group_id, qualified_name: hit.qualified_name})"
+            in query
+        ):
+            return _FakeResult(data_value=[])
+        raise AssertionError(f"unexpected query: {query}")
+
+    driver = _FakeDriver(run_fn)
+    with patch(
+        "palace_mcp.code.find_semantic.get_embedding_dispatcher",
+        return_value=dispatcher,
+    ):
+        result = await semantic_search(
+            driver=driver,
+            query="signature verification",
+            project="wallet-core",
+            include_context=False,
+            settings=settings,
+        )
+
+    assert result["ok"] is True
+    assert result["embedded_symbol_count"] == 1
+    assert result["embedding_coverage"]["embedded_symbols"] == 1
+    assert result["returned_count"] == 1
+
+
+@pytest.mark.asyncio
 async def test_success_filters_scope_and_skips_context_when_disabled() -> None:
     from palace_mcp.code.find_semantic import semantic_search
 

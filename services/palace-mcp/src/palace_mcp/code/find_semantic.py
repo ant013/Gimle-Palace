@@ -47,7 +47,7 @@ RETURN collect(p.slug) AS found_projects
 _COUNT_EMBEDDED_SYMBOLS_QUERY = """
 MATCH (s:Symbol)
 WHERE s.group_id IN $group_ids
-  AND s.embedding IS NOT NULL
+  AND coalesce(s.embedding, s.name_embedding) IS NOT NULL
   AND ($include_deprecated OR NOT s:Deprecated)
 RETURN count(s) AS embedded_symbol_count
 """.strip()
@@ -56,7 +56,8 @@ _COVERAGE_QUERY = """
 MATCH (s:Symbol)
 WHERE s.group_id IN $group_ids
   AND ($include_deprecated OR NOT s:Deprecated)
-WITH s.source_scope AS source_scope, s.embedding IS NOT NULL AS has_embed
+WITH s.source_scope AS source_scope,
+     coalesce(s.embedding, s.name_embedding) IS NOT NULL AS has_embed
 RETURN source_scope, count(*) AS total, sum(CASE WHEN has_embed THEN 1 ELSE 0 END) AS embedded_cnt
 """.strip()
 
