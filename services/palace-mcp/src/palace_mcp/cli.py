@@ -37,15 +37,6 @@ import anyio
 import httpx
 
 from palace_mcp.extractors.foundation.profiles import get_ordered_extractors
-from palace_mcp.swift_scip_provenance import (
-    SWIFT_SCIP_EMITTER_NAME as _SWIFT_SCIP_EMITTER_NAME,
-    SWIFT_SCIP_EMITTER_VERSION as _SWIFT_SCIP_EMITTER_VERSION,
-    SwiftScipProvenance,
-    SwiftScipProvenancePolicy,
-    inspect_swift_scip_provenance,
-    load_swift_scip_metadata,
-    validate_swift_scip_metadata,
-)
 
 _SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
 _DEFAULT_MCP_URL = "http://localhost:8000/mcp"
@@ -62,6 +53,8 @@ _PROJECT_SUCCESS_STATUSES = {
     "SUCCEEDED_WITH_SKIPS",
     "SUCCEEDED_WITH_FAILURES",
 }
+_SWIFT_SCIP_EMITTER_NAME = "palace-swift-scip-emit-cli"
+_SWIFT_SCIP_EMITTER_VERSION = "2026-05-15"
 _DEFAULT_REMOTE_HOST = "imac-ssh.ant013.work"
 _DEFAULT_REMOTE_BASE = "/Users/Shared/Ios/HorizontalSystems"
 _DEFAULT_MACBOOK_BASE = "/Users/ant013/Ios/HorizontalSystems"
@@ -608,53 +601,11 @@ def _build_macbook_fallback_command(spec: ProjectRuntimeSpec) -> str:
 
 
 def _load_scip_metadata(meta_path: Path) -> dict[str, Any] | None:
-    return load_swift_scip_metadata(meta_path)
-
-
-def swift_scip_metadata_needs_regeneration(
-    *,
-    repo_path: Path,
-    repo_head_sha: str,
-    metadata: dict[str, Any] | None,
-) -> tuple[bool, str]:
-    stale, reason = validate_swift_scip_metadata(
-        repo_path=repo_path,
-        repo_head_sha=repo_head_sha,
-        metadata=metadata,
-    )
-    compatibility_reasons = {
-        "metadata_missing_or_invalid": "metadata missing or invalid",
-        "metadata_current": "metadata current",
-        "metadata_current_remote_copy": "metadata current (remote_copy)",
-        "source_repo_path_missing": "source_repo_path missing",
-        "destination_repo_path_missing": "destination_repo_path missing",
-        "generator_host_missing": "generator_host missing",
-    }
-    if reason.endswith("_mismatch"):
-        reason = f"{reason.removesuffix('_mismatch')} mismatch"
-    return stale, compatibility_reasons.get(reason, reason)
-
-
-def _require_current_prepared_scip(
-    *, spec: ProjectRuntimeSpec, output_path: Path
-) -> SwiftScipProvenance:
-    provenance = inspect_swift_scip_provenance(
-        repo_path=spec.repo_path,
-        project_slug=spec.slug,
-        scip_path=output_path,
-        policy=SwiftScipProvenancePolicy.PREPARATION,
-    )
-    if provenance.current:
-        return provenance
-    error_code = (
-        "missing_required_scip_artifact"
-        if provenance.reason in {"scip_artifact_missing", "scip_artifact_empty"}
-        else "stale_scip_artifact"
-    )
-    raise ProjectAnalyzeCliError(
-        f"current Swift SCIP artifact required: {provenance.reason}",
-        error_code=error_code,
-    )
+    try:
+        payload = json.loads(meta_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
 
 
 def _write_scip_metadata(
@@ -847,12 +798,6 @@ def _emit_swift_kit_scip(
         )
 
     metadata = _load_scip_metadata(meta_path)
-    if metadata is None:
-        raise ProjectAnalyzeCliError(
-            f"swift_kit emitter did not write metadata: {meta_path}",
-            error_code="missing_scip_metadata",
-        )
-
     return {
         "emitted": True,
         "helper": "swift_kit",
@@ -901,12 +846,6 @@ def _emit_uw_ios_app_scip(
         )
 
     metadata = _load_scip_metadata(meta_path)
-    if metadata is None:
-        raise ProjectAnalyzeCliError(
-            f"uw-ios-app emitter did not write metadata: {meta_path}",
-            error_code="missing_scip_metadata",
-        )
-
     return {
         "emitted": True,
         "helper": "uw_ios_app",
@@ -923,40 +862,35 @@ def ensure_swift_scip_artifact(
     emit_scip: str,
 ) -> dict[str, Any]:
     output_path = spec.repo_path / "scip" / "index.scip"
-    repo_head_sha = _git_head_sha(spec.repo_path)
+    meta_path = Path(f"{output_path}.meta.json")
+    metadata = _load_scip_metadata(meta_path)
+    usable_index = output_path.is_file() and output_path.stat().st_size > 0
 
     if emit_scip == "always":
-        result = _emit_swift_scip(spec=spec, repo_head_sha=repo_head_sha)
-        _require_current_prepared_scip(spec=spec, output_path=output_path)
-        return result
+        return _emit_swift_scip(spec=spec, repo_head_sha=_git_head_sha(spec.repo_path))
 
     if emit_scip == "never":
-        provenance = _require_current_prepared_scip(spec=spec, output_path=output_path)
-        return {
-            "emitted": False,
-            "host_scip_path": str(output_path),
-            "meta_path": str(provenance.metadata_path),
-            "metadata": provenance.metadata,
-            "reason": "existing artifact reused",
-        }
-
-    provenance = inspect_swift_scip_provenance(
-        repo_path=spec.repo_path,
-        project_slug=spec.slug,
-        scip_path=output_path,
-        policy=SwiftScipProvenancePolicy.PREPARATION,
-    )
-    if not provenance.current:
-        result = _emit_swift_scip(spec=spec, repo_head_sha=repo_head_sha)
-        _require_current_prepared_scip(spec=spec, output_path=output_path)
-        return result
+        if not usable_index:
+            raise ProjectAnalyzeCliError(
+                "usable SCIP artifact required for --emit-scip=never",
+                error_code="missing_required_scip_artifact",
+            )
+    else:
+        repo_head_sha = _git_head_sha(spec.repo_path)
+        source_changed = (
+            metadata is not None
+            and bool(metadata.get("repo_head_sha"))
+            and metadata["repo_head_sha"] != repo_head_sha
+        )
+        if not usable_index or source_changed:
+            return _emit_swift_scip(spec=spec, repo_head_sha=repo_head_sha)
 
     return {
         "emitted": False,
         "host_scip_path": str(output_path),
-        "meta_path": str(provenance.metadata_path),
-        "metadata": provenance.metadata,
-        "reason": provenance.reason,
+        "meta_path": str(meta_path),
+        "metadata": metadata,
+        "reason": "existing artifact reused",
     }
 
 

@@ -17,6 +17,7 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 import re
+import subprocess
 from time import perf_counter
 from typing import ClassVar
 
@@ -79,13 +80,6 @@ from palace_mcp.extractors.scip_parser import (
     iter_scip_occurrences,
     iter_scip_symbol_infos,
     parse_scip_file,
-)
-from palace_mcp.swift_scip_provenance import (
-    SWIFT_SYMBOL_BASELINE_KIND as _SWIFT_SYMBOL_BASELINE_KIND,
-    SWIFT_SYMBOL_BASELINE_STATE_VERSION as _SWIFT_SYMBOL_BASELINE_STATE_VERSION,
-    SwiftScipProvenancePolicy,
-    git_head_sha,
-    inspect_swift_scip_provenance,
 )
 
 logger = logging.getLogger(__name__)
@@ -183,6 +177,8 @@ RETURN collect(DISTINCT f.last_seen_in_commit) AS commits
 _GRAPH_BATCH_SIZE = 500
 _INCREMENTAL_FULL_REPROCESS_THRESHOLD = 0.8
 _GIT_CHANGESET_CAP = 500
+_SWIFT_SYMBOL_BASELINE_KIND = "swift_symbol_scope"
+_SWIFT_SYMBOL_BASELINE_STATE_VERSION = 1
 _SWIFT_SOURCE_SUFFIXES = (".swift", ".swiftinterface")
 _SWIFT_ACCESS_LOOKBACK_LINES = 2
 _SWIFT_ACCESS_MODIFIER_RE = re.compile(
@@ -247,32 +243,6 @@ class SymbolIndexSwift(BaseExtractor):
                 action="manual_cleanup",
             ) from e
 
-        provenance = inspect_swift_scip_provenance(
-            repo_path=ctx.repo_path,
-            project_slug=ctx.project_slug,
-            scip_path=scip_path,
-            policy=SwiftScipProvenancePolicy.CONSUMPTION,
-        )
-        if not provenance.current:
-            raise ExtractorError(
-                error_code=ExtractorErrorCode.SCIP_ARTIFACT_STALE,
-                message=(
-                    "current Swift SCIP artifact required before ingest: "
-                    f"{provenance.reason}"
-                ),
-                recoverable=False,
-                action="manual_cleanup",
-                context={
-                    "scip_path": str(scip_path),
-                    "metadata_path": str(provenance.metadata_path),
-                    "reason": provenance.reason,
-                },
-            )
-        assert provenance.repo_head_sha is not None
-        assert provenance.scip_digest is not None
-        commit_sha = provenance.repo_head_sha
-        scip_digest = provenance.scip_digest
-
         previous_error = await _get_previous_error_code(driver, ctx.project_slug)
         check_resume_budget(previous_error_code=previous_error)
 
@@ -286,6 +256,8 @@ class SymbolIndexSwift(BaseExtractor):
 
         try:
             scip_index = parse_scip_file(scip_path)
+            commit_sha = _read_head_sha(ctx.repo_path)
+            scip_digest = _file_digest(scip_path)
             scip_paths = _scip_source_paths(scip_index)
 
             def _iter_occurrences() -> Iterable[SymbolOccurrence]:
@@ -750,7 +722,7 @@ async def _current_swift_baseline_fast_skip_reason(
     project_id: str,
     commit_sha: str,
     body_hash_manifest_digest: str,
-    scip_digest: str,
+    scip_digest: str | None,
 ) -> str | None:
     baseline = await load_extractor_baseline(
         driver,
@@ -815,6 +787,16 @@ def _body_hash_manifest_digest(file_body_hashes: dict[str, str]) -> str:
         digest.update(b"\0")
         digest.update(body_hash.encode("utf-8", errors="surrogateescape"))
         digest.update(b"\0")
+    return f"sha256:{digest.hexdigest()}"
+
+
+def _file_digest(path: Path) -> str | None:
+    if not path.is_file():
+        return None
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
     return f"sha256:{digest.hexdigest()}"
 
 
@@ -1531,7 +1513,17 @@ def _is_vendor(file_path: str) -> bool:
 
 
 def _read_head_sha(repo_path: Path) -> str:
-    return git_head_sha(repo_path) or "unknown"
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return "unknown"
+    return result.stdout.strip() if result.returncode == 0 else "unknown"
 
 
 async def _get_previous_error_code(driver: AsyncDriver, project: str) -> str | None:
