@@ -30,6 +30,7 @@ ISSUE_RE = re.compile(r"^[A-Z][A-Z0-9]{0,15}-[1-9][0-9]*$")
 ROUTINE_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
 VERSION_BRANCH_RE = re.compile(r"^version/[0-9]+\.[0-9]+$")
 WARNING_CODE_RE = re.compile(r"^[a-z][a-z0-9._-]{0,63}$")
+IDEMPOTENCY_KEY_RE = re.compile(r"^[A-Za-z0-9._:-]{1,160}$")
 CONTROL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 CYRILLIC_RE = re.compile(r"[\u0400-\u04ff]")
 SEVERITIES = ("Critical", "Block", "Important", "Observation")
@@ -221,6 +222,24 @@ def _sha(value: Any, where: str, *, git: bool = False) -> str:
     if not pattern.fullmatch(text):
         _fail(f"{where} must be lowercase {'40' if git else '64'}-hex")
     return text
+
+
+def _idempotency_key(value: Any, where: str) -> str:
+    text = _bounded_string(value, where, maximum=160)
+    if not IDEMPOTENCY_KEY_RE.fullmatch(text):
+        _fail(f"{where} has invalid format")
+    return text
+
+
+def _delivery_idempotency_key(summary_sha: str, language: str) -> str:
+    _sha(summary_sha, "delivery summary digest")
+    if language not in {"ru", "en"}:
+        _fail("delivery language is invalid")
+    return f"uaudit:{summary_sha}:{language}"
+
+
+def _daily_status_idempotency_key(identity: Mapping[str, Any]) -> str:
+    return f"uaudit-status:{_sha256_bytes(_canonical_bytes(identity))}"
 
 
 def _normalize_space(value: str) -> str:
@@ -1484,9 +1503,9 @@ def _validate_receipt(run_dir: Path, summary: Mapping[str, Any], summary_sha: st
     ]
     if bilingual:
         keys.extend(("english_message_id", "english_report_sha256"))
-    payload_keys = ["payload_sha256"]
+    payload_keys = ["payload_sha256", "idempotency_key"]
     if bilingual:
-        payload_keys.append("english_payload_sha256")
+        payload_keys.extend(("english_payload_sha256", "english_idempotency_key"))
     _exact_keys(receipt, tuple(keys), tuple(payload_keys), where="delivery-result.json")
     if receipt["schema_version"] != SCHEMA_VERSION:
         _fail("unsupported receipt schema_version")
@@ -1512,7 +1531,7 @@ def _validate_receipt(run_dir: Path, summary: Mapping[str, Any], summary_sha: st
         if not _is_int(receipt["english_message_id"]) or receipt["english_message_id"] <= 0:
             _fail("receipt english_message_id must be a positive integer")
     if "payload_sha256" in receipt:
-        payloads = _validate_delivery_payloads(run_dir, summary)
+        payloads = _validate_delivery_payloads(run_dir, summary, summary_sha)
         for field, expected_value in payloads.items():
             if receipt.get(field) != expected_value:
                 _fail(f"receipt mismatch: {field}")
@@ -1528,7 +1547,7 @@ def _validate_delivery_progress(summary: Mapping[str, Any], summary_sha: str, va
             "schema_version", "summary_sha256", "run_binding_sha256", "message_id",
             "telegram_text_sha256", "report_sha256",
         ),
-        ("payload_sha256",),
+        ("payload_sha256", "idempotency_key"),
         where="delivery-progress.json",
     )
     expected = {
@@ -1543,6 +1562,8 @@ def _validate_delivery_progress(summary: Mapping[str, Any], summary_sha: str, va
             _fail(f"delivery progress mismatch: {field}")
     if not _is_int(progress["message_id"]) or progress["message_id"] <= 0:
         _fail("delivery progress message_id must be a positive integer")
+    if "idempotency_key" in progress:
+        _idempotency_key(progress["idempotency_key"], "delivery progress idempotency_key")
     return progress
 
 
@@ -1819,6 +1840,7 @@ def verify_payload(args: argparse.Namespace) -> dict[str, Any]:
         payloads = _persist_delivery_payloads(
             run_dir,
             summary,
+            summary_sha,
             company_id=args.company_id,
             agent_id=args.agent_id,
         )
@@ -1833,6 +1855,7 @@ def _delivery_payload(
     *,
     company_id: str,
     agent_id: str,
+    idempotency_key: str | None,
 ) -> dict[str, Any]:
     company_id = _bounded_string(company_id, "payload companyId", maximum=128)
     agent_id = _bounded_string(agent_id, "payload agentId", maximum=128)
@@ -1843,6 +1866,10 @@ def _delivery_payload(
         "issueIdentifier": summary["issue_identifier"],
         "text": text,
     }
+    if idempotency_key is not None:
+        params["idempotencyKey"] = _idempotency_key(
+            idempotency_key, "payload idempotencyKey"
+        )
     if report is not None:
         report_path = run_dir / report["file"]
         report_raw = _read_bytes(report_path)
@@ -1861,9 +1888,28 @@ def _delivery_payload(
     return {"params": params}
 
 
+def _create_or_match_compatible_payload(
+    path: Path,
+    current: Mapping[str, Any],
+    legacy: Mapping[str, Any],
+) -> tuple[dict[str, Any], bytes]:
+    current_raw = _canonical_bytes(current)
+    legacy_raw = _canonical_bytes(legacy)
+    if path.exists():
+        existing_raw = _read_bytes(path)
+        if existing_raw == current_raw:
+            return dict(current), existing_raw
+        if existing_raw == legacy_raw:
+            return dict(legacy), existing_raw
+        _fail(f"conflicting immutable {path.name}")
+    _atomic_write(path, current_raw)
+    return dict(current), current_raw
+
+
 def _persist_delivery_payloads(
     run_dir: Path,
     summary: Mapping[str, Any],
+    summary_sha: str,
     *,
     company_id: str,
     agent_id: str,
@@ -1874,13 +1920,25 @@ def _persist_delivery_payloads(
         summary["report"],
         company_id=company_id,
         agent_id=agent_id,
+        idempotency_key=_delivery_idempotency_key(summary_sha, "ru"),
     )
-    russian_raw = _canonical_bytes(russian)
-    _atomic_write(run_dir / "payload.ru.json", russian_raw)
+    russian_legacy = _delivery_payload(
+        run_dir,
+        summary,
+        summary["report"],
+        company_id=company_id,
+        agent_id=agent_id,
+        idempotency_key=None,
+    )
+    russian, russian_raw = _create_or_match_compatible_payload(
+        run_dir / "payload.ru.json", russian, russian_legacy
+    )
     result = {
         "payload_file": str((run_dir / "payload.ru.json").resolve()),
         "payload_sha256": _sha256_bytes(russian_raw),
     }
+    if "idempotencyKey" in russian["params"]:
+        result["idempotency_key"] = russian["params"]["idempotencyKey"]
     english = summary.get("english_report")
     if english is None:
         _safe_unlink(run_dir / "payload.en.json")
@@ -1891,13 +1949,25 @@ def _persist_delivery_payloads(
             english,
             company_id=company_id,
             agent_id=agent_id,
+            idempotency_key=_delivery_idempotency_key(summary_sha, "en"),
         )
-        english_raw = _canonical_bytes(english_payload)
-        _atomic_write(run_dir / "payload.en.json", english_raw)
+        english_legacy = _delivery_payload(
+            run_dir,
+            summary,
+            english,
+            company_id=company_id,
+            agent_id=agent_id,
+            idempotency_key=None,
+        )
+        english_payload, english_raw = _create_or_match_compatible_payload(
+            run_dir / "payload.en.json", english_payload, english_legacy
+        )
         result.update({
             "english_payload_file": str((run_dir / "payload.en.json").resolve()),
             "english_payload_sha256": _sha256_bytes(english_raw),
         })
+        if "idempotencyKey" in english_payload["params"]:
+            result["english_idempotency_key"] = english_payload["params"]["idempotencyKey"]
     return result
 
 
@@ -1906,7 +1976,8 @@ def _validate_payload_file(
     summary: Mapping[str, Any],
     filename: str,
     report: Mapping[str, Any] | None,
-) -> tuple[dict[str, Any], str]:
+    expected_idempotency_key: str,
+) -> tuple[dict[str, Any], str, str | None]:
     path = run_dir / filename
     value = _expect_object(_load_json(path), filename)
     _exact_keys(value, ("params",), where=filename)
@@ -1914,37 +1985,53 @@ def _validate_payload_file(
     required = ("companyId", "agentId", "issueIdentifier", "text")
     if report is not None:
         required += ("markdownFileName", "markdownContent")
-    _exact_keys(params, required, where=f"{filename}.params")
+    _exact_keys(params, required, ("idempotencyKey",), where=f"{filename}.params")
+    actual_idempotency_key = None
+    if "idempotencyKey" in params:
+        actual_idempotency_key = _idempotency_key(
+            params["idempotencyKey"], f"{filename}.params.idempotencyKey"
+        )
+        if actual_idempotency_key != expected_idempotency_key:
+            _fail(f"{filename} idempotencyKey mismatch")
     expected = _delivery_payload(
         run_dir,
         summary,
         report,
         company_id=params["companyId"],
         agent_id=params["agentId"],
+        idempotency_key=actual_idempotency_key,
     )
     raw = _read_bytes(path)
     if value != expected or raw != _canonical_bytes(expected):
         _fail(f"{filename} does not match the immutable delivery payload")
-    return value, _sha256_bytes(raw)
+    return value, _sha256_bytes(raw), actual_idempotency_key
 
 
-def _validate_delivery_payloads(run_dir: Path, summary: Mapping[str, Any]) -> dict[str, str]:
-    russian, russian_sha = _validate_payload_file(
-        run_dir, summary, "payload.ru.json", summary["report"]
+def _validate_delivery_payloads(
+    run_dir: Path, summary: Mapping[str, Any], summary_sha: str
+) -> dict[str, str]:
+    russian, russian_sha, russian_key = _validate_payload_file(
+        run_dir, summary, "payload.ru.json", summary["report"],
+        _delivery_idempotency_key(summary_sha, "ru"),
     )
     result = {"payload_sha256": russian_sha}
+    if russian_key is not None:
+        result["idempotency_key"] = russian_key
     english = summary.get("english_report")
     if english is None:
         if (run_dir / "payload.en.json").exists():
             _fail("unexpected payload.en.json without an English report")
         return result
-    english_payload, english_sha = _validate_payload_file(
-        run_dir, summary, "payload.en.json", english
+    english_payload, english_sha, english_key = _validate_payload_file(
+        run_dir, summary, "payload.en.json", english,
+        _delivery_idempotency_key(summary_sha, "en"),
     )
     for field in ("companyId", "agentId", "issueIdentifier", "text"):
         if english_payload["params"][field] != russian["params"][field]:
             _fail(f"English payload mismatch: {field}")
     result["english_payload_sha256"] = english_sha
+    if english_key is not None:
+        result["english_idempotency_key"] = english_key
     return result
 
 
@@ -2000,7 +2087,7 @@ def record_delivery(args: argparse.Namespace) -> dict[str, Any]:
     response_path = args.response.resolve()
     if response_path != run_dir / "delivery-plugin-response.json":
         _fail("plugin response must be $RUN/delivery-plugin-response.json")
-    payloads = _validate_delivery_payloads(run_dir, summary)
+    payloads = _validate_delivery_payloads(run_dir, summary, summary_sha)
     data = _plugin_data(_load_json(response_path))
     expected_mode = "message" if summary["report"] is None else "document"
     required = {
@@ -2014,6 +2101,9 @@ def record_delivery(args: argparse.Namespace) -> dict[str, Any]:
     for field, expected in required.items():
         if data.get(field) != expected:
             _fail(f"plugin response mismatch: {field}")
+    if "idempotency_key" in payloads:
+        if data.get("idempotencyKey") != payloads["idempotency_key"]:
+            _fail("plugin response mismatch: idempotencyKey")
     message_id = data.get("messageId")
     if not _is_int(message_id) or message_id <= 0:
         _fail("plugin response messageId must be a positive integer")
@@ -2029,8 +2119,12 @@ def record_delivery(args: argparse.Namespace) -> dict[str, Any]:
             None, payloads["payload_sha256"]
         ):
             _fail("Russian plugin response payload does not match delivery progress")
+        if progress is not None and progress.get("idempotency_key") not in (
+            None, payloads.get("idempotency_key")
+        ):
+            _fail("Russian plugin response idempotency key does not match delivery progress")
         if progress is None and args.english_response is None:
-            _atomic_json(progress_path, {
+            progress_value = {
                 "schema_version": SCHEMA_VERSION,
                 "summary_sha256": summary_sha,
                 "run_binding_sha256": summary["run_binding_sha256"],
@@ -2038,7 +2132,10 @@ def record_delivery(args: argparse.Namespace) -> dict[str, Any]:
                 "telegram_text_sha256": summary["telegram_text"]["sha256"],
                 "report_sha256": summary["report"]["sha256"],
                 "payload_sha256": payloads["payload_sha256"],
-            })
+            }
+            if "idempotency_key" in payloads:
+                progress_value["idempotency_key"] = payloads["idempotency_key"]
+            _atomic_json(progress_path, progress_value)
             return {"status": "english_pending", "message_id": message_id, "summary_sha256": summary_sha}
         if args.english_response is None:
             _fail("English report requires --english-response")
@@ -2049,6 +2146,9 @@ def record_delivery(args: argparse.Namespace) -> dict[str, Any]:
         for field, expected in required.items():
             if english_data.get(field) != expected:
                 _fail(f"English plugin response mismatch: {field}")
+        if "english_idempotency_key" in payloads:
+            if english_data.get("idempotencyKey") != payloads["english_idempotency_key"]:
+                _fail("English plugin response mismatch: idempotencyKey")
         english_message_id = english_data.get("messageId")
         if not _is_int(english_message_id) or english_message_id <= 0:
             _fail("English plugin response messageId must be a positive integer")
@@ -2066,10 +2166,14 @@ def record_delivery(args: argparse.Namespace) -> dict[str, Any]:
         "payload_sha256": payloads["payload_sha256"],
         "delivered_at": delivered_at,
     }
+    if "idempotency_key" in payloads:
+        receipt["idempotency_key"] = payloads["idempotency_key"]
     if summary.get("english_report") is not None:
         receipt["english_message_id"] = english_message_id
         receipt["english_report_sha256"] = summary["english_report"]["sha256"]
         receipt["english_payload_sha256"] = payloads["english_payload_sha256"]
+        if "english_idempotency_key" in payloads:
+            receipt["english_idempotency_key"] = payloads["english_idempotency_key"]
     receipt_raw = _canonical_bytes(receipt)
     _atomic_write(receipt_path, receipt_raw)
     _safe_unlink(progress_path)
@@ -2426,6 +2530,7 @@ def _status_summary(run_dir: Path) -> tuple[dict[str, Any], str]:
     _exact_keys(
         summary,
         ("schema_version", "identity", "issue_identifier", "telegram_text", "attempt_id", "created_at"),
+        ("idempotency_key",),
         where="daily status summary",
     )
     if summary["schema_version"] != STATUS_SCHEMA:
@@ -2469,6 +2574,10 @@ def _status_summary(run_dir: Path) -> tuple[dict[str, Any], str]:
         _fail("daily status summary telegram digest mismatch")
     _bounded_string(summary["attempt_id"], "daily status summary.attempt_id", maximum=128)
     _iso_utc(summary["created_at"], "daily status summary.created_at")
+    if "idempotency_key" in summary:
+        key = _idempotency_key(summary["idempotency_key"], "daily status summary.idempotency_key")
+        if key != _daily_status_idempotency_key(identity):
+            _fail("daily status summary idempotency_key mismatch")
     return summary, _sha256_path(run_dir / "status-summary.json")
 
 
@@ -2516,7 +2625,10 @@ def prepare_daily_status(args: argparse.Namespace) -> dict[str, Any]:
             send_started = run_dir / "status" / "send_started.json"
             if not send_started.exists():
                 _atomic_json(send_started, {"schema_version": STATUS_SCHEMA, "attempt_id": attempt_id})
-            return {"status": "already_prepared", "run_dir": str(run_dir), "summary_sha256": summary_sha}
+            result = {"status": "already_prepared", "run_dir": str(run_dir), "summary_sha256": summary_sha}
+            if "idempotency_key" in summary:
+                result["idempotency_key"] = summary["idempotency_key"]
+            return result
     run_dir.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=f".{run_dir.name}.staging.", dir=run_dir.parent))
     try:
@@ -2533,6 +2645,7 @@ def prepare_daily_status(args: argparse.Namespace) -> dict[str, Any]:
             "telegram_text": {"file": "telegram-summary.txt", "sha256": _sha256_path(staging / "telegram-summary.txt")},
             "attempt_id": attempt_id,
             "created_at": _iso_utc(args.created_at, "daily status created_at"),
+            "idempotency_key": _daily_status_idempotency_key(identity),
         }
         _atomic_json(staging / "status-summary.json", summary)
         _atomic_json(staging / "status" / "send_started.json", {"schema_version": STATUS_SCHEMA, "attempt_id": attempt_id})
@@ -2542,7 +2655,12 @@ def prepare_daily_status(args: argparse.Namespace) -> dict[str, Any]:
             if run_dir.exists():
                 return prepare_daily_status(args)
             raise
-        return {"status": "ready", "run_dir": str(run_dir), "summary_sha256": _sha256_path(run_dir / "status-summary.json")}
+        return {
+            "status": "ready",
+            "run_dir": str(run_dir),
+            "summary_sha256": _sha256_path(run_dir / "status-summary.json"),
+            "idempotency_key": summary["idempotency_key"],
+        }
     finally:
         if staging.exists():
             shutil.rmtree(staging)
@@ -2562,6 +2680,9 @@ def record_daily_status(args: argparse.Namespace) -> dict[str, Any]:
         _fail("daily status plugin response is invalid")
     if data.get("issueIdentifier") != summary["issue_identifier"]:
         _fail("daily status plugin response issue mismatch")
+    if "idempotency_key" in summary:
+        if data.get("idempotencyKey") != summary["idempotency_key"]:
+            _fail("daily status plugin response idempotencyKey mismatch")
     message_id = data.get("messageId")
     if not _is_int(message_id) or message_id <= 0:
         _fail("daily status plugin response messageId is invalid")
@@ -2569,6 +2690,8 @@ def record_daily_status(args: argparse.Namespace) -> dict[str, Any]:
         "schema_version": STATUS_SCHEMA, "summary_sha256": summary_sha, "attempt_id": summary["attempt_id"],
         "message_id": message_id, "delivered_at": _iso_utc(args.delivered_at, "daily status delivered_at"),
     }
+    if "idempotency_key" in summary:
+        receipt["idempotency_key"] = summary["idempotency_key"]
     _atomic_json(receipt_path, receipt)
     _atomic_json(run_dir / "status" / "telegram.done", {"schema_version": STATUS_SCHEMA, "delivery_result_sha256": _sha256_path(receipt_path), "summary_sha256": summary_sha})
     return {"status": "recorded", "message_id": message_id, "summary_sha256": summary_sha}
