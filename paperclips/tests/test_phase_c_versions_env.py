@@ -3,7 +3,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 VENV = REPO / "paperclips" / "scripts" / "versions.env"
-EXPECTED_TELEGRAM_PLUGIN_SHA = "84c492d987ad0c16dcd224294b0747d60cd0d41f"
+EXPECTED_TELEGRAM_PLUGIN_SHA = "eb3a970f7f404eac149d6929a9e9f625ce3935e9"
 
 
 def test_versions_env_exists():

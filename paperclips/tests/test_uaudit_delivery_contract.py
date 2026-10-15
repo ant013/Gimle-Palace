@@ -369,21 +369,25 @@ def record(fixture: dict, mode: str, *, route: str = "UAudit", ok: bool = True) 
         "agent-123",
     )
     response = fixture["run"] / "delivery-plugin-response.json"
+    russian_key = read_json(fixture["run"] / "payload.ru.json")["params"].get("idempotencyKey")
+    response_data = {
+        "ok": True,
+        "mode": mode,
+        "routeSource": "file_route",
+        "routeName": route,
+        "issueIdentifier": "UNS-123",
+        "projectKey": "UNS",
+        "messageId": 321,
+        "chatId": "-100123",
+    }
+    if russian_key is not None:
+        response_data["idempotencyKey"] = russian_key
     write_json(
         response,
         {
             "data": {
                 "content": [{"type": "text", "text": "Telegram delivery result"}],
-                "data": {
-                    "ok": True,
-                    "mode": mode,
-                    "routeSource": "file_route",
-                    "routeName": route,
-                    "issueIdentifier": "UNS-123",
-                    "projectKey": "UNS",
-                    "messageId": 321,
-                    "chatId": "-100123",
-                },
+                "data": response_data,
             }
         },
     )
@@ -394,6 +398,9 @@ def record(fixture: dict, mode: str, *, route: str = "UAudit", ok: bool = True) 
         english_response = fixture["run"] / "delivery-plugin-response.en.json"
         value = read_json(response)
         value["data"]["data"]["messageId"] = 322
+        english_key = read_json(fixture["run"] / "payload.en.json")["params"].get("idempotencyKey")
+        if english_key is not None:
+            value["data"]["data"]["idempotencyKey"] = english_key
         write_json(english_response, value)
         args.extend(("--english-response", english_response))
     args.extend(("--delivered-at", DELIVERED_AT))
@@ -851,6 +858,68 @@ def test_daily_document_requires_bound_english_translation_before_delivery(tmp_p
     ).read_text()
     assert russian_payload["params"]["markdownContent"].strip()
     assert english_payload["params"]["markdownContent"].strip()
+    summary_sha = sha256_path(fixture["run"] / "delivery-summary.json")
+    assert russian_payload["params"]["idempotencyKey"] == f"uaudit:{summary_sha}:ru"
+    assert english_payload["params"]["idempotencyKey"] == f"uaudit:{summary_sha}:en"
+    assert russian_payload["params"]["idempotencyKey"] != english_payload["params"]["idempotencyKey"]
+
+
+def test_delivery_response_must_echo_bound_idempotency_key(tmp_path: Path):
+    fixture = prepare_run(tmp_path, findings={"security": [finding()]})
+    aggregate(fixture)
+    write_handoff(fixture)
+    call(
+        fixture["helper"], "verify-payload", "--run-dir", fixture["run"],
+        "--handoff", fixture["run"] / "delivery-handoff.json", "--expected-mode", "document",
+        "--company-id", "company-123", "--agent-id", "agent-123",
+    )
+    response = fixture["run"] / "delivery-plugin-response.json"
+    base = {
+        "ok": True, "mode": "document", "routeSource": "file_route", "routeName": "UAudit",
+        "issueIdentifier": "UNS-123", "projectKey": "UNS", "messageId": 321,
+    }
+    write_json(response, base)
+    missing = call(
+        fixture["helper"], "record-delivery", "--run-dir", fixture["run"],
+        "--response", response, "--delivered-at", DELIVERED_AT, ok=False,
+    )
+    assert "idempotencyKey" in missing["error"]
+    write_json(response, {**base, "idempotencyKey": "uaudit:wrong:ru"})
+    mismatch = call(
+        fixture["helper"], "record-delivery", "--run-dir", fixture["run"],
+        "--response", response, "--delivered-at", DELIVERED_AT, ok=False,
+    )
+    assert "idempotencyKey" in mismatch["error"]
+
+
+def test_legacy_payload_without_idempotency_key_remains_recoverable(tmp_path: Path):
+    fixture = prepare_run(tmp_path, findings={"security": [finding()]})
+    aggregate(fixture)
+    write_handoff(fixture)
+    verify_args = (
+        "verify-payload", "--run-dir", fixture["run"],
+        "--handoff", fixture["run"] / "delivery-handoff.json", "--expected-mode", "document",
+        "--company-id", "company-123", "--agent-id", "agent-123",
+    )
+    call(fixture["helper"], *verify_args)
+    payload_path = fixture["run"] / "payload.ru.json"
+    payload = read_json(payload_path)
+    payload["params"].pop("idempotencyKey")
+    write_json(payload_path, payload)
+
+    resumed = call(fixture["helper"], *verify_args)
+    assert "idempotency_key" not in resumed
+    assert "idempotencyKey" not in read_json(payload_path)["params"]
+    response = fixture["run"] / "delivery-plugin-response.json"
+    write_json(response, {
+        "ok": True, "mode": "document", "routeSource": "file_route", "routeName": "UAudit",
+        "issueIdentifier": "UNS-123", "projectKey": "UNS", "messageId": 321,
+    })
+    recorded = call(
+        fixture["helper"], "record-delivery", "--run-dir", fixture["run"],
+        "--response", response, "--delivered-at", DELIVERED_AT,
+    )
+    assert recorded["status"] == "recorded"
 
 
 def test_bilingual_delivery_records_russian_then_recovers_english_only(tmp_path: Path):
@@ -863,9 +932,11 @@ def test_bilingual_delivery_records_russian_then_recovers_english_only(tmp_path:
         "--company-id", "company-123", "--agent-id", "agent-123",
     )
     response = fixture["run"] / "delivery-plugin-response.json"
+    russian_key = read_json(fixture["run"] / "payload.ru.json")["params"]["idempotencyKey"]
     write_json(response, {
         "ok": True, "mode": "document", "routeSource": "file_route", "routeName": "UAudit",
         "issueIdentifier": "UNS-123", "projectKey": "UNS", "messageId": 321,
+        "idempotencyKey": russian_key,
     })
 
     pending = call(
@@ -1409,6 +1480,7 @@ def test_daily_no_change_status_is_idempotent_and_never_creates_a_cursor(tmp_pat
     helper, prepared = prepare_daily_status(tmp_path)
     run = Path(prepared["run_dir"])
     assert prepared["status"] == "ready"
+    assert prepared["idempotency_key"].startswith("uaudit-status:")
     assert "no_change" in (run / "telegram-summary.txt").read_text()
     assert not (tmp_path / "state/ios-version-audit.json").exists()
 
@@ -1417,12 +1489,28 @@ def test_daily_no_change_status_is_idempotent_and_never_creates_a_cursor(tmp_pat
     response = tmp_path / "response.json"
     write_json(response, {
         "ok": True, "mode": "message", "routeName": "UAudit", "issueIdentifier": "UNS-123", "messageId": 77,
+        "idempotencyKey": read_json(run / "status-summary.json")["idempotency_key"],
     })
     result = call(helper, "record-daily-status", "--run-dir", run, "--response", response, "--delivered-at", DELIVERED_AT)
     assert result["message_id"] == 77
     resumed = call(helper, "record-daily-status", "--run-dir", run, "--response", response, "--delivered-at", DELIVERED_AT)
     assert resumed["status"] == "already_recorded"
     assert not (tmp_path / "state/ios-version-audit.json").exists()
+
+
+def test_daily_status_response_must_echo_idempotency_key(tmp_path: Path):
+    helper, prepared = prepare_daily_status(tmp_path)
+    run = Path(prepared["run_dir"])
+    response = tmp_path / "response.json"
+    write_json(response, {
+        "ok": True, "mode": "message", "routeName": "UAudit",
+        "issueIdentifier": "UNS-123", "messageId": 77,
+    })
+    failure = call(
+        helper, "record-daily-status", "--run-dir", run, "--response", response,
+        "--delivered-at", DELIVERED_AT, ok=False,
+    )
+    assert "idempotencyKey mismatch" in failure["error"]
 
 
 def test_daily_status_rejects_slot_proof_for_a_different_descriptor(tmp_path: Path):

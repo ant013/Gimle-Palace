@@ -580,9 +580,12 @@ def test_delivery_bundles_retry_failed_telegram_sends_without_blocking_reports()
             REPO / f"paperclips/dist/uaudit/codex/{agent}.md",
         ):
             text = path.read_text()
-            assert "resend the same payload up to 3 times" in text
+            assert "resend the exact unchanged payload with the same `idempotencyKey` up to 3 times" in text
             assert "`<response>.attempt-N.json`, never canonical" in text
-            assert "After all retries fail" in text
+            assert "Never POST again after HTTP 2xx" in text
+            assert "without ad-hoc `jq` parsing" in text
+            assert "never create a new key for the same RU, EN, or daily-status delivery" in text
+            assert "at-least-once; a crash may duplicate" not in text
             assert "never block an existing report" in text
 
 
