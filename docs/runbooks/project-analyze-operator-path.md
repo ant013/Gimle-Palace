@@ -1,287 +1,275 @@
-# Runbook: `project analyze` operator path
+# Runbook: native `project analyze`
 
-**Audience:** оператор Gimle, запускающий host-side orchestration через `palace-mcp` CLI.  
-**Goal:** от checkout до `summary.json` и `report.md` для одного проекта через `project analyze`.  
-**Target time-to-first-success:** ≤ 10 минут на хосте с рабочими `docker compose`, `uv` и `docker buildx >= 0.17.0`.
-**Measured on 2026-05-15:** full success на этой машине не достигнут из-за host blockers: stale Neo4j credentials volume и `docker buildx 0.10.5`.
+**Audience:** оператор Gimle, запускающий анализ на локальном native
+`palace-mcp`.
 
-## Что делает команда
+**Goal:** обновить один проект через `project analyze --mode incremental` и
+получить `summary.json` и `report.md` без запуска Docker.
 
-`project analyze`:
+## Runtime contract
 
-1. резолвит host repo path в container path;
-2. пишет override-файл `.gimle/runtime/project-analyze/docker-compose.project-analyze.yml`;
-3. для `swift_kit` при необходимости готовит SCIP и обновляет `PALACE_SCIP_INDEX_PATHS` в `.env`;
-4. поднимает runtime через `docker compose --profile review up -d neo4j palace-mcp`;
-5. ждёт `http://localhost:8080/healthz`;
-6. вызывает MCP tools:
-   - `palace.project.analyze`
-   - `palace.project.analyze_status`
-   - `palace.project.analyze_resume`
-7. пишет:
-   - `.gimle/runtime/project-analyze/<slug>-analysis-report.md`
-   - `.gimle/runtime/project-analyze/<slug>-analysis-summary.json`
+| Path | MCP URL | Runtime ownership | Docker side effects |
+|---|---|---|---|
+| Native default | `http://localhost:8765/mcp` | Уже запущенный launchd service | Нет |
+| Legacy iMac/Docker | `http://localhost:8080/mcp` | CLI с явным `--manage-runtime` | Есть |
+
+Без `--manage-runtime` команда:
+
+- не запускает Docker, Docker Compose или Colima;
+- не создаёт
+  `.gimle/runtime/project-analyze/docker-compose.project-analyze.yml`;
+- не перезапускает Neo4j или `palace-mcp`;
+- не изменяет compose-only mapping `PALACE_SCIP_INDEX_PATHS` в `.env`;
+- использует уже запущенный MCP по переданному `--url`.
+
+`--manage-runtime` — legacy opt-in. Он не нужен для обычного incremental
+update.
 
 ## Prerequisites
 
-Из project files подтверждены следующие зависимости:
-
-- repo root содержит `docker-compose.yml`, `.env`, `services/palace-mcp/pyproject.toml`;
-- runtime публикует `palace-mcp` на `http://localhost:8080`;
-- health endpoint: `http://localhost:8080/healthz`;
-- compose profile для operator path: `review`;
-- CLI запускать через `uv run` из `services/palace-mcp`.
-
-Проверьте окружение:
+Native service должен отвечать на порту `8765`:
 
 ```bash
-cd /Users/Shared/Ios/worktrees/cx/Gimle-Palace
-docker --version
-docker compose version
-docker buildx version
-test -f .env
+curl -fsS http://localhost:8765/healthz
 ```
 
-Ожидаемо:
+Ответ должен содержать:
 
-- `docker` и `docker compose` отвечают без ошибки;
-- `docker buildx version` показывает версию `0.17.0` или новее;
-- `.env` существует.
-
-## Step 1. Проверка CLI entrypoint
-
-```bash
-cd /Users/Shared/Ios/worktrees/cx/Gimle-Palace/services/palace-mcp
-uv run python -m palace_mcp.cli project analyze --help
+```json
+{"status":"ok","neo4j":"reachable"}
 ```
 
-Ожидаемо:
+Исходники анализируемых iOS-проектов берутся из чистых mirror checkout:
 
-- help выводит флаги `--repo-path`, `--slug`, `--language-profile`, `--depth`, `--env-file`, `--report-out`, `--summary-out`.
-
-Если `python -m palace_mcp.cli ...` запускать без `uv run`, импорт пакета может не разрешиться.
-
-## Step 2. Подготовка переменных
-
-Ниже минимальный copy-paste-safe шаблон. Замените только строки с `# TODO`.
-
-```bash
-export GIMLE_ROOT="/Users/Shared/Ios/worktrees/cx/Gimle-Palace"
-export ENV_FILE="$GIMLE_ROOT/.env"
-export REPORT_OUT="$GIMLE_ROOT/.gimle/runtime/project-analyze/py-mini-project-analysis-report.md"
-export SUMMARY_OUT="$GIMLE_ROOT/.gimle/runtime/project-analyze/py-mini-project-analysis-summary.json"
-
-export TARGET_REPO="$GIMLE_ROOT/services/palace-mcp/tests/extractors/fixtures/py-mini-project"
-export TARGET_SLUG="py-mini-project"
-export TARGET_PROFILE="python_service"
-
-# TODO: for a real project, replace TARGET_REPO/TARGET_SLUG/TARGET_PROFILE.
-# Example Swift project:
-# export TARGET_REPO="/absolute/path/to/TronKit.Swift"
-# export TARGET_SLUG="tron-kit"
-# export TARGET_PROFILE="swift_kit"
+```text
+/Users/Shared/Ios/Gimle-Repos/HorizontalSystems/
 ```
 
-Ожидаемо:
+Не используйте product-development checkout или старый
+`/Users/ant013/Ios/HorizontalSystems/`, если оператор явно не выбрал другой
+источник.
+
+CLI запускается существующим native Python. Не создавайте отдельный `.venv` в
+каждом task worktree:
 
 ```bash
-test -d "$TARGET_REPO"
-printf '%s\n' "$TARGET_SLUG" "$TARGET_PROFILE"
+export PALACE_PYTHON="/Users/ant013/Android/Gimle-Palace-native/.venv/bin/python"
+
+# Используйте тот же source root, что и активный launchd service.
+# Текущее значение можно увидеть в launchd environment:
+launchctl print gui/$(id -u)/work.ant013.palace-mcp-native |
+  grep PALACE_SERVICE_ROOT
+
+# TODO: подставьте путь из launchd; если override отсутствует, используйте
+# default из launch_native_macos.sh.
+export PALACE_SERVICE_ROOT="/absolute/path/to/Gimle-Palace/services/palace-mcp"
+
+test -x "$PALACE_PYTHON"
+test -d "$PALACE_SERVICE_ROOT/src/palace_mcp"
 ```
 
-## Step 3. Запуск анализа
+Выведенный `PALACE_SERVICE_ROOT` — активный runtime workspace (на текущем хосте
+это может быть `Gimle-Palace-serving`). Не удаляйте его как старый task
+worktree, пока launchd ссылается на этот путь.
+
+Проверить CLI:
 
 ```bash
-cd "$GIMLE_ROOT/services/palace-mcp"
-uv run python -m palace_mcp.cli project analyze \
+cd "$PALACE_SERVICE_ROOT"
+PYTHONPATH="$PALACE_SERVICE_ROOT/src" \
+  "$PALACE_PYTHON" -m palace_mcp.cli project analyze --help
+```
+
+В help должны присутствовать `--mode {full,incremental}`, `--url` и
+`--manage-runtime`. Последний выключен по умолчанию.
+
+## Native incremental update
+
+### 1. Подготовить переменные
+
+Пример для Swift kit:
+
+```bash
+export GIMLE_ROOT="$(cd "$PALACE_SERVICE_ROOT/../.." && pwd)"
+export TARGET_REPO="/Users/Shared/Ios/Gimle-Repos/HorizontalSystems/TronKit.Swift"
+export TARGET_SLUG="tron-kit"
+export TARGET_PROFILE="swift_kit"
+export REPORT_OUT="$GIMLE_ROOT/.gimle/runtime/project-analyze/$TARGET_SLUG-analysis-report.md"
+export SUMMARY_OUT="$GIMLE_ROOT/.gimle/runtime/project-analyze/$TARGET_SLUG-analysis-summary.json"
+
+test -d "$TARGET_REPO/.git"
+```
+
+Для другого проекта замените только `TARGET_REPO`, `TARGET_SLUG` и
+`TARGET_PROFILE`.
+
+### 2. Запустить incremental analysis
+
+```bash
+cd "$PALACE_SERVICE_ROOT"
+PYTHONPATH="$PALACE_SERVICE_ROOT/src" \
+  "$PALACE_PYTHON" -m palace_mcp.cli project analyze \
   --repo-path "$TARGET_REPO" \
   --slug "$TARGET_SLUG" \
   --language-profile "$TARGET_PROFILE" \
+  --mode incremental \
   --depth quick \
-  --env-file "$ENV_FILE" \
+  --url http://localhost:8765/mcp \
   --report-out "$REPORT_OUT" \
   --summary-out "$SUMMARY_OUT"
 ```
 
-Во время запуска CLI сам использует:
+Не добавляйте `--manage-runtime` в native-команду.
 
-```bash
-docker compose \
-  --env-file "$ENV_FILE" \
-  -f "$GIMLE_ROOT/docker-compose.yml" \
-  -f "$GIMLE_ROOT/.gimle/runtime/project-analyze/docker-compose.project-analyze.yml" \
-  --profile review \
-  up -d neo4j palace-mcp
-```
+Requested mode остаётся `incremental`, но Gimle безопасно переключает
+конкретный запуск на effective `full`, если:
 
-Ожидаемо:
+- отсутствует предыдущий `indexed_commit`;
+- текущий repo HEAD или file count нельзя определить;
+- `detect_changes` недоступен, unusable или truncated;
+- доля изменённых файлов превышает защитный threshold.
 
-- создаётся override-файл `.gimle/runtime/project-analyze/docker-compose.project-analyze.yml`;
-- `neo4j` и `palace-mcp` стартуют;
-- CLI опрашивает `palace.project.analyze_status` каждые 2 секунды;
-- при статусе `RESUMABLE` CLI сам вызывает `palace.project.analyze_resume`.
+Это fallback анализа, а не запуск Docker.
 
-## Step 4. Проверка runtime
-
-Пока команда работает или сразу после неё:
-
-```bash
-cd "$GIMLE_ROOT"
-docker compose \
-  --env-file "$ENV_FILE" \
-  -f docker-compose.yml \
-  -f .gimle/runtime/project-analyze/docker-compose.project-analyze.yml \
-  --profile review \
-  ps
-curl -fsS http://localhost:8080/healthz
-```
-
-Ожидаемо:
-
-- `docker compose ... ps` показывает `neo4j` и `palace-mcp`;
-- `curl` возвращает успешный HTTP status;
-- health wait в CLI ограничен 60 секундами.
-
-## Step 5. Проверка артефактов
+### 3. Проверить результат
 
 ```bash
 test -f "$REPORT_OUT"
 test -f "$SUMMARY_OUT"
-sed -n '1,40p' "$REPORT_OUT"
-sed -n '1,160p' "$SUMMARY_OUT"
+sed -n '1,80p' "$REPORT_OUT"
+sed -n '1,200p' "$SUMMARY_OUT"
 ```
 
-Ожидаемо:
+В summary должны быть как минимум:
 
-- markdown начинается с `# AnalysisRun <run_id>`;
-- JSON содержит поля:
-  - `"slug"`
-  - `"repo_path"`
-  - `"language_profile"`
-  - `"compose_files"`
-  - `"run_id"`
-  - `"status"`
-  - `"report_out"`
-  - `"summary_out"`
+- `"mode": "incremental"` — requested mode CLI;
+- `"run_id"` и terminal `"status"`;
+- `"report_out"` и `"summary_out"`;
+- details run/audit с effective mode и fallback reason, если был выбран full.
 
-Успех CLI считается по terminal status:
+Успешные terminal status:
 
 - `SUCCEEDED`
 - `SUCCEEDED_WITH_SKIPS`
 - `SUCCEEDED_WITH_FAILURES`
 
-Если вернулся terminal error, смотреть `summary.json -> result`.
+Последний означает, что orchestration завершился, но отдельные extractor
+checkpoint требуют проверки.
+
+### 4. Убедиться, что Docker не был задействован
+
+Native path не требует запуска Docker. После команды не должны появиться:
+
+```text
+.gimle/runtime/project-analyze/docker-compose.project-analyze.yml
+```
+
+и новые Gimle containers/images. Если Docker Desktop вообще выключен,
+incremental update должен работать при здоровом native MCP.
 
 ## Swift-specific notes
 
-Для `--language-profile swift_kit` CLI дополнительно:
+Для `--language-profile swift_kit` CLI может подготовить или проверить SCIP
+через `ensure_swift_scip_artifact(...)`.
 
-- вызывает `ensure_swift_scip_artifact(...)`;
-- поддерживает `--emit-scip auto|always|never`;
-- обновляет `PALACE_SCIP_INDEX_PATHS` в `.env`;
-- может завершиться `SCIP_EMIT_TOOLCHAIN_UNSUPPORTED` с fallback-командой вида:
+Поддерживаются:
 
-```bash
-# TODO: replace tron-kit with your Swift slug
-bash paperclips/scripts/scip_emit_swift_kit.sh tron-kit
-```
+- `--emit-scip auto`
+- `--emit-scip always`
+- `--emit-scip never`
 
-### Optional extractor inputs for `swift_kit`
+Дорогой `scip_emit_swift/.build` является reusable build cache. Не удаляйте его
+при обычной очистке.
 
-Для `tron-kit` и похожих Swift kit missing optional inputs больше не должны
-ломать base smoke:
-
-- `public_api_surface` без `.palace/public-api/...` → checkpoint `MISSING_INPUT`
-- `cross_module_contract` без результата `public_api_surface` → checkpoint `SKIPPED`
-- `hot_path_profiler` без `profiles/` или trace files → checkpoint `MISSING_INPUT`
-- `cross_repo_version_skew` без usable `:DEPENDS_ON` graph → checkpoint `MISSING_INPUT`
-
-Эти статусы могут привести к terminal result `SUCCEEDED_WITH_SKIPS`, но не
-должны переводить run в `SUCCEEDED_WITH_FAILURES`, если hard failures нет.
-
-## Top-3 troubleshooting
-
-### 1. `neo4j` stuck in `health: starting` + `The client is unauthorized due to authentication failure`
-
-Симптом:
+Если emit невозможен, CLI возвращает bounded fallback-команду, например:
 
 ```bash
-docker compose --profile review ps
-docker compose logs --tail=80 neo4j
+bash "$GIMLE_ROOT/paperclips/scripts/scip_emit_swift_kit.sh" tron-kit
 ```
 
-Причина:
+Missing optional inputs могут дать `MISSING_INPUT`, `SKIPPED` или итоговый
+`SUCCEEDED_WITH_SKIPS`; это не обязательно hard failure.
 
-- существующий `neo4j_data` volume был создан с другим паролем, а текущий `.env` уже содержит новый `NEO4J_PASSWORD`;
-- healthcheck использует `cypher-shell -u neo4j -p ... 'RETURN 1'`, поэтому mismatch держит сервис в `starting`.
+## Troubleshooting: native path
 
-Что делать:
+### `localhost:8765` не отвечает
 
-- проверьте, что `NEO4J_PASSWORD` в `.env` соответствует паролю volume;
-- если нужен чистый локальный smoke, поднимайте isolated compose project с новыми volume;
-- не меняйте production/local volumes без понимания, кто ими пользуется.
-
-### 2. `compose build requires buildx 0.17.0 or later`
-
-Симптом:
+Проверьте launchd и логи:
 
 ```bash
-uv run python -m palace_mcp.cli project analyze ...
+launchctl print gui/$(id -u)/work.ant013.palace-mcp-native |
+  sed -n '1,120p'
+tail -n 100 ~/Library/Logs/palace-mcp-native/palace-mcp.err
+tail -n 100 ~/Library/Logs/palace-mcp-native/palace-mcp.out
 ```
 
-падает ещё до запуска анализа.
-
-Причина:
-
-- `project analyze` поднимает `palace-mcp` через compose build;
-- локальный `docker buildx` старее требуемого порога.
-
-Что делать:
+Если source/environment корректны, перезапустите native job:
 
 ```bash
-docker buildx version
+launchctl kickstart -k gui/$(id -u)/work.ant013.palace-mcp-native
+curl -fsS http://localhost:8765/healthz
 ```
 
-- обновите Docker/buildx до `0.17.0+`;
-- затем повторите `project analyze`.
+Не запускайте Docker как автоматический fallback.
 
-### 3. `ModuleNotFoundError: No module named 'palace_mcp'`
+### `ModuleNotFoundError: No module named 'palace_mcp'`
 
-Симптом:
+Убедитесь, что используются native Python и source root активного service:
 
 ```bash
-python -m palace_mcp.cli project analyze --help
+test -x "$PALACE_PYTHON"
+test -f "$PALACE_SERVICE_ROOT/src/palace_mcp/__init__.py"
+PYTHONPATH="$PALACE_SERVICE_ROOT/src" \
+  "$PALACE_PYTHON" -c 'import palace_mcp; print(palace_mcp.__file__)'
 ```
 
-Причина:
+### Requested incremental стал effective full
 
-- запуск идёт вне `uv run`, поэтому проектовый package context не поднят.
+Посмотрите fallback reason в report/summary. Срабатывание безопасного full
+fallback не означает ошибку runtime и не требует Docker.
 
-Что делать:
+## Legacy iMac/Docker path
+
+Используйте этот раздел только когда оператор явно запросил legacy Docker
+runtime. В этом режиме нужны оба аргумента:
 
 ```bash
-cd /Users/Shared/Ios/worktrees/cx/Gimle-Palace/services/palace-mcp
-uv run python -m palace_mcp.cli project analyze --help
+cd "$PALACE_SERVICE_ROOT"
+PYTHONPATH="$PALACE_SERVICE_ROOT/src" \
+  "$PALACE_PYTHON" -m palace_mcp.cli project analyze \
+  --repo-path "$TARGET_REPO" \
+  --slug "$TARGET_SLUG" \
+  --language-profile "$TARGET_PROFILE" \
+  --mode incremental \
+  --depth quick \
+  --manage-runtime \
+  --url http://localhost:8080/mcp \
+  --env-file "$GIMLE_ROOT/.env" \
+  --report-out "$REPORT_OUT" \
+  --summary-out "$SUMMARY_OUT"
 ```
 
-## Verification captured for this doc
+Только с `--manage-runtime` CLI может:
 
-Команды, выполненные при подготовке runbook:
+- написать compose override;
+- обновить compose SCIP mapping;
+- выполнить `docker compose --profile review up -d`;
+- запустить или пересоздать `neo4j` и `palace-mcp`.
 
-```bash
-cd /Users/Shared/Ios/worktrees/cx/Gimle-Palace/services/palace-mcp
-uv run python -m palace_mcp.cli project analyze --help
+Порт `8080` обязателен в этом примере: compose публикует `8080:8000`, а default
+CLI `8765` относится к native service.
 
-cd /Users/Shared/Ios/worktrees/cx/Gimle-Palace
-docker compose --profile review ps
-docker compose logs --tail=80 neo4j
-docker inspect --format '{{json .State.Health}}' gimle-palace-neo4j-1
-docker buildx version
-```
+Docker/buildx/Neo4j volume troubleshooting относится только к этому explicit
+legacy path. Основной native incremental run не должен зависеть от этих
+компонентов.
 
-Observed on 2026-05-15:
+## Contract verification
 
-- CLI help matched source flags.
-- Runtime smoke was blocked by two host-specific issues:
-  - stale Neo4j credentials in existing Docker volume;
-  - `docker buildx` version `0.10.5`, while compose requires `0.17.0+` for this path.
+Runtime boundary зафиксирован тестами:
+
+- `test_project_analyze_parser_defaults_to_native_port_8765`
+- `test_project_analyze_parser_accepts_incremental_mode`
+- `test_project_analyze_parser_accepts_legacy_runtime_management`
+- `test_project_analyze_does_not_manage_runtime_by_default`
+
+При изменении CLI или runbook эти тесты должны оставаться зелёными.
