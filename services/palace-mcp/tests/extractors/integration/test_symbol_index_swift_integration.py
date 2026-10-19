@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from pathlib import Path
 import shutil
-import socket
 import subprocess
 import time
 from types import SimpleNamespace
@@ -28,11 +26,6 @@ from palace_mcp.extractors.runner import run_extractor
 from palace_mcp.extractors.schema import ensure_extractors_schema
 from palace_mcp.extractors.scip_parser import parse_scip_file
 from palace_mcp.proto import scip_pb2
-from palace_mcp.swift_scip_provenance import (
-    SWIFT_SCIP_EMITTER_NAME,
-    SWIFT_SCIP_EMITTER_VERSION,
-    swift_scip_metadata_path,
-)
 from tests.extractors.unit.test_real_scip_fixtures import (
     _UW_IOS_N_DOCUMENTS,
     _UW_IOS_TOOL_NAME,
@@ -163,23 +156,6 @@ def _git_head(repo: Path) -> str:
     ).strip()
 
 
-def _write_scip_metadata(*, repo: Path, scip_path: Path, slug: str) -> None:
-    metadata = {
-        "slug": slug,
-        "repo_head_sha": _git_head(repo),
-        "emitter_name": SWIFT_SCIP_EMITTER_NAME,
-        "emitter_version": SWIFT_SCIP_EMITTER_VERSION,
-        "artifact_origin": "local",
-        "package_path": "Package.swift",
-        "generator_host": socket.gethostname(),
-        "source_repo_path": str(repo.resolve()),
-        "destination_repo_path": str(repo.resolve()),
-    }
-    swift_scip_metadata_path(scip_path).write_text(
-        json.dumps(metadata), encoding="utf-8"
-    )
-
-
 @pytest.fixture
 async def _project_and_repo(driver: AsyncDriver, tmp_path: Path) -> Path:
     async with driver.session() as session:
@@ -200,7 +176,6 @@ async def _project_and_repo(driver: AsyncDriver, tmp_path: Path) -> Path:
     scip_path.parent.mkdir()
     shutil.copy2(FIXTURE_SCIP, scip_path)
     _initialize_repo(repo)
-    _write_scip_metadata(repo=repo, scip_path=scip_path, slug="uw-ios-mini")
     return tmp_path / "repos"
 
 
@@ -233,7 +208,6 @@ async def test_run_writes_shadow_backing_for_struct_symbol(
         "// swift-tools-version: 6.0\n", encoding="utf-8"
     )
     _initialize_repo(repo)
-    _write_scip_metadata(repo=repo, scip_path=scip_path, slug="swift-shadow-mini")
 
     settings = MagicMock()
     tantivy_dir = tmp_path / "tantivy"
@@ -319,7 +293,6 @@ async def test_incremental_run_does_not_deprecate_unchanged_file_symbols(
     _write_incremental_repo(repo, file_c_suffix="// run 1")
     (repo / "Package.swift").write_text("// swift-tools-version: 6.0\n")
     initial_head_sha = _initialize_repo(repo)
-    _write_scip_metadata(repo=repo, scip_path=scip_path, slug="swift-incremental-mini")
 
     settings = MagicMock()
     tantivy_dir = tmp_path / "tantivy"
@@ -376,9 +349,6 @@ async def test_incremental_run_does_not_deprecate_unchanged_file_symbols(
         write_scip_fixture(
             _build_incremental_prune_scip(file_c_lines=(10, 20)),
             scip_path,
-        )
-        _write_scip_metadata(
-            repo=repo, scip_path=scip_path, slug="swift-incremental-mini"
         )
         second_run = await SymbolIndexSwift().run(graphiti=graphiti_mock, ctx=run2_ctx)
         prune_stats = await PruneSwiftSymbols().run(
@@ -936,7 +906,6 @@ async def test_perf_p1_incremental_phase1_graph_update_completes_under_three_min
     _write_incremental_repo(repo, file_c_suffix="// run 1")
     (repo / "Package.swift").write_text("// swift-tools-version: 6.0\n")
     _initialize_repo(repo)
-    _write_scip_metadata(repo=repo, scip_path=scip_path, slug="swift-incremental-perf")
 
     settings = MagicMock()
     tantivy_dir = tmp_path / "tantivy"
@@ -992,9 +961,6 @@ async def test_perf_p1_incremental_phase1_graph_update_completes_under_three_min
         write_scip_fixture(
             _build_incremental_prune_scip(file_c_lines=(10, 20)),
             scip_path,
-        )
-        _write_scip_metadata(
-            repo=repo, scip_path=scip_path, slug="swift-incremental-perf"
         )
 
         start = time.perf_counter()

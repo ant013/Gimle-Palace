@@ -365,129 +365,6 @@ def test_merge_scip_index_env_mapping_rejects_invalid_json(tmp_path: Path) -> No
         raise AssertionError("expected ProjectAnalyzeCliError")
 
 
-def test_swift_scip_metadata_needs_regeneration_on_head_mismatch(
-    tmp_path: Path,
-) -> None:
-    repo_path = tmp_path / "TronKit.Swift"
-    repo_path.mkdir()
-    stale, reason = cli.swift_scip_metadata_needs_regeneration(
-        repo_path=repo_path,
-        repo_head_sha="abc123",
-        metadata={
-            "repo_head_sha": "old",
-            "emitter_name": "palace-swift-scip-emit-cli",
-            "emitter_version": "2026-05-15",
-            "package_path": "Package.swift",
-            "destination_repo_path": str(repo_path.resolve()),
-        },
-    )
-    assert stale is True
-    assert reason == "repo_head_sha mismatch"
-
-
-def test_swift_scip_metadata_needs_regeneration_on_source_repo_path_mismatch(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    repo_path = tmp_path / "TronKit.Swift"
-    repo_path.mkdir()
-    monkeypatch.setattr(cli.socket, "gethostname", lambda: "local-host")
-
-    stale, reason = cli.swift_scip_metadata_needs_regeneration(
-        repo_path=repo_path,
-        repo_head_sha="abc123",
-        metadata={
-            "repo_head_sha": "abc123",
-            "emitter_name": "palace-swift-scip-emit-cli",
-            "emitter_version": "2026-05-15",
-            "package_path": "Package.swift",
-            "generator_host": "local-host",
-            "source_repo_path": "/different/source",
-            "destination_repo_path": str(repo_path.resolve()),
-        },
-    )
-
-    assert stale is True
-    assert reason == "source_repo_path mismatch"
-
-
-def test_swift_scip_metadata_needs_regeneration_on_generator_host_mismatch(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    repo_path = tmp_path / "TronKit.Swift"
-    repo_path.mkdir()
-    monkeypatch.setattr(cli.socket, "gethostname", lambda: "current-host")
-
-    stale, reason = cli.swift_scip_metadata_needs_regeneration(
-        repo_path=repo_path,
-        repo_head_sha="abc123",
-        metadata={
-            "repo_head_sha": "abc123",
-            "emitter_name": "palace-swift-scip-emit-cli",
-            "emitter_version": "2026-05-15",
-            "package_path": "Package.swift",
-            "generator_host": "different-host",
-            "source_repo_path": str(repo_path.resolve()),
-            "destination_repo_path": str(repo_path.resolve()),
-        },
-    )
-
-    assert stale is True
-    assert reason == "generator_host mismatch"
-
-
-def test_swift_scip_metadata_accepts_remote_copy_provenance(
-    tmp_path: Path,
-) -> None:
-    repo_path = tmp_path / "TronKit.Swift"
-    repo_path.mkdir()
-
-    stale, reason = cli.swift_scip_metadata_needs_regeneration(
-        repo_path=repo_path,
-        repo_head_sha="abc123",
-        metadata={
-            "repo_head_sha": "abc123",
-            "emitter_name": "palace-swift-scip-emit-cli",
-            "emitter_version": "2026-05-15",
-            "artifact_origin": "remote_copy",
-            "package_path": "Package.swift",
-            "generator_host": "macbook-host",
-            "source_repo_path": "/Users/ant013/Ios/HorizontalSystems/TronKit.Swift",
-            "destination_repo_path": str(repo_path.resolve()),
-        },
-    )
-
-    assert stale is False
-    assert reason == "metadata current (remote_copy)"
-
-
-def test_swift_scip_metadata_accepts_uw_ios_app_remote_copy_provenance(
-    tmp_path: Path,
-) -> None:
-    repo_path = tmp_path / "unstoppable-wallet-ios"
-    repo_path.mkdir()
-
-    stale, reason = cli.swift_scip_metadata_needs_regeneration(
-        repo_path=repo_path,
-        repo_head_sha="abc123",
-        metadata={
-            "slug": "uw-ios-app",
-            "repo_head_sha": "abc123",
-            "emitter_name": "palace-swift-scip-emit-cli",
-            "emitter_version": "2026-05-15",
-            "artifact_origin": "remote_copy",
-            "package_path": "Wallet.xcworkspace",
-            "generator_host": "macbook-host",
-            "source_repo_path": "/Users/ant013/Ios/HorizontalSystems/unstoppable-wallet-ios",
-            "destination_repo_path": str(repo_path.resolve()),
-        },
-    )
-
-    assert stale is False
-    assert reason == "metadata current (remote_copy)"
-
-
 def test_build_macbook_fallback_command_uses_macbook_repo_path() -> None:
     spec = cli.ProjectRuntimeSpec(
         repo_path=Path("/Users/Shared/Ios/HorizontalSystems/TronKit.Swift"),
@@ -1809,7 +1686,7 @@ def test_project_analyze_hs_swift_kit_emit_failure_stops_before_extractor_cascad
     assert "scip_emit_swift_kit.sh bitcoin-kit" in summary["fallback_command"]
 
 
-def test_ensure_swift_scip_artifact_auto_fails_closed_when_stale_artifact_exists(
+def test_ensure_swift_scip_artifact_auto_reuses_artifact_without_metadata(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -1848,8 +1725,8 @@ def test_ensure_swift_scip_artifact_auto_fails_closed_when_stale_artifact_exists
         ),
     )
 
-    with pytest.raises(cli.ScipEmitToolchainUnsupported):
-        cli.ensure_swift_scip_artifact(spec=spec, emit_scip="auto")
+    result = cli.ensure_swift_scip_artifact(spec=spec, emit_scip="auto")
+    assert result["emitted"] is False
 
 
 def test_ensure_swift_scip_artifact_auto_reraises_when_no_artifact_on_disk(
@@ -1914,7 +1791,7 @@ def _make_scip_spec(tmp_path: Path) -> cli.ProjectRuntimeSpec:
     )
 
 
-def test_ensure_swift_scip_artifact_never_fails_with_missing_metadata(
+def test_ensure_swift_scip_artifact_never_accepts_missing_metadata(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -1923,13 +1800,13 @@ def test_ensure_swift_scip_artifact_never_fails_with_missing_metadata(
     scip_dir.mkdir(parents=True)
     (scip_dir / "index.scip").write_bytes(b"\x00" * 16)
 
-    with pytest.raises(cli.ProjectAnalyzeCliError) as exc_info:
-        cli.ensure_swift_scip_artifact(spec=spec, emit_scip="never")
+    result = cli.ensure_swift_scip_artifact(spec=spec, emit_scip="never")
 
-    assert exc_info.value.error_code == "stale_scip_artifact"
+    assert result["emitted"] is False
+    assert result["metadata"] is None
 
 
-def test_ensure_swift_scip_artifact_never_fails_with_stale_sha(
+def test_ensure_swift_scip_artifact_never_accepts_stale_sha(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -1944,14 +1821,12 @@ def test_ensure_swift_scip_artifact_never_fails_with_stale_sha(
         repo_head_sha="deadbeef",
     )
 
-    with pytest.raises(cli.ProjectAnalyzeCliError) as exc_info:
-        cli.ensure_swift_scip_artifact(spec=spec, emit_scip="never")
-
-    assert exc_info.value.error_code == "stale_scip_artifact"
-    assert "repo_head_sha_mismatch" in str(exc_info.value)
+    result = cli.ensure_swift_scip_artifact(spec=spec, emit_scip="never")
+    assert result["emitted"] is False
+    assert result["metadata"]["repo_head_sha"] == "deadbeef"
 
 
-def test_ensure_swift_scip_artifact_never_accepts_current_provenance(
+def test_ensure_swift_scip_artifact_never_reuses_existing_artifact(
     tmp_path: Path,
 ) -> None:
     spec = _make_scip_spec(tmp_path)
@@ -1968,6 +1843,61 @@ def test_ensure_swift_scip_artifact_never_accepts_current_provenance(
 
     assert result["emitted"] is False
     assert result["reason"] == "existing artifact reused"
+
+
+def test_auto_scip_regenerates_when_source_commit_changes(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    spec = _make_scip_spec(tmp_path)
+    scip_dir = spec.repo_path / "scip"
+    scip_dir.mkdir()
+    (scip_dir / "index.scip").write_bytes(b"previous")
+    (scip_dir / "index.scip.meta.json").write_text(json.dumps({"repo_head_sha": "old"}))
+    expected_head = cli._git_head_sha(spec.repo_path)
+    calls = []
+
+    def emit(**kwargs):
+        calls.append(kwargs)
+        return {"emitted": True}
+
+    monkeypatch.setattr(cli, "_emit_swift_scip", emit)
+
+    result = cli.ensure_swift_scip_artifact(spec=spec, emit_scip="auto")
+    assert result["emitted"] is True
+    assert calls == [{"spec": spec, "repo_head_sha": expected_head}]
+
+
+@pytest.mark.parametrize("emit_scip", ["auto", "never"])
+def test_existing_workspace_scip_ignores_provenance_fields(
+    tmp_path: Path,
+    emit_scip: str,
+    monkeypatch,
+) -> None:
+    spec = _make_scip_spec(tmp_path)
+    scip_dir = spec.repo_path / "scip"
+    scip_dir.mkdir()
+    (scip_dir / "index.scip").write_bytes(b"existing")
+    (scip_dir / "index.scip.meta.json").write_text(
+        json.dumps(
+            {
+                "repo_head_sha": cli._git_head_sha(spec.repo_path),
+                "slug": "stable-wallet-ios",
+                "package_path": "Wallet.xcworkspace",
+                "emitter_name": "legacy-emitter",
+                "emitter_version": "legacy",
+                "generator_host": "other-host",
+                "source_repo_path": "/other/source",
+                "destination_repo_path": "/other/destination",
+            }
+        )
+    )
+    monkeypatch.setattr(
+        cli, "_emit_swift_scip", lambda **_: pytest.fail("unexpected emit")
+    )
+
+    result = cli.ensure_swift_scip_artifact(spec=spec, emit_scip=emit_scip)
+    assert result["emitted"] is False
 
 
 def test_ensure_swift_scip_artifact_never_fails_with_no_index(
