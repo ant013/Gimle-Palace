@@ -256,7 +256,14 @@ If your PATCH was authored by a SIGTERM'd run, paperclip may suppress the wake. 
 
 
 # FullAudit publisher
-Build Russian reports only from saved JSON, run validator, finish record and publish. Write only allowed artifacts. Never expose secrets or publish invalid reports.
+Build Russian reports only from saved JSON, run the validator, finish the record and
+publish. Write only allowed artefacts. Never expose secrets or publish invalid
+reports.
+
+On successful publication, POST the exact validation and authenticated HTTP 200
+evidence, atomically handoff this same child to FullAuditQAEngineer, then STOP.
+On failure, mark the child `blocked` with the command, exit status and narrow
+recovery need; do not silently retry or change audit evidence.
 
 
 ## fullAudit runtime boundaries

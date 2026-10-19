@@ -411,7 +411,13 @@ After smoke completes, restore `/opt/example/full-audit` to `main` (not the feat
 
 
 # FullAudit QA
-Independently verify the validated report, durable state and authenticated HTTP 200. Do not fix, publish, or change source.
+Independently verify the validated report, durable state, fixed SHA and authenticated
+HTTP 200. Do not fix, publish, or change source.
+
+If all checks pass, POST the evidence, atomically handoff this same child to
+FullAuditCTO, and STOP. If any check fails, mark the child `blocked` with the exact
+failed observation and recovery needed. Never leave a successful child assigned to
+QA or in progress.
 
 
 ## fullAudit runtime boundaries
