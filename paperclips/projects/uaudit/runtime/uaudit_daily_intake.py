@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
 import json
 import os
@@ -22,7 +23,7 @@ from typing import Any
 
 INSTALL_SCHEMA = "uaudit-daily-intake-install/v1"
 INSTALL_MANIFEST = "uaudit_daily_intake.manifest.json"
-CONFIG_SCHEMA = "uaudit-daily-intake-routines/v1"
+CONFIG_SCHEMA = "uaudit-daily-intake-routines/v2"
 RESULT_SCHEMA = "uaudit-daily-intake-result/v1"
 HANDOFF_SCHEMA = "uaudit-daily-status-handoff/v1"
 STATUS_SCHEMA_V1 = "uaudit-daily-slot-status/v1"
@@ -36,6 +37,7 @@ UUID_RE = re.compile(
 )
 ISSUE_RE = re.compile(r"^[A-Z][A-Z0-9]{1,15}-[1-9][0-9]*$")
 VERSION_RE = re.compile(r"^version/(\d+)\.(\d+)$")
+BRANCH_RE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_./-]{0,63}")
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,127}$")
 
 CommandRunner = Callable[[Sequence[str], Path | None], subprocess.CompletedProcess[str]]
@@ -286,6 +288,7 @@ def _load_config(path: Path, *, allow_file_url: bool) -> tuple[dict[str, Any], s
                 "routine_key",
                 "platform",
                 "branch",
+                "tracking_mode",
                 "base_branch",
                 "repo_url",
                 "repo_path",
@@ -309,8 +312,14 @@ def _load_config(path: Path, *, allow_file_url: bool) -> tuple[dict[str, Any], s
         seen.add(routine["id"])
         if routine["platform"] not in {"android", "ios"}:
             raise IntakeError("daily intake routine platform is invalid")
-        if not VERSION_RE.fullmatch(
-            _string(routine["branch"], "daily intake release branch")
+        if not isinstance(routine["tracking_mode"], str) or routine[
+            "tracking_mode"
+        ] not in {"release_line", "fixed_branch"}:
+            raise IntakeError("daily intake tracking mode is invalid")
+        if not _valid_branch_name(routine["branch"]) or routine["branch"] == "master":
+            raise IntakeError("daily intake working branch is invalid")
+        if routine["tracking_mode"] == "release_line" and not VERSION_RE.fullmatch(
+            routine["branch"]
         ):
             raise IntakeError("daily intake release branch is invalid")
         if routine["base_branch"] != "master":
@@ -335,8 +344,26 @@ def _next_branch(branch: str) -> str:
     return f"version/{major}.{minor + 1}"
 
 
+def _valid_branch_name(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and BRANCH_RE.fullmatch(value) is not None
+        and value != "HEAD"
+        and not value.startswith("refs/")
+        and ".." not in value
+        and "//" not in value
+        and all(
+            part and not part.startswith(".") and not part.endswith((".", ".lock"))
+            for part in value.split("/")
+        )
+    )
+
+
 def _load_daily_cursor(
-    path: Path, routine: Mapping[str, Any]
+    path: Path,
+    routine: Mapping[str, Any],
+    *,
+    migrating: bool = False,
 ) -> tuple[dict[str, Any], str]:
     cursor = _load_json(path, "daily audit cursor", maximum=64 * 1024)
     if not isinstance(cursor, dict):
@@ -347,6 +374,17 @@ def _load_daily_cursor(
     assert cursor_sha is not None
     schema = cursor.get("schema_version")
     if schema is None:
+        if routine["tracking_mode"] == "fixed_branch" and not migrating:
+            raise IntakeError("fixed branch requires explicit v2 cursor migration")
+        allowed = {
+            "last_successfully_audited_sha",
+            "last_successful_issue",
+            "last_successful_at",
+            "last_delivery_summary_sha256",
+            "last_telegram_message_id",
+        }
+        if set(cursor) - allowed:
+            raise IntakeError("legacy daily cursor has invalid fields")
         return cursor, routine["branch"]
     if schema != CURSOR_SCHEMA_V2:
         raise IntakeError("daily audit cursor schema is unsupported")
@@ -374,8 +412,20 @@ def _load_daily_cursor(
         "daily audit cursor active_release_branch",
         maximum=64,
     )
-    if not VERSION_RE.fullmatch(active_branch):
+    if not _valid_branch_name(active_branch):
         raise IntakeError("daily audit cursor active_release_branch is invalid")
+    if not migrating:
+        if (
+            routine["tracking_mode"] == "fixed_branch"
+            and active_branch != routine["branch"]
+        ):
+            raise IntakeError(
+                "fixed branch cursor requires explicit migration to configured branch"
+            )
+        if routine["tracking_mode"] == "release_line" and not VERSION_RE.fullmatch(
+            active_branch
+        ):
+            raise IntakeError("release line cursor requires explicit migration")
     return cursor, active_branch
 
 
@@ -424,8 +474,9 @@ def _validate_resolver_output(
     expected_heads = {
         None: refs["base"],
         branches["current"]: refs["current"],
-        branches["next"]: refs["next"],
     }
+    if "next" in branches:
+        expected_heads[branches["next"]] = refs["next"]
     if selected_branch not in expected_heads:
         raise IntakeError("resolver selected an unobserved branch")
     if selected_head != expected_heads[selected_branch]:
@@ -625,6 +676,97 @@ def _is_ancestor(
         allowed={0, 1},
     )
     return result.returncode == 0
+
+
+def _prepare_history(
+    runner: CommandRunner,
+    repo: Path,
+    repo_url: str,
+    refs: Mapping[str, str | None],
+    run_id: str,
+    cursor_sha: str,
+) -> dict[str, Any]:
+    """Recover evidence only from the configured upstream and pinned snapshot."""
+    shallow = (
+        _run(
+            runner, ["git", "rev-parse", "--is-shallow-repository"], cwd=repo
+        ).stdout.strip()
+        == "true"
+    )
+    evidence: dict[str, Any] = {
+        "was_shallow": shallow,
+        "unshallow_succeeded": None,
+        "cursor_fetch_attempted": False,
+    }
+    if shallow:
+        refspecs = [
+            f"+{head}:{_scoped_ref(run_id, label)}"
+            for label, head in refs.items()
+            if head is not None
+        ]
+        result = _run(
+            runner,
+            ["git", "fetch", "--no-tags", "--unshallow", repo_url, *refspecs],
+            cwd=repo,
+            allowed={0, 1, 128},
+        )
+        evidence["unshallow_succeeded"] = result.returncode == 0
+    available = (
+        _run(
+            runner,
+            ["git", "cat-file", "-e", f"{cursor_sha}^{{commit}}"],
+            cwd=repo,
+            allowed={0, 1, 128},
+        ).returncode
+        == 0
+    )
+    if not available:
+        evidence["cursor_fetch_attempted"] = True
+        fetched = _run(
+            runner,
+            [
+                "git",
+                "fetch",
+                "--no-tags",
+                repo_url,
+                f"{cursor_sha}:{_scoped_ref(run_id, 'cursor')}",
+            ],
+            cwd=repo,
+            allowed={0, 1, 128},
+        )
+        evidence["cursor_fetch_succeeded"] = fetched.returncode == 0
+        available = (
+            _run(
+                runner,
+                ["git", "cat-file", "-e", f"{cursor_sha}^{{commit}}"],
+                cwd=repo,
+                allowed={0, 1, 128},
+            ).returncode
+            == 0
+        )
+    evidence["cursor_available"] = available
+    evidence["is_shallow"] = (
+        _run(
+            runner, ["git", "rev-parse", "--is-shallow-repository"], cwd=repo
+        ).stdout.strip()
+        == "true"
+    )
+    return evidence
+
+
+def _history_ancestor(
+    runner: CommandRunner,
+    repo: Path,
+    ancestor: str,
+    descendant: str | None,
+    history: Mapping[str, Any],
+    *,
+    cursor_endpoint: bool = False,
+) -> bool | None:
+    if descendant is None or (cursor_endpoint and not history["cursor_available"]):
+        return None
+    proven = _is_ancestor(runner, repo, ancestor, descendant)
+    return True if proven else (None if history["is_shallow"] else False)
 
 
 def _invoke_json(
@@ -922,78 +1064,212 @@ def migrate_cursor(
     allow_file_url: bool = False,
     dry_run: bool = False,
 ) -> dict[str, Any]:
-    """Migrate one legacy cursor after proving its SHA belongs to the branch."""
-
-    verify_install(manifest_path)
-    if not VERSION_RE.fullmatch(active_branch):
-        raise IntakeError("migration active branch must be version/X.Y")
+    """Explicit metadata migration; the audited SHA and receipt history never advance."""
+    install = verify_install(manifest_path)
+    if not _valid_branch_name(active_branch) or active_branch == "master":
+        raise IntakeError("migration active branch is invalid")
     helper_dir = Path(__file__).resolve().parent
-    config, _config_sha = _load_config(
+    config, config_sha = _load_config(
         helper_dir / "uaudit_daily_routines.json", allow_file_url=allow_file_url
     )
     matches = [item for item in config["routines"] if item["id"] == routine_id]
     if len(matches) != 1:
         raise IntakeError("migration routine id is not uniquely configured")
     routine = matches[0]
+    if routine["tracking_mode"] == "fixed_branch":
+        if active_branch != routine["branch"]:
+            raise IntakeError("migration target must match the configured fixed branch")
+    elif not VERSION_RE.fullmatch(active_branch):
+        raise IntakeError("release line migration target must be version/X.Y")
+    for key in ("repo_path", "cursor_path", "lock_path"):
+        if Path(routine[key]).is_symlink():
+            raise IntakeError("migration runtime paths must not be symlinks")
     repo = Path(routine["repo_path"]).resolve()
     cursor_path = Path(routine["cursor_path"]).resolve()
     lock_dir = Path(routine["lock_path"]).resolve()
-    if not repo.is_dir() or cursor_path.is_symlink() or lock_dir.is_symlink():
+    if not repo.is_dir() or backup_dir.is_symlink():
         raise IntakeError("migration runtime paths are invalid")
-    if backup_dir.is_symlink():
-        raise IntakeError("migration backup directory must not be a symlink")
     backup_dir = backup_dir.resolve()
+    request = {
+        "routine_id": routine_id,
+        "routine_key": routine["routine_key"],
+        "target_branch": active_branch,
+        "cursor_path": str(cursor_path),
+        "backup_dir": str(backup_dir),
+        "config_sha256": config_sha,
+        "install_manifest_sha256": install["manifest_sha256"],
+    }
+    request_sha = _sha256_bytes(_canonical_bytes(request))
+    journal_path = backup_dir / f"{cursor_path.stem}.{request_sha[:16]}.migration.json"
+    complete_path = journal_path.with_suffix(".done.json")
+    owner_path = lock_dir / "cursor-migration.json"
+    owner = {
+        "schema_version": "uaudit-cursor-migration-lock/v1",
+        "request_sha256": request_sha,
+        "pid": os.getpid(),
+        "hostname": socket.gethostname(),
+        "created_at": _now_utc(),
+    }
     lock_dir.parent.mkdir(parents=True, exist_ok=True)
     try:
         lock_dir.mkdir()
-    except FileExistsError as exc:
-        raise IntakeError("daily routine lock is held; cursor migration refused") from exc
+    except FileExistsError:
+        if lock_dir.is_symlink() or not lock_dir.is_dir():
+            raise IntakeError("migration lock is invalid")
+        previous = _exact(
+            _load_json(owner_path, "migration lock owner"),
+            set(owner),
+            "migration lock owner",
+        )
+        if (
+            previous["request_sha256"] != request_sha
+            or previous["schema_version"] != owner["schema_version"]
+        ):
+            raise IntakeError("daily routine lock is held by another transaction")
+        if (
+            not isinstance(previous["pid"], int)
+            or isinstance(previous["pid"], bool)
+            or previous["pid"] <= 0
+        ):
+            raise IntakeError("migration lock owner PID is invalid")
+        if _owner_process_is_active(previous):
+            raise IntakeError("migration lock owner is active")
+    else:
+        _atomic_json(owner_path, owner)
+    # Kernel lease prevents two retries from simultaneously adopting a dead owner.
+    lock_fd = os.open(lock_dir, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    directory = os.fstat(lock_fd)
+    directory_identity = (directory.st_dev, directory.st_ino)
+    lease_path = lock_dir / "migration.lease"
+    lease = None
+    acquired = False
     try:
-        _atomic_json(
-            lock_dir / "cursor-migration.json",
-            {
+        if _load_json(owner_path, "migration lock owner").get("request_sha256") != request_sha:
+            raise IntakeError("migration lock ownership changed")
+        lease = os.open("migration.lease", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600, dir_fd=lock_fd)
+        try:
+            fcntl.flock(lease, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise IntakeError("migration lock is held by an active retry") from exc
+        try:
+            current_directory = lock_dir.stat(follow_symlinks=False)
+            current_lease = lease_path.stat(follow_symlinks=False)
+        except FileNotFoundError as exc:
+            raise IntakeError("migration lock generation changed; retry") from exc
+        opened_lease = os.fstat(lease)
+        if (
+            current_directory.st_dev,
+            current_directory.st_ino,
+        ) != directory_identity or (current_lease.st_dev, current_lease.st_ino) != (
+            opened_lease.st_dev,
+            opened_lease.st_ino,
+        ):
+            raise IntakeError("migration lock generation changed; retry")
+        locked_owner = _load_json(owner_path, "migration lock owner")
+        if locked_owner.get("request_sha256") != request_sha:
+            raise IntakeError("migration lock ownership changed")
+        acquired = True
+        _replace_json(owner_path, owner)
+        cursor, old_branch = _load_daily_cursor(cursor_path, routine, migrating=True)
+        current_digest = _sha256_path(cursor_path)
+        if journal_path.exists():
+            journal = _exact(
+                _load_json(journal_path, "migration journal"),
+                {
+                    "schema_version",
+                    "request",
+                    "request_sha256",
+                    "old_state_sha256",
+                    "old_file_sha256",
+                    "new_state_sha256",
+                    "new_state",
+                    "backup",
+                    "proof",
+                },
+                "migration journal",
+            )
+            if (
+                journal["schema_version"] != "uaudit-cursor-migration/v1"
+                or journal["request"] != request
+                or journal["request_sha256"] != request_sha
+            ):
+                raise IntakeError("migration journal belongs to another transaction")
+            backup = _exact(journal["backup"], {"path", "sha256"}, "migration backup")
+            backup_path = Path(backup["path"])
+            if (
+                backup_path.parent != backup_dir
+                or backup_path.is_symlink()
+                or _sha256_path(backup_path) != backup["sha256"]
+            ):
+                raise IntakeError("migration backup digest or path mismatch")
+            before = _load_json(backup_path, "migration backup")
+            migrated = {
+                **before,
                 "schema_version": CURSOR_SCHEMA_V2,
-                "routine_id": routine_id,
                 "routine_key": routine["routine_key"],
                 "active_release_branch": active_branch,
-                "created_at": _now_utc(),
-            },
-        )
-        legacy = _load_json(cursor_path, "legacy daily cursor", maximum=64 * 1024)
-        if not isinstance(legacy, dict):
-            raise IntakeError("legacy daily cursor must be an object")
-        if "schema_version" in legacy:
-            if legacy.get("schema_version") == CURSOR_SCHEMA_V2:
-                raise IntakeError("daily cursor is already v2")
-            raise IntakeError("legacy daily cursor has an unsupported schema")
-        allowed = {
-            "last_successfully_audited_sha",
-            "last_successful_issue",
-            "last_successful_at",
-            "last_delivery_summary_sha256",
-            "last_telegram_message_id",
-        }
-        if set(legacy) - allowed or "last_successfully_audited_sha" not in legacy:
-            raise IntakeError("legacy daily cursor has invalid fields")
-        cursor_sha = _sha(
-            legacy["last_successfully_audited_sha"], "legacy daily cursor SHA"
-        )
-        assert cursor_sha is not None
+            }
+            if (
+                _sha256_bytes(_canonical_bytes(before)) != journal["old_state_sha256"]
+                or migrated != journal["new_state"]
+                or _sha256_bytes(_canonical_bytes(migrated))
+                != journal["new_state_sha256"]
+            ):
+                raise IntakeError("migration journal state digest mismatch")
+            if current_digest == journal["new_state_sha256"]:
+                if not dry_run:
+                    _atomic_json(
+                        complete_path,
+                        {
+                            "request_sha256": request_sha,
+                            "new_state_sha256": current_digest,
+                        },
+                    )
+                return {
+                    "status": "already_applied",
+                    "cursor_sha": cursor["last_successfully_audited_sha"],
+                    "backup_path": str(backup_path),
+                    "journal_path": str(journal_path),
+                }
+            if current_digest != journal["old_file_sha256"]:
+                raise IntakeError("migration cursor differs from both journal states")
+        else:
+            journal = None
+            migrated = {
+                **cursor,
+                "schema_version": CURSOR_SCHEMA_V2,
+                "routine_key": routine["routine_key"],
+                "active_release_branch": active_branch,
+            }
+            version = "v2" if "schema_version" in cursor else "v1"
+            suffix = (
+                f".{_sha256_bytes(_canonical_bytes(cursor))[:16]}"
+                if version == "v2"
+                else ""
+            )
+            backup_path = backup_dir / f"{cursor_path.stem}{suffix}.{version}.json"
+        cursor_sha = cursor["last_successfully_audited_sha"]
         run_id = str(uuid.uuid4())
-        refs, _evidence = _authoritative_snapshot(
+        refs, snapshot = _authoritative_snapshot(
             runner,
             repo,
             routine["repo_url"],
-            {"active": active_branch},
+            {"active": active_branch, "base": routine["base_branch"]},
             run_id,
         )
-        active_head = refs["active"]
-        if active_head is None:
-            raise IntakeError("migration active branch is proven absent")
-        _run(runner, ["git", "cat-file", "-e", f"{cursor_sha}^{{commit}}"], cwd=repo)
-        if not _is_ancestor(runner, repo, cursor_sha, active_head):
+        if refs["active"] is None or refs["base"] is None:
+            raise IntakeError("migration active or base branch is proven absent")
+        history = _prepare_history(
+            runner, repo, routine["repo_url"], refs, run_id, cursor_sha
+        )
+        if (
+            _history_ancestor(
+                runner, repo, cursor_sha, refs["active"], history, cursor_endpoint=True
+            )
+            is not True
+        ):
             raise IntakeError(
-                "legacy cursor SHA is not an ancestor of the migration active branch"
+                "cursor SHA is not a proven ancestor of the migration active branch"
             )
         if dry_run:
             return {
@@ -1002,29 +1278,65 @@ def migrate_cursor(
                 "routine_key": routine["routine_key"],
                 "active_release_branch": active_branch,
                 "cursor_sha": cursor_sha,
-                "remote_head": active_head,
+                "remote_head": refs["active"],
             }
-        backup_dir.mkdir(parents=True, exist_ok=True)
-        backup_path = backup_dir / f"{cursor_path.stem}.v1.json"
-        _atomic_json(backup_path, legacy)
-        migrated = {
-            "schema_version": CURSOR_SCHEMA_V2,
-            "routine_key": routine["routine_key"],
-            "active_release_branch": active_branch,
-            **legacy,
-        }
+        if journal is None:
+            _atomic_json(backup_path, cursor)
+            journal = {
+                "schema_version": "uaudit-cursor-migration/v1",
+                "request": request,
+                "request_sha256": request_sha,
+                "old_state_sha256": _sha256_bytes(_canonical_bytes(cursor)),
+                "old_file_sha256": current_digest,
+                "new_state_sha256": _sha256_bytes(_canonical_bytes(migrated)),
+                "new_state": migrated,
+                "backup": _artifact(backup_path),
+                "proof": {
+                    "from_branch": old_branch if "schema_version" in cursor else None,
+                    "refs": refs,
+                    "snapshot": snapshot,
+                    "history": history,
+                    "created_at": _now_utc(),
+                },
+            }
+            _atomic_json(journal_path, journal)
+        # Persist the backup/journal directory entries before publishing the cursor.
+        directory_fd = os.open(backup_dir, os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+        if _sha256_path(cursor_path) != journal["old_file_sha256"]:
+            raise IntakeError("migration cursor compare-and-set failed")
         _replace_json(cursor_path, migrated)
+        _atomic_json(
+            complete_path,
+            {
+                "request_sha256": request_sha,
+                "new_state_sha256": journal["new_state_sha256"],
+            },
+        )
         return {
             "status": "migrated",
             "routine_id": routine_id,
             "routine_key": routine["routine_key"],
             "active_release_branch": active_branch,
             "cursor_sha": cursor_sha,
-            "remote_head": active_head,
+            "remote_head": refs["active"],
             "backup_path": str(backup_path),
+            "journal_path": str(journal_path),
         }
     finally:
-        _discard_lock(lock_dir)
+        if acquired and lock_dir.exists():
+            current_directory = lock_dir.stat(follow_symlinks=False)
+            if (
+                current_directory.st_dev,
+                current_directory.st_ino,
+            ) == directory_identity:
+                _discard_lock(lock_dir)
+        if lease is not None:
+            os.close(lease)
+        os.close(lock_fd)
 
 
 def run_intake(
@@ -1101,8 +1413,9 @@ def run_intake(
         branches = {
             "base": routine["base_branch"],
             "current": active_branch,
-            "next": _next_branch(active_branch),
         }
+        if routine["tracking_mode"] == "release_line":
+            branches["next"] = _next_branch(active_branch)
         try:
             refs, snapshot_evidence = _authoritative_snapshot(
                 runner,
@@ -1147,35 +1460,29 @@ def run_intake(
             raise IntakeError(f"{exc}; evidence: {failure_dir}") from exc
         base_head = refs["base"]
         current_head = refs["current"]
-        next_head = refs["next"]
         if base_head is None:
             raise IntakeError("configured base branch is proven absent")
-        _run(runner, ["git", "cat-file", "-e", f"{cursor_sha}^{{commit}}"], cwd=repo)
+        history = _prepare_history(runner, repo, routine["repo_url"], refs, issue["originRunId"], cursor_sha)
         resolver_input = {
+            "tracking_mode": routine["tracking_mode"],
             "cursor_sha": cursor_sha,
             "release_branch": active_branch,
             "release_head": current_head,
             "master_anchor_sha": None,
             "master_head": base_head,
-            "cursor_is_ancestor_of_release": None
-            if current_head is None
-            else _is_ancestor(runner, repo, cursor_sha, current_head),
-            "cursor_is_ancestor_of_master": _is_ancestor(
-                runner, repo, cursor_sha, base_head
-            ),
-            "master_is_ancestor_of_release": None
-            if current_head is None
-            else _is_ancestor(runner, repo, base_head, current_head),
-            "next_release_branch": branches["next"],
-            "next_release_head": next_head,
-            "master_is_ancestor_of_next_release": None
-            if next_head is None
-            else _is_ancestor(runner, repo, base_head, next_head),
-            "cursor_is_ancestor_of_next_release": None
-            if next_head is None
-            else _is_ancestor(runner, repo, cursor_sha, next_head),
+            "cursor_is_ancestor_of_release": _history_ancestor(runner, repo, cursor_sha, current_head, history, cursor_endpoint=True),
+            "cursor_is_ancestor_of_master": _history_ancestor(runner, repo, cursor_sha, base_head, history, cursor_endpoint=True),
+            "master_is_ancestor_of_release": _history_ancestor(runner, repo, base_head, current_head, history),
             "old_series_equivalence": "unavailable",
         }
+        if "next" in branches:
+            next_head = refs["next"]
+            resolver_input.update({
+                "next_release_branch": branches["next"],
+                "next_release_head": next_head,
+                "master_is_ancestor_of_next_release": _history_ancestor(runner, repo, base_head, next_head, history),
+                "cursor_is_ancestor_of_next_release": _history_ancestor(runner, repo, cursor_sha, next_head, history, cursor_endpoint=True),
+            })
         git_evidence = {
             "schema_version": RESULT_SCHEMA,
             "repo_url": routine["repo_url"],
@@ -1183,6 +1490,8 @@ def run_intake(
             "routine_id": routine["id"],
             "origin_run_id": issue["originRunId"],
             "branches": branches,
+            "tracking_mode": routine["tracking_mode"],
+            "history": history,
             "refs": refs,
             **snapshot_evidence,
         }
@@ -1233,7 +1542,7 @@ def run_intake(
             cursor_to_branch = (
                 selected_branch
                 if isinstance(selected_branch, str)
-                and VERSION_RE.fullmatch(selected_branch)
+                and _valid_branch_name(selected_branch)
                 else active_branch
             )
             source_ref = {

@@ -28,7 +28,7 @@ GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
 ISSUE_RE = re.compile(r"^[A-Z][A-Z0-9]{0,15}-[1-9][0-9]*$")
 ROUTINE_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
-VERSION_BRANCH_RE = re.compile(r"^version/[0-9]+\.[0-9]+$")
+BRANCH_RE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_./-]*")
 WARNING_CODE_RE = re.compile(r"^[a-z][a-z0-9._-]{0,63}$")
 IDEMPOTENCY_KEY_RE = re.compile(r"^[A-Za-z0-9._:-]{1,160}$")
 CONTROL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
@@ -364,6 +364,23 @@ def _validate_kind(value: Any) -> str:
     return value
 
 
+def valid_branch_name(value: Any) -> bool:
+    """Match the bounded branch-name subset accepted by audit intake."""
+
+    return (
+        isinstance(value, str)
+        and 0 < len(value) <= 64
+        and BRANCH_RE.fullmatch(value) is not None
+        and value != "HEAD"
+        and not value.startswith("refs/")
+        and ".." not in value
+        and all(
+            component and not component.startswith(".") and not component.endswith((".", ".lock"))
+            for component in value.split("/")
+        )
+    )
+
+
 def _validate_source_ref(value: Any, audit_kind: str, where: str = "source_ref") -> dict[str, Any]:
     ref = _expect_object(value, where)
     if audit_kind == "pr":
@@ -387,8 +404,8 @@ def _validate_source_ref(value: Any, audit_kind: str, where: str = "source_ref")
     routine = _bounded_string(ref["routine_id"], f"{where}.routine_id", maximum=128)
     if not ROUTINE_RE.fullmatch(routine):
         _fail(f"{where}.routine_id has invalid format")
-    branch = _bounded_string(ref["branch"], f"{where}.branch", maximum=200)
-    if branch.strip() != branch or branch.startswith("-") or ".." in branch:
+    branch = _bounded_string(ref["branch"], f"{where}.branch", maximum=64)
+    if not valid_branch_name(branch):
         _fail(f"{where}.branch is not safe")
     from_sha = _sha(ref["from_sha"], f"{where}.from_sha", git=True)
     to_sha = _sha(ref["to_sha"], f"{where}.to_sha", git=True)
@@ -416,10 +433,10 @@ def _validate_source_ref(value: Any, audit_kind: str, where: str = "source_ref")
         cursor_to_branch = _bounded_string(
             ref["cursor_to_branch"], f"{where}.cursor_to_branch", maximum=64
         )
-        if not VERSION_BRANCH_RE.fullmatch(cursor_from_branch):
-            _fail(f"{where}.cursor_from_branch must be version/X.Y")
-        if not VERSION_BRANCH_RE.fullmatch(cursor_to_branch):
-            _fail(f"{where}.cursor_to_branch must be version/X.Y")
+        if not valid_branch_name(cursor_from_branch):
+            _fail(f"{where}.cursor_from_branch must be a safe Git branch name")
+        if not valid_branch_name(cursor_to_branch):
+            _fail(f"{where}.cursor_to_branch must be a safe Git branch name")
         if branch not in {cursor_to_branch, "master"}:
             _fail(f"{where}.branch must be cursor_to_branch or master")
         normalized.update(
@@ -2265,8 +2282,8 @@ def _load_cursor(path: Path) -> dict[str, Any]:
             "cursor.active_release_branch",
             maximum=64,
         )
-        if not VERSION_BRANCH_RE.fullmatch(active_branch):
-            _fail("cursor.active_release_branch must be version/X.Y")
+        if not valid_branch_name(active_branch):
+            _fail("cursor.active_release_branch must be a safe Git branch name")
         if "last_transition" in cursor:
             transition = _expect_object(
                 cursor["last_transition"], "cursor.last_transition"
@@ -2280,8 +2297,8 @@ def _load_cursor(path: Path) -> dict[str, Any]:
                 branch = _bounded_string(
                     transition[field], f"cursor.last_transition.{field}", maximum=64
                 )
-                if not VERSION_BRANCH_RE.fullmatch(branch):
-                    _fail(f"cursor.last_transition.{field} must be version/X.Y")
+                if not valid_branch_name(branch):
+                    _fail(f"cursor.last_transition.{field} must be a safe Git branch name")
             _validate_issue(
                 transition["issue_identifier"],
                 "cursor.last_transition.issue_identifier",
