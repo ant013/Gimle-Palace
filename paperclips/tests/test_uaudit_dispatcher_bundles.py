@@ -8,6 +8,7 @@ import tomllib
 from pathlib import Path
 
 import yaml
+import pytest
 
 REPO = Path(__file__).resolve().parents[2]
 SCRIPTS = REPO / "paperclips" / "scripts"
@@ -45,7 +46,11 @@ def test_daily_routine_config_uses_names_not_uuids_and_resolves_agents():
     assert {r["platform"] for r in config["routines"]} == {"android", "ios"}
     assert {r["app_id"] for r in config["routines"]} == {"unstoppable_wallet"}
     assert config["apps"] == [{"id": "unstoppable_wallet", "display_name": "Unstoppable Wallet", "enabled": True, "report_route": "UAudit"}]
-    assert {r["branch"] for r in config["routines"]} == {"version/0.52"}
+    assert config["schemaVersion"] == 3
+    assert {(r["platform"], r["tracking_mode"], r["branch"]) for r in config["routines"]} == {
+        ("ios", "fixed_branch", "develop"),
+        ("android", "release_line", "version/0.52"),
+    }
     assert {r["routine_key"] for r in config["routines"]} == {
         "uaudit-daily-android",
         "uaudit-daily-ios",
@@ -189,7 +194,7 @@ def test_generated_dispatchers_pin_canonical_daily_cursors():
     for name, (canonical, legacy) in expected.items():
         text = (REPO / f"paperclips/dist/uaudit/codex/{name}.md").read_text()
         assert canonical in text
-        assert "FROM and the active release line are only" in text
+        assert "FROM is only the v2 cursor" in text
         assert "preserve it" in text
         assert legacy in text
         assert "never read below" in text
@@ -438,7 +443,11 @@ def test_daily_dispatchers_require_branch_aware_cursor_and_forward_ranges():
         text = (
             REPO / "paperclips/projects/uaudit/roles-codex" / source_name
         ).read_text()
-        assert "active release line" in text
+        assert "tracking_mode" in text
+        assert "fixed_branch" in text and "release_line" in text
+        assert "explicit metadata migration" in text
+        assert "never reset SHA to HEAD" in text
+        assert "BASE=version/X.Y" not in text
         assert "blocked_recovery" in text
         assert "FROM is not a proven ancestor of TO" in text
         assert "cursor_from_branch,cursor_to_branch" in text
@@ -915,3 +924,52 @@ def test_validate_uaudit_docs_script_passes():
     assert spec.loader is not None
     spec.loader.exec_module(module)
     assert module.main() == 0
+
+
+@pytest.mark.parametrize("branch", [
+    "HEAD", "master", "refs/heads/develop", "dev//nested", "dev..old", "dev.",
+    "dev/", "-dev", ".dev", "dev/.hidden", "dev.lock/nested", "dev/nested.lock",
+    "dev/nested.", "de velop", "dev\nbranch", "dev@{old}", "дев", "d" * 65,
+])
+def test_fixed_branch_config_rejects_invalid_working_refs(tmp_path, branch):
+    data = yaml.safe_load(CONFIG.read_text())
+    data["routines"][1]["branch"] = branch
+    config_path = tmp_path / "routines.yaml"
+    config_path.write_text(yaml.safe_dump(data))
+    with pytest.raises(ValueError):
+        load_config(config_path)
+
+
+@pytest.mark.parametrize("branch", ["dev", "develop", "core/development-1", "_dev"])
+def test_fixed_branch_config_accepts_exact_safe_working_ref(tmp_path, branch):
+    data = yaml.safe_load(CONFIG.read_text())
+    data["routines"][1]["branch"] = branch
+    config_path = tmp_path / "routines.yaml"
+    config_path.write_text(yaml.safe_dump(data))
+    assert load_config(config_path)["routines"][1]["branch"] == branch
+
+
+def test_routine_config_rejects_unknown_mode_and_nonversion_release_line(tmp_path):
+    data = yaml.safe_load(CONFIG.read_text())
+    config_path = tmp_path / "routines.yaml"
+    for mode, branch in [("automatic", "develop"), ("release_line", "develop"), ("release_line", "version/one")]:
+        data["routines"][1].update(tracking_mode=mode, branch=branch)
+        config_path.write_text(yaml.safe_dump(data))
+        with pytest.raises(ValueError):
+            load_config(config_path)
+
+
+def test_reconcile_ios_fixed_mode_preserves_legacy_live_routine_identity():
+    config = load_config(CONFIG)
+    agents = resolve_agent_ids("uaudit", REPO / "paperclips/projects/uaudit/bindings.local-example.yaml")
+    ios = config["routines"][1]
+    current = _legacy_live_routine(config, ios, agents["UWICTO"], suffix="12")
+    current["description"] = current["description"].replace("branch: develop", "branch: version/0.52")
+    plan = build_plan({**config, "routines": [ios]}, agents, [current], _paths())
+    assert len(plan) == 1
+    assert plan[0]["live_uuid"] == current["id"]
+    assert plan[0]["routine_id"] == "daily-ios-version-0.52"
+    assert "tracking_mode: fixed_branch" in plan[0]["desired_description"]
+    assert "base_branch: master" in plan[0]["desired_description"]
+    assert "branch: develop" in plan[0]["desired_description"]
+    assert plan[0]["patch"]["baseRevisionId"] == current["latestRevisionId"]

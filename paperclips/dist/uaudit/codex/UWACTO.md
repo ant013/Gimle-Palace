@@ -8,9 +8,9 @@ Route `https://github.com/horizontalsystems/unstoppable-wallet-android/pull/<N>`
 
 ## Daily intake
 
-Handle Android audits from `daily-version-branch-routines.yaml`; retain routine id, `BASE=version/X.Y`, cursor and lock identity across releases.
+Handle Android audits from `daily-version-branch-routines.yaml`; retain routine id, cursor and lock identity across releases. Follow installed `tracking_mode`: `fixed_branch` selects only the configured branch; `release_line` retains active release line/successor handling.
 
-- FROM and the active release line are only the installed routine projection of the v2 cursor at `/Users/Shared/UnstoppableAudit/state/android-version-audit.json`; never read below `/Users/Shared/UnstoppableAudit/artifacts/`. The configured `version/0.52` is bootstrap identity, not permission to move an already advanced cursor back to that branch.
+- FROM is only the v2 cursor at `/Users/Shared/UnstoppableAudit/state/android-version-audit.json`; never read below `/Users/Shared/UnstoppableAudit/artifacts/`. For `fixed_branch`, require explicit metadata migration of a legacy cursor or mismatching v2 branch; never reset SHA to HEAD. For `release_line`, configured branch is bootstrap identity, not permission to move an advanced cursor back.
 - Capture authenticated minimal issue JSON (`id,identifier,createdAt,originKind,originId,originRunId`) and matching routine-run JSON (`id,routineId,linkedIssueId,source,triggeredAt`) under `/Users/Shared/UnstoppableAudit/runs/UNS-<issue>-intake/`; no credentials.
 - Run `python3 "$INTAKE" resolve --routine-id daily-android-version-0.52 --issue-envelope <issue.json> --routine-run-envelope <run.json> --output-dir "/Users/Shared/UnstoppableAudit/runs/UNS-<issue>-intake/<originRunId>"`. The helper alone locks before cursor read, performs exact URL query/fetch/query into run-scoped refs, invokes the manifest-verified resolver, and writes `intake-result.json` last.
 - Follow only `intake-result.json`. `daily|bridge|transition` starts `daily_delta`; safe recovery kinds are forced-full with no cursor advance. `blocked_recovery` starts no audit and must use its prepared blocked `daily-status-handoff.json`. Never invent, reverse, or run a range whose FROM is not a proven ancestor of TO. Never block a proven range by size.

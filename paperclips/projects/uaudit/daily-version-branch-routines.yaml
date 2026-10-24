@@ -1,4 +1,4 @@
-schemaVersion: 2
+schemaVersion: 3
 project: uaudit
 marker: UAudit daily version-branch delta audit
 
@@ -14,6 +14,7 @@ routines:
     routine_key: uaudit-daily-android
     title: UAudit daily Android version delta audit
     platform: android
+    tracking_mode: release_line
     branch: version/0.52
     base_branch: master
     schedule:
@@ -48,7 +49,8 @@ routines:
     routine_key: uaudit-daily-ios
     title: UAudit daily iOS version delta audit
     platform: ios
-    branch: version/0.52
+    tracking_mode: fixed_branch
+    branch: develop
     base_branch: master
     schedule:
       enabled: true
