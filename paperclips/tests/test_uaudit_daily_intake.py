@@ -71,7 +71,8 @@ def advance_release(producer: Path, text: str) -> str:
 
 
 def install_runtime(
-    tmp_path: Path, *, repo: Path, cursor: Path, lock: Path, remote: Path
+    tmp_path: Path, *, repo: Path, cursor: Path, lock: Path, remote: Path,
+    tracking_mode: str = "release_line", branch: str = "version/0.52",
 ):
     tools = tmp_path / "tools"
     tools.mkdir()
@@ -103,7 +104,7 @@ def install_runtime(
     write_json(
         tools / "uaudit_daily_routines.json",
         {
-            "schema_version": "uaudit-daily-intake-routines/v1",
+            "schema_version": "uaudit-daily-intake-routines/v2",
             "source_config_sha256": "a" * 64,
             "routines": [
                 {
@@ -112,7 +113,8 @@ def install_runtime(
                     "app_id": "unstoppable_wallet",
                     "routine_key": "uaudit-daily-android",
                     "platform": "android",
-                    "branch": "version/0.52",
+                    "branch": branch,
+                    "tracking_mode": tracking_mode,
                     "base_branch": "master",
                     "repo_url": remote.as_uri(),
                     "repo_path": str(repo),

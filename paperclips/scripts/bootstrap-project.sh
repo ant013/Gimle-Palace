@@ -220,7 +220,8 @@ PY
     trusted_previous="${UAUDIT_HELPER_TRUSTED_PREVIOUS_SHA256:-}"
     if [ -z "$trusted_previous" ] && { \
       [ "$manifest_sha" = "d3fe36b8c820f5092cde81ec9a69771a17fffa4d7e7ebfce1be65e68f5ba08b7" ] || \
-      [ "$manifest_sha" = "34c89b5d6cd082fa92b3bf2507c94d019fc6da40a6b6f44b33f4782e3c3d4056" ]; \
+      [ "$manifest_sha" = "34c89b5d6cd082fa92b3bf2507c94d019fc6da40a6b6f44b33f4782e3c3d4056" ] || \
+      [ "$manifest_sha" = "6edceaf51481efb341c9384fad6391009be6ff8f1579343072b41391abcf9ca8" ]; \
     }; then
       trusted_previous="$manifest_sha"
     fi
@@ -341,6 +342,9 @@ PY
         return 0
       fi
       trusted_previous="${UAUDIT_RESOLVER_TRUSTED_PREVIOUS_SHA256:-}"
+      if [ -z "$trusted_previous" ] && [ "$manifest_sha" = "12cbdaac827d552da4605c2ffcc8beac58b018057bf3061c9e85d784b67546a4" ]; then
+        trusted_previous="$manifest_sha"
+      fi
       [[ "$trusted_previous" =~ ^[0-9a-f]{64}$ ]] && [ "$trusted_previous" = "$manifest_sha" ] || \
         die "UAudit resolver generation differs from source and is not explicitly trusted for upgrade"
     fi
@@ -378,6 +382,8 @@ install_uaudit_daily_intake() {
 
   [ -f "$helper_source" ] || die "UAudit daily intake helper source missing"
   [ -f "$config_source" ] || die "UAudit daily routine config missing"
+  [ "$(yq -r '.schemaVersion // ""' "$config_source")" = "3" ] || \
+    die "UAudit daily routine config schemaVersion must be 3"
   [ -f "$paths_file" ] || die "UAudit host-local paths file missing"
   [ -f "$routine_bindings_file" ] || die "UAudit host-local routine bindings file missing"
   [ -f "${tools_dir}/uaudit_release_resolver.manifest.json" ] || die "UAudit resolver manifest missing before intake install"
@@ -397,7 +403,7 @@ install_uaudit_daily_intake() {
 
   config_tmp=$(mktemp "${tools_dir}/.uaudit_daily_routines.json.XXXXXX")
   yq -o=json '.routines' "$config_source" | jq \
-    --arg schema_version "uaudit-daily-intake-routines/v1" \
+    --arg schema_version "uaudit-daily-intake-routines/v2" \
     --arg source_config_sha256 "$source_config_sha" \
     --arg project_root "$project_root" \
     --arg primary_repo_root "$primary_repo_root" \
@@ -406,7 +412,7 @@ install_uaudit_daily_intake() {
         schema_version: $schema_version,
         source_config_sha256: $source_config_sha256,
         routines: map({
-          id, app_id, routine_key, platform, branch, base_branch, repo_url,
+          id, app_id, routine_key, platform, tracking_mode, branch, base_branch, repo_url,
           live_routine_id: $routine_ids[.id],
           repo_path: (.repo_local_path_template
             | gsub("\\{\\{paths.project_root\\}\\}"; $project_root)
@@ -418,6 +424,17 @@ install_uaudit_daily_intake() {
         })
       }
     ' > "$config_tmp"
+  python3 - "$helper_source" "$config_tmp" <<'PYCONFIG' || die "UAudit daily routine projection is invalid"
+import importlib.util
+import pathlib
+import sys
+
+spec = importlib.util.spec_from_file_location("uaudit_intake_projection", sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+module._load_config(pathlib.Path(sys.argv[2]), allow_file_url=False)
+PYCONFIG
   config_sha=$(shasum -a 256 "$config_tmp" | awk '{print $1}')
 
   helper_tmp=$(mktemp "${tools_dir}/.uaudit_daily_intake.py.XXXXXX")

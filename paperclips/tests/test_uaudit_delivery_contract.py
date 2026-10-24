@@ -1596,3 +1596,106 @@ def test_daily_status_deep_validation_rejects_tampered_telegram_text(tmp_path: P
         "--delivered-at", DELIVERED_AT, ok=False,
     )
     assert "telegram digest mismatch" in failure["error"]
+
+
+@pytest.mark.parametrize("platform", ["ios", "android"])
+def test_development_branch_reconciliation_requires_receipt_and_resumes_crash(tmp_path: Path, platform: str):
+    fixture = prepare_run(
+        tmp_path, kind="daily_delta", platform=platform,
+        routine_key=f"uaudit-daily-{platform}",
+        cursor_from_branch="develop", cursor_to_branch="develop",
+    )
+    aggregate(fixture)
+    cursor = tmp_path / "state" / f"{platform}-version-audit.json"
+    transition = {
+        "from_branch": "version/0.53", "to_branch": "develop",
+        "issue_identifier": "UNS-122", "completed_at": CREATED_AT,
+    }
+    before = {
+        "schema_version": "uaudit-daily-cursor/v2",
+        "routine_key": f"uaudit-daily-{platform}",
+        "active_release_branch": "develop",
+        "last_successfully_audited_sha": BASE_SHA,
+        "last_transition": transition,
+    }
+    write_json(cursor, before)
+    args = (
+        "reconcile-daily", "--run-dir", fixture["run"], "--cursor", cursor,
+        "--lock-dir", fixture["lock"], "--reconciled-at", RECONCILED_AT,
+    )
+    call(fixture["helper"], *args, ok=False)
+    assert read_json(cursor) == before
+    assert not (fixture["run"] / "status/cursor.done").exists()
+    record(fixture, "message")
+    assert call(fixture["helper"], *args)["status"] == "applied"
+    updated = read_json(cursor)
+    assert updated["active_release_branch"] == "develop"
+    assert updated["last_successfully_audited_sha"] == HEAD_SHA
+    assert updated["last_transition"] == transition
+    (fixture["run"] / "status/cursor.done").unlink()
+    assert call(fixture["helper"], *args)["status"] == "confirmed"
+    assert call(fixture["helper"], *args)["status"] == "already_applied"
+    assert read_json(cursor) == updated
+
+
+@pytest.mark.parametrize("mismatch", ["legacy", "branch", "routine"])
+def test_development_branch_reconciliation_rejects_mismatched_cursor(tmp_path: Path, mismatch: str):
+    fixture = prepare_run(
+        tmp_path, kind="daily_delta", routine_key="uaudit-daily-ios",
+        cursor_from_branch="develop", cursor_to_branch="develop",
+    )
+    aggregate(fixture)
+    record(fixture, "message")
+    cursor = tmp_path / "state" / "ios-version-audit.json"
+    before = {"last_successfully_audited_sha": BASE_SHA}
+    if mismatch != "legacy":
+        before.update({
+            "schema_version": "uaudit-daily-cursor/v2",
+            "routine_key": "uaudit-daily-android" if mismatch == "routine" else "uaudit-daily-ios",
+            "active_release_branch": "version/0.53" if mismatch == "branch" else "develop",
+        })
+    write_json(cursor, before)
+    failure = call(
+        fixture["helper"], "reconcile-daily", "--run-dir", fixture["run"],
+        "--cursor", cursor, "--lock-dir", fixture["lock"],
+        "--reconciled-at", RECONCILED_AT, ok=False,
+    )
+    expected = {"legacy": "v2 daily cursor", "routine": "routine_key", "branch": "compare-and-set"}
+    assert expected[mismatch] in failure["error"]
+    assert read_json(cursor) == before
+    assert not (fixture["run"] / "status/cursor.done").exists()
+
+
+def test_branch_validators_reject_revisions_and_preserve_source_branch_binding(tmp_path: Path):
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("branch_validator_contract", SOURCE_HELPER)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    ref = {
+        **source_ref("daily_delta"), "branch": "develop", "routine_key": "uaudit-daily-ios",
+        "cursor_from_branch": "develop", "cursor_to_branch": "develop",
+    }
+    assert module._validate_source_ref(ref, "daily_delta") == ref
+    assert module._validate_source_ref({**ref, "branch": "master"}, "daily_delta")["branch"] == "master"
+    with pytest.raises(module.ContractError, match="cursor_to_branch or master"):
+        module._validate_source_ref({**ref, "branch": "feature/unselected"}, "daily_delta")
+    cursor = tmp_path / "cursor.json"
+    before = {
+        "schema_version": "uaudit-daily-cursor/v2", "routine_key": "uaudit-daily-ios",
+        "active_release_branch": "develop", "last_successfully_audited_sha": BASE_SHA,
+    }
+    for branch in ("HEAD", "refs/heads/develop", "dev..old", "a//b", "a/.b", "a/b.lock", "a/", "dev.", "a" * 65, "a@{1}", "a\n", "a b", "a~1", "a:b"):
+        for field in ("branch", "cursor_from_branch", "cursor_to_branch"):
+            with pytest.raises(module.ContractError):
+                module._validate_source_ref({**ref, field: branch}, "daily_delta")
+        write_json(cursor, {**before, "active_release_branch": branch})
+        with pytest.raises(module.ContractError):
+            module._load_cursor(cursor)
+        write_json(cursor, {**before, "last_transition": {
+            "from_branch": branch, "to_branch": "develop",
+            "issue_identifier": "UNS-122", "completed_at": CREATED_AT,
+        }})
+        with pytest.raises(module.ContractError):
+            module._load_cursor(cursor)

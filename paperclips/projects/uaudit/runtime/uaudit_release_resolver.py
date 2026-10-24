@@ -22,6 +22,8 @@ from typing import Any, Literal, Sequence
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 VERSION_RE = re.compile(r"^version/(\d+)\.(\d+)$")
+BRANCH_RE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_./-]*")
+_UNSET = object()
 ResolutionKind = Literal[
     "no_change",
     "daily",
@@ -68,11 +70,31 @@ def _sha(value: str | None, name: str, *, required: bool = True) -> str | None:
     return value
 
 
-def _branch(value: str | None, name: str, *, required: bool = True) -> str | None:
+def valid_branch_name(value: Any) -> bool:
+    """Accept a bounded, portable subset of Git branch names, never revisions."""
+
+    return (
+        isinstance(value, str)
+        and 0 < len(value) <= 64
+        and BRANCH_RE.fullmatch(value) is not None
+        and value != "HEAD"
+        and not value.startswith("refs/")
+        and ".." not in value
+        and all(
+            component and not component.startswith(".") and not component.endswith((".", ".lock"))
+            for component in value.split("/")
+        )
+    )
+
+
+def _branch(
+    value: str | None, name: str, *, required: bool = True, release_line: bool = True
+) -> str | None:
     if value is None and not required:
         return None
-    if not isinstance(value, str) or not VERSION_RE.fullmatch(value):
-        raise ResolutionError(f"{name} must be version/X.Y")
+    if not valid_branch_name(value) or (release_line and not VERSION_RE.fullmatch(value)):
+        expected = "version/X.Y" if release_line else "a safe Git branch name"
+        raise ResolutionError(f"{name} must be {expected}")
     return value
 
 
@@ -94,13 +116,14 @@ def resolve_release_history(
     master_anchor_sha: str | None,
     master_head: str,
     cursor_is_ancestor_of_release: bool | None,
-    cursor_is_ancestor_of_master: bool,
+    cursor_is_ancestor_of_master: bool | None,
     master_is_ancestor_of_release: bool | None,
-    next_release_branch: str | None = None,
-    next_release_head: str | None = None,
-    master_is_ancestor_of_next_release: bool | None = None,
-    cursor_is_ancestor_of_next_release: bool | None = None,
+    next_release_branch: Any = _UNSET,
+    next_release_head: Any = _UNSET,
+    master_is_ancestor_of_next_release: Any = _UNSET,
+    cursor_is_ancestor_of_next_release: Any = _UNSET,
     old_series_equivalence: Literal["equivalent", "changed", "ambiguous", "unavailable"] = "unavailable",
+    tracking_mode: Literal["release_line", "fixed_branch"] = "release_line",
 ) -> Resolution:
     """Select auditable segments from independently verified Git facts.
 
@@ -109,8 +132,35 @@ def resolve_release_history(
     divergent history is blocked instead of manufacturing a reverse range.
     """
 
+    if not isinstance(tracking_mode, str) or tracking_mode not in {"release_line", "fixed_branch"}:
+        raise ResolutionError("tracking_mode must be release_line or fixed_branch")
+    successor_facts = (
+        next_release_branch, next_release_head,
+        master_is_ancestor_of_next_release, cursor_is_ancestor_of_next_release,
+    )
+    if tracking_mode == "fixed_branch" and any(value is not _UNSET for value in successor_facts):
+        raise ResolutionError("fixed_branch must not supply successor fields")
+    next_release_branch = None if next_release_branch is _UNSET else next_release_branch
+    next_release_head = None if next_release_head is _UNSET else next_release_head
+    master_is_ancestor_of_next_release = (
+        None if master_is_ancestor_of_next_release is _UNSET else master_is_ancestor_of_next_release
+    )
+    cursor_is_ancestor_of_next_release = (
+        None if cursor_is_ancestor_of_next_release is _UNSET else cursor_is_ancestor_of_next_release
+    )
+    for name, value in (
+        ("cursor_is_ancestor_of_release", cursor_is_ancestor_of_release),
+        ("cursor_is_ancestor_of_master", cursor_is_ancestor_of_master),
+        ("master_is_ancestor_of_release", master_is_ancestor_of_release),
+        ("master_is_ancestor_of_next_release", master_is_ancestor_of_next_release),
+        ("cursor_is_ancestor_of_next_release", cursor_is_ancestor_of_next_release),
+    ):
+        if value is not None and type(value) is not bool:
+            raise ResolutionError(f"{name} must be boolean or null")
     cursor_sha = _sha(cursor_sha, "cursor_sha")  # type: ignore[assignment]
-    release_branch = _branch(release_branch, "release_branch")  # type: ignore[assignment]
+    release_branch = _branch(
+        release_branch, "release_branch", release_line=tracking_mode == "release_line"
+    )  # type: ignore[assignment]
     release_head = _sha(release_head, "release_head", required=False)
     master_anchor_sha = _sha(master_anchor_sha, "master_anchor_sha", required=False)
     master_head = _sha(master_head, "master_head")  # type: ignore[assignment]
@@ -139,7 +189,7 @@ def resolve_release_history(
                 (Segment("release", next_release_branch, cursor_sha, next_release_head),),
                 False, "configured release is absent; cursor is already in next release, continuing incrementally",
             )
-        if master_is_ancestor_of_next_release is True and cursor_is_ancestor_of_master:
+        if master_is_ancestor_of_next_release is True and cursor_is_ancestor_of_master is True:
             segments = tuple(
                 segment
                 for segment in (
@@ -184,9 +234,11 @@ def resolve_release_history(
         if cursor_sha == master_head:
             return Resolution(
                 "no_change", None, master_head, (), False,
+                "configured working branch is absent; waiting for its restoration (master already at cursor)"
+                if tracking_mode == "fixed_branch" else
                 "release branch is absent and the master bridge is already at the cursor",
             )
-        if cursor_is_ancestor_of_master:
+        if cursor_is_ancestor_of_master is True:
             return Resolution("bridge", None, master_head, (Segment("master", "master", cursor_sha, master_head),), True,
                               "release branch is absent; audit the proven master bridge")
         return Resolution(
@@ -240,7 +292,7 @@ def resolve_json(value: Any) -> dict[str, Any]:
         "cursor_is_ancestor_of_release", "cursor_is_ancestor_of_master", "master_is_ancestor_of_release",
         "next_release_branch", "next_release_head", "master_is_ancestor_of_next_release",
         "cursor_is_ancestor_of_next_release",
-        "old_series_equivalence",
+        "old_series_equivalence", "tracking_mode",
     }
     unknown = sorted(set(value) - allowed)
     if unknown:
@@ -252,9 +304,8 @@ def resolve_json(value: Any) -> dict[str, Any]:
     missing = sorted(required - set(value))
     if missing:
         raise ResolutionError(f"resolver input missing fields: {', '.join(missing)}")
-    if type(value["cursor_is_ancestor_of_master"]) is not bool:
-        raise ResolutionError("cursor_is_ancestor_of_master must be boolean")
     for field in (
+        "cursor_is_ancestor_of_master",
         "cursor_is_ancestor_of_release",
         "master_is_ancestor_of_release",
         "master_is_ancestor_of_next_release",

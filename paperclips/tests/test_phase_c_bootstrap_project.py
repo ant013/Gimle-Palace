@@ -7,9 +7,12 @@ script structure + arg-parsing only.
 import hashlib
 import json
 import re
+import shutil
 import stat
 import subprocess
 import sys
+
+import pytest
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
@@ -225,8 +228,8 @@ install_uaudit_delivery_helper "$2"
     )
 
 
-def _installer_function(name: str) -> str:
-    text = SCRIPT.read_text()
+def _installer_function(name: str, source_script: Path = SCRIPT) -> str:
+    text = source_script.read_text()
     match = re.search(
         rf"^{re.escape(name)}\(\) \{{.*?^\}}\n",
         text,
@@ -236,7 +239,9 @@ def _installer_function(name: str) -> str:
     return match.group(0)
 
 
-def _run_uaudit_runtime_install(team_root: Path, tmp_path: Path) -> subprocess.CompletedProcess[str]:
+def _run_uaudit_runtime_install(
+    team_root: Path, tmp_path: Path, *, source_repo: Path = REPO, source_script: Path = SCRIPT
+) -> subprocess.CompletedProcess[str]:
     project_root = tmp_path / "uaudit"
     (project_root / "repos/android/unstoppable-wallet-android").mkdir(parents=True, exist_ok=True)
     (project_root / "repos/ios/unstoppable-wallet-ios").mkdir(parents=True, exist_ok=True)
@@ -259,7 +264,7 @@ def _run_uaudit_runtime_install(team_root: Path, tmp_path: Path) -> subprocess.C
         },
     )
     functions = "\n".join(
-        _installer_function(name)
+        _installer_function(name, source_script)
         for name in (
             "install_uaudit_delivery_helper",
             "install_uaudit_release_resolver",
@@ -277,7 +282,7 @@ install_uaudit_release_resolver "$2"
 install_uaudit_daily_intake "$2" "$3" "$4"
 """
     return subprocess.run(
-        ["bash", "-c", runner, "uaudit-runtime-test", str(REPO), str(team_root), str(paths), str(routines)],
+        ["bash", "-c", runner, "uaudit-runtime-test", str(source_repo), str(team_root), str(paths), str(routines)],
         capture_output=True,
         text=True,
     )
@@ -333,7 +338,11 @@ def test_uaudit_daily_intake_bundle_is_manifest_bound_and_self_verifying(tmp_pat
         assert path.stat().st_mode & (stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH) == 0
     assert (tools / "uaudit_daily_intake.manifest.json").stat().st_mode & 0o222 == 0
     config = json.loads((tools / "uaudit_daily_routines.json").read_text())
-    assert config["schema_version"] == "uaudit-daily-intake-routines/v1"
+    assert config["schema_version"] == "uaudit-daily-intake-routines/v2"
+    assert {(r["platform"], r["tracking_mode"], r["branch"]) for r in config["routines"]} == {
+        ("ios", "fixed_branch", "develop"),
+        ("android", "release_line", "version/0.52"),
+    }
     assert {routine["base_branch"] for routine in config["routines"]} == {"master"}
     assert all(routine["repo_url"].startswith("https://") for routine in config["routines"])
     verify = subprocess.run(
@@ -556,3 +565,91 @@ def test_uaudit_helper_install_recovers_split_helper_manifest_rename(tmp_path):
     assert hashlib.sha256(helper.read_bytes()).hexdigest() == target_sha
     assert json.loads(manifest_path.read_text())["sha256"] == target_sha
     assert not pending.exists()
+
+
+BASELINE_RUNTIME_REF = "f35d6e23e153674ee71a84968788913df0bf9908"
+
+
+def _baseline_runtime_checkout(tmp_path):
+    available = subprocess.run(
+        ["git", "cat-file", "-e", f"{BASELINE_RUNTIME_REF}^{{commit}}"],
+        cwd=REPO, capture_output=True, check=False,
+    )
+    if available.returncode:
+        pytest.skip("reviewed predecessor Git object requires a full-history checkout")
+    baseline = tmp_path / "baseline"
+    files = [
+        "paperclips/scripts/bootstrap-project.sh",
+        "paperclips/projects/uaudit/daily-version-branch-routines.yaml",
+        *["paperclips/projects/uaudit/runtime/" + name for name in (
+            "uaudit_daily_intake.py", "uaudit_delivery_contract.py", "uaudit_release_resolver.py",
+        )],
+    ]
+    for relative in files:
+        result = subprocess.run(
+            ["git", "show", f"{BASELINE_RUNTIME_REF}:{relative}"],
+            cwd=REPO, capture_output=True, check=True,
+        )
+        destination = baseline / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(result.stdout)
+    return baseline
+
+
+def test_uaudit_runtime_upgrades_reviewed_baseline_and_repeats_idempotently(tmp_path):
+    baseline = _baseline_runtime_checkout(tmp_path)
+    team_root = tmp_path / "team"
+    installed = _run_uaudit_runtime_install(
+        team_root, tmp_path, source_repo=baseline,
+        source_script=baseline / "paperclips/scripts/bootstrap-project.sh",
+    )
+    assert installed.returncode == 0, installed.stderr
+    tools = team_root / ".uaudit-tools"
+    old_config = json.loads((tools / "uaudit_daily_routines.json").read_text())
+    assert old_config["schema_version"] == "uaudit-daily-intake-routines/v1"
+    assert all("tracking_mode" not in r for r in old_config["routines"])
+    upgraded = _run_uaudit_runtime_install(team_root, tmp_path)
+    assert upgraded.returncode == 0, upgraded.stderr
+    new_config = json.loads((tools / "uaudit_daily_routines.json").read_text())
+    assert new_config["schema_version"] == "uaudit-daily-intake-routines/v2"
+    assert [r["live_routine_id"] for r in new_config["routines"]] == [r["live_routine_id"] for r in old_config["routines"]]
+    before_repeat = {p.name: p.read_bytes() for p in tools.iterdir() if p.is_file()}
+    repeated = _run_uaudit_runtime_install(team_root, tmp_path)
+    assert repeated.returncode == 0, repeated.stderr
+    assert {p.name: p.read_bytes() for p in tools.iterdir() if p.is_file()} == before_repeat
+
+
+@pytest.mark.parametrize("filename", ["uaudit_delivery_contract.py", "uaudit_release_resolver.py"])
+def test_uaudit_runtime_upgrade_rejects_tampered_predecessor(tmp_path, filename):
+    baseline = _baseline_runtime_checkout(tmp_path)
+    team_root = tmp_path / "team"
+    installed = _run_uaudit_runtime_install(
+        team_root, tmp_path, source_repo=baseline,
+        source_script=baseline / "paperclips/scripts/bootstrap-project.sh",
+    )
+    assert installed.returncode == 0, installed.stderr
+    helper = team_root / ".uaudit-tools" / filename
+    helper.chmod(0o644)
+    helper.write_bytes(helper.read_bytes() + b"# changed after install\n")
+    helper.chmod(0o444)
+    upgraded = _run_uaudit_runtime_install(team_root, tmp_path)
+    assert upgraded.returncode != 0
+    assert "digest mismatch" in upgraded.stderr
+
+
+@pytest.mark.parametrize("field,value", [("tracking_mode", "automatic"), ("branch", "refs/heads/develop")])
+def test_uaudit_runtime_rejects_invalid_projection_before_publish(tmp_path, field, value):
+    import yaml
+
+    source_repo = tmp_path / "source"
+    runtime = Path("paperclips/projects/uaudit/runtime")
+    shutil.copytree(REPO / runtime, source_repo / runtime)
+    relative_config = Path("paperclips/projects/uaudit/daily-version-branch-routines.yaml")
+    data = yaml.safe_load((REPO / relative_config).read_text())
+    data["routines"][1][field] = value
+    (source_repo / relative_config).write_text(yaml.safe_dump(data))
+    team_root = tmp_path / "team"
+    result = _run_uaudit_runtime_install(team_root, tmp_path, source_repo=source_repo)
+    assert result.returncode != 0
+    assert "routine projection is invalid" in result.stderr
+    assert not (team_root / ".uaudit-tools/uaudit_daily_intake.manifest.json").exists()

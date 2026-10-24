@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -44,6 +45,7 @@ ROUTINE_REQUIRED_STRINGS = (
     "routine_key",
     "title",
     "platform",
+    "tracking_mode",
     "branch",
     "base_branch",
     "repo_url",
@@ -96,8 +98,8 @@ def load_config(path: Path = DEFAULT_CONFIG) -> dict[str, Any]:
     data = yaml.safe_load(path.read_text())
     if not isinstance(data, dict):
         raise ValueError(f"{path}: root must be mapping")
-    if data.get("schemaVersion") != 2:
-        raise ValueError(f"{path}: schemaVersion must be 2")
+    if data.get("schemaVersion") != 3:
+        raise ValueError(f"{path}: schemaVersion must be 3")
     marker = _single_line(data.get("marker"), f"{path}: marker")
     routines = data.get("routines")
     apps = data.get("apps")
@@ -125,8 +127,21 @@ def load_config(path: Path = DEFAULT_CONFIG) -> dict[str, Any]:
             raise ValueError(f"{path}: routines[{index}].app_id is not registered")
         if routine["platform"] not in {"android", "ios"}:
             raise ValueError(f"{path}: routines[{index}].platform must be android or ios")
-        if not routine["branch"].startswith("version/"):
-            raise ValueError(f"{path}: routines[{index}].branch must start with version/")
+        mode = routine["tracking_mode"]
+        if mode not in {"fixed_branch", "release_line"}:
+            raise ValueError(f"{path}: routines[{index}].tracking_mode is invalid")
+        branch = routine["branch"]
+        components = branch.split("/")
+        if (
+            not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_./-]{0,63}", branch)
+            or branch in {"HEAD", "master"}
+            or branch.startswith("refs/")
+            or ".." in branch
+            or any(not part or part.startswith(".") or part.endswith((".lock", ".")) for part in components)
+        ):
+            raise ValueError(f"{path}: routines[{index}].branch is not a safe working branch")
+        if mode == "release_line" and not re.fullmatch(r"version/[0-9]+\.[0-9]+", branch):
+            raise ValueError(f"{path}: routines[{index}].release_line branch must be version/X.Y")
         if routine["base_branch"] != "master":
             raise ValueError(f"{path}: routines[{index}].base_branch must be master")
         if not routine["repo_url"].startswith("https://"):
@@ -273,6 +288,8 @@ def render_description(config: dict[str, Any], routine: dict[str, Any], paths: d
             f"app_id: {routine['app_id']}",
             f"routine_key: {routine['routine_key']}",
             f"platform: {routine['platform']}",
+            f"tracking_mode: {routine['tracking_mode']}",
+            f"base_branch: {routine['base_branch']}",
             f"branch: {routine['branch']}",
             f"repo: {repo_path}",
             f"cursor: {cursor_path}",

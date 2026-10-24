@@ -7,7 +7,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "projects/uaudit/runtime"))
 from uaudit_delivery_contract import _validate_source_ref  # noqa: E402
-from uaudit_release_resolver import ResolutionError, Segment, resolve_json, resolve_release_history  # noqa: E402
+from uaudit_release_resolver import ResolutionError, Segment, resolve_json, resolve_release_history, valid_branch_name  # noqa: E402
 
 
 def sha(char: str) -> str:
@@ -151,3 +151,102 @@ class ReleaseResolverTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FixedBranchResolverTests(unittest.TestCase):
+    def facts(self, **updates):
+        value = {
+            "tracking_mode": "fixed_branch",
+            "cursor_sha": sha("a"), "release_branch": "develop",
+            "release_head": sha("b"), "master_anchor_sha": None,
+            "master_head": sha("c"), "cursor_is_ancestor_of_release": True,
+            "cursor_is_ancestor_of_master": False,
+            "master_is_ancestor_of_release": False,
+        }
+        return {**value, **updates}
+
+    def test_fixed_delta_ignores_master_divergence_and_release_merges(self):
+        for master in (sha("c"), sha("b")):
+            result = resolve_release_history(**self.facts(master_head=master))
+            self.assertEqual(result.kind, "daily")
+            self.assertEqual(result.segments, (Segment("release", "develop", sha("a"), sha("b")),))
+        result = resolve_release_history(**self.facts(cursor_sha=sha("b"), master_head=sha("d")))
+        self.assertEqual(result.kind, "no_change")
+        self.assertEqual(result.segments, ())
+        later = resolve_release_history(**self.facts(cursor_sha=sha("b"), release_head=sha("d")))
+        self.assertEqual(later.segments[0].from_sha, sha("b"))
+
+    def test_fixed_deleted_branch_keeps_safe_master_bridge(self):
+        bridge = resolve_release_history(**self.facts(
+            release_head=None, cursor_is_ancestor_of_release=None,
+            cursor_is_ancestor_of_master=True,
+        ))
+        self.assertEqual(bridge.kind, "bridge")
+        self.assertEqual(bridge.selected_branch, None)
+        self.assertEqual(bridge.segments, (Segment("master", "master", sha("a"), sha("c")),))
+        equal = resolve_release_history(**self.facts(
+            release_head=None, master_head=sha("a"), cursor_is_ancestor_of_release=None,
+        ))
+        self.assertEqual(equal.kind, "no_change")
+        self.assertEqual(equal.segments, ())
+        self.assertIn("waiting", equal.reason)
+        for ancestry in (False, None):
+            blocked = resolve_release_history(**self.facts(
+                release_head=None, cursor_is_ancestor_of_release=None,
+                cursor_is_ancestor_of_master=ancestry,
+            ))
+            self.assertEqual(blocked.kind, "blocked_recovery")
+            self.assertEqual(blocked.segments, ())
+
+    def test_rewritten_fixed_history_needs_independent_forward_recovery(self):
+        recovered = resolve_release_history(**self.facts(
+            cursor_is_ancestor_of_release=None, cursor_is_ancestor_of_master=None,
+            master_is_ancestor_of_release=True,
+        ))
+        self.assertEqual(recovered.kind, "full_recovery")
+        self.assertTrue(recovered.requires_full_audit)
+        self.assertEqual(recovered.segments, (Segment("release", "develop", sha("c"), sha("b")),))
+        for master_relation, head in ((False, sha("b")), (None, sha("b")), (True, sha("c"))):
+            blocked = resolve_release_history(**self.facts(
+                cursor_is_ancestor_of_release=False,
+                master_is_ancestor_of_release=master_relation, release_head=head,
+            ))
+            self.assertEqual(blocked.kind, "blocked_recovery")
+            self.assertEqual(blocked.segments, ())
+
+    def test_fixed_rejects_every_successor_field_including_null(self):
+        for field, nonnull in (
+            ("next_release_branch", "version/0.54"),
+            ("next_release_head", sha("d")),
+            ("master_is_ancestor_of_next_release", False),
+            ("cursor_is_ancestor_of_next_release", True),
+        ):
+            for supplied in (nonnull, None):
+                with self.subTest(field=field, supplied=supplied):
+                    with self.assertRaisesRegex(ResolutionError, "successor"):
+                        resolve_json(self.facts(**{field: supplied}))
+                    with self.assertRaisesRegex(ResolutionError, "successor"):
+                        resolve_release_history(**self.facts(**{field: supplied}))
+
+    def test_unknown_ancestry_is_nullable_but_truthy_values_are_rejected(self):
+        facts = self.facts(cursor_is_ancestor_of_master=None)
+        self.assertEqual(resolve_json(facts)["kind"], "daily")
+        for field in ("cursor_is_ancestor_of_release", "cursor_is_ancestor_of_master", "master_is_ancestor_of_release"):
+            for bad in ("false", 1, [], {}):
+                with self.subTest(field=field, bad=bad):
+                    with self.assertRaisesRegex(ResolutionError, "boolean"):
+                        resolve_json(self.facts(**{field: bad}))
+
+    def test_fixed_branch_names_are_safe_and_legacy_stays_version_only(self):
+        for branch in ("develop", "dev", "feature/a.b", "version/0.53", "_dev", "a" * 64):
+            self.assertTrue(valid_branch_name(branch), branch)
+            self.assertEqual(resolve_json(self.facts(release_branch=branch))["selected_branch"], branch)
+        for branch in ("", "HEAD", "refs/heads/dev", "-dev", "dev..old", "a//b", "a/.b", "a/b.lock", "a/", "dev.", "a" * 65, "a@{1}", "a\n", "a b", "a~1", "a:b"):
+            self.assertFalse(valid_branch_name(branch), branch)
+            with self.assertRaises(ResolutionError):
+                resolve_json(self.facts(release_branch=branch))
+        with self.assertRaises(ResolutionError):
+            resolve_json(self.facts(tracking_mode="release_line"))
+        for mode in ("auto", None, 1, [], {}):
+            with self.assertRaisesRegex(ResolutionError, "tracking_mode"):
+                resolve_json(self.facts(tracking_mode=mode))
